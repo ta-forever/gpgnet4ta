@@ -2,6 +2,7 @@
 #include <sstream>
 
 #include "GameMonitor.h"
+#include "TADemoParser.h"
 
 GameMonitor::PlayerData::PlayerData() :
 is_dead(false),
@@ -46,13 +47,9 @@ bool GameMonitor::isGameOver() const
 std::set<std::string> GameMonitor::getLastTeamStanding() const
 {
     std::set<std::string> winningPlayerNames;
-    for (auto itPlayerNum = m_lastTeamStanding.begin(); itPlayerNum != m_lastTeamStanding.end(); ++itPlayerNum)
+    for (std::uint8_t playernum : m_lastTeamStanding)
     {
-        auto itPlayer = m_players.find(*itPlayerNum);
-        if (itPlayer != m_players.end())
-        {
-            winningPlayerNames.insert(itPlayer->second.name);
-        }
+        winningPlayerNames.insert(m_players.at(playernum).name);
     }
     return winningPlayerNames;
 }
@@ -166,11 +163,11 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
 
 std::uint8_t GameMonitor::getPlayerByName(const std::string &name) const
 {
-    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    for (const auto &player: m_players)
     {
-        if (it->second.name == name)
+        if (player.second.name == name)
         {
-            return it->first;
+            return player.second.number;
         }
     }
     return 0u;
@@ -178,11 +175,11 @@ std::uint8_t GameMonitor::getPlayerByName(const std::string &name) const
 
 std::uint8_t GameMonitor::getPlayerByDplayId(std::uint32_t dplayid) const
 {
-    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    for (const auto& player : m_players)
     {
-        if (it->second.dplayid == dplayid)
+        if (player.second.dplayid == dplayid)
         {
-            return it->first;
+            return player.second.number;
         }
     }
     return 0u;
@@ -199,7 +196,15 @@ void GameMonitor::checkLastTeamStanding()
     std::set<std::uint8_t> candidateWinners = getActivePlayers();
     if (isAllied(candidateWinners))
     {
+        // remaining players are a winning team
         m_lastTeamStanding = candidateWinners;
+    }
+
+    // lets pull in dead allies so they can get credit for the team win too
+    for (std::uint8_t nWinner : m_lastTeamStanding)
+    {
+        std::set<std::uint8_t> mutualAlliesOfWinner = getMutualAllies(nWinner);
+        m_lastTeamStanding.insert(mutualAlliesOfWinner.begin(), mutualAlliesOfWinner.end());
     }
 }
 
@@ -207,11 +212,11 @@ void GameMonitor::checkLastTeamStanding()
 std::set<std::uint8_t> GameMonitor::getActivePlayers() const
 {
     std::set<std::uint8_t> activePlayers;
-    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    for (const auto & player : m_players)
     {
-        if (!it->second.is_dead && it->second.side != 2)
+        if (!player.second.is_dead && player.second.side != TADemo::Side::WATCH)
         {
-            activePlayers.insert(it->second.number);
+            activePlayers.insert(player.second.number);
         }
     }
     return activePlayers;
@@ -224,8 +229,7 @@ bool GameMonitor::isAllied(const std::set<std::uint8_t> &playerIds) const
     {
         for (std::uint8_t n : playerIds)
         {
-            auto itPlayer = m_players.find(m);
-            if (m != n && itPlayer->second.allies.count(n) == 0)
+            if (m != n && m_players.at(m).allies.count(n) == 0)
             {
                 return false;
             }
@@ -233,6 +237,25 @@ bool GameMonitor::isAllied(const std::set<std::uint8_t> &playerIds) const
     }
     return true;
 }
+
+
+std::set<std::uint8_t> GameMonitor::getMutualAllies(std::uint8_t playernum) const
+{
+    std::set<std::uint8_t> mutualAllies;
+
+    const PlayerData &player = m_players.at(playernum);
+    for (std::uint8_t otherplayernum: player.allies)
+    {
+        const PlayerData& other = m_players.at(otherplayernum);
+        if (other.allies.count(player.number) > 0)
+        {
+            mutualAllies.insert(other.number);
+        }
+    }
+
+    return mutualAllies;
+}
+
 
 // based on chat messages "<player1>  allied with player2".
 // not spoofable in-game, but can be spoofed in lobby :(

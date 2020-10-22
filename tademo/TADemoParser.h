@@ -13,6 +13,7 @@
 
 namespace TADemo
 {
+    enum class Side { ARM = 0, CORE = 1, WATCH = 2 };
 
     void HexDump(const void* _buff, std::size_t size, std::ostream& s);
 
@@ -38,9 +39,10 @@ namespace TADemo
 
     struct Player
     {
-        std::uint8_t color;
-        std::uint8_t side;
-        std::uint8_t number;
+
+        std::uint8_t color:8;
+        Side side:8;
+        std::uint8_t number:8;
         std::string name;           // upto 64
     };
 

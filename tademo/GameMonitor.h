@@ -30,7 +30,7 @@ class GameMonitor : public TADemo::Parser
     std::string m_mapName;
     std::uint16_t m_maxUnits;
     std::string m_lobbyChat;                            // cached here from ExtraSegment for deferred alliance processing once all players are known
-    std::map<std::uint8_t, PlayerData> m_players;
+    std::map<std::uint8_t, PlayerData> m_players;       // keyed by PlayerData::number
     std::set<std::uint8_t> m_lastTeamStanding;          // we'll update this every time someone dies until a winning team is found
 
 public:
@@ -63,7 +63,10 @@ private:
     virtual std::set<std::uint8_t> getActivePlayers() const;
 
     // determine whether a set of players are all allied (ie are all on one team)
-    virtual bool isAllied(const std::set<std::uint8_t> &playerIds) const;
+    virtual bool isAllied(const std::set<std::uint8_t> &playernums) const;
+
+    // get all players for which alliance is mutal (whether alive or dead)
+    virtual std::set<std::uint8_t> getMutualAllies(std::uint8_t playernum) const;
 
     // based on chat messages "<player1>  allied with player2".
     // not spoofable in-game, but can be spoofed in lobby :(

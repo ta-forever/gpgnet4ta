@@ -145,7 +145,7 @@ namespace TADemo
     {
         bytestring data = m_recordReader(m_is);
         p.color = data[0];
-        p.side = data[1];
+        p.side = static_cast<Side>(data[1]);
         p.number = data[2];
         p.name = (char*)data.substr(3).c_str();
     }
