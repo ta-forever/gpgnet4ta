@@ -1,0 +1,287 @@
+#include <iostream>
+#include <sstream>
+
+#include "GameMonitor.h"
+
+GameMonitor::PlayerData::PlayerData() :
+is_dead(false),
+tick(0u)
+{ }
+
+GameMonitor::PlayerData::PlayerData(const TADemo::Player &player) :
+TADemo::Player(player),
+is_dead(false),
+tick(0u)
+{ }
+
+std::ostream & GameMonitor::PlayerData::print(std::ostream &s)
+{
+    s << "player " << unsigned(this->number) << "(" << this->name << "), tick=" << tick << " is_dead=" << (is_dead ? "yes" : "no");
+    return s;
+}
+
+
+GameMonitor::GameMonitor() :
+m_gameStarted(false),
+m_cheatsEnabled(false),
+m_suspiciousStatus(false)
+{ }
+
+bool GameMonitor::isGameStarted() const
+{
+    return m_gameStarted;
+}
+
+std::string GameMonitor::getMapName() const
+{
+    return m_mapName;
+}
+
+// returns set of winning players
+bool GameMonitor::isGameOver() const
+{
+    return (!m_lastTeamStanding.empty() || getActivePlayers().empty());
+}
+
+std::set<std::string> GameMonitor::getLastTeamStanding() const
+{
+    std::set<std::string> winningPlayerNames;
+    for (auto itPlayerNum = m_lastTeamStanding.begin(); itPlayerNum != m_lastTeamStanding.end(); ++itPlayerNum)
+    {
+        auto itPlayer = m_players.find(*itPlayerNum);
+        if (itPlayer != m_players.end())
+        {
+            winningPlayerNames.insert(itPlayer->second.name);
+        }
+    }
+    return winningPlayerNames;
+}
+
+void GameMonitor::handle(const TADemo::Header &header)
+{
+    m_mapName = header.mapName;
+    m_maxUnits = header.maxUnits;
+}
+
+void GameMonitor::handle(const TADemo::ExtraSector &es, int n, int ofTotal)
+{
+    if (es.sectorType == 0x02)
+    {
+        m_lobbyChat = (const char*)(es.data.data());
+    }
+}
+
+void GameMonitor::handle(const TADemo::Player &player, int n, int ofTotal)
+{
+    m_players[player.number] = player;
+}
+
+void GameMonitor::handle(const TADemo::PlayerStatusMessage &msg, std::uint32_t dplayid, int n, int ofTotal)
+{
+    m_players[msg.number].dplayid = dplayid;
+}
+
+void GameMonitor::handle(const TADemo::UnitData &unitData)
+{ }
+
+void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo::bytestring>& unpacked, std::size_t n)
+{
+    if (!m_lobbyChat.empty())
+    {
+        std::stringstream test(m_lobbyChat);
+        std::string line;
+        while (std::getline(test, line, char(0x0d)))
+        {
+            updateAlliances(0, line);
+        }
+        m_lobbyChat.clear();
+    }
+
+    for (const TADemo::bytestring& s : unpacked)
+    {
+        switch (s[0])
+        {
+        case 0x05:  // chat
+        {
+            std::string chat = (const char*)(&s[1]);
+            updateAlliances(packet.sender, chat);
+            break;
+        }
+        case 0x0c:  // self dies
+        {
+            std::uint16_t unitid = *(std::uint16_t*)(&s[1]);
+            if (unitid % m_maxUnits == 1)
+            {
+                m_players[packet.sender].print(std::cout) << ", COMMANDER DIED" << std::endl;
+                m_players[packet.sender].is_dead = true;
+                checkLastTeamStanding();
+            }
+            break;
+        }
+        case 0x1b:  // reject other
+        {
+            std::uint32_t dplayid = *(std::uint32_t*)(&s[1]);
+            std::uint8_t rejected = getPlayerByDplayId(dplayid);
+            m_players[packet.sender].print(std::cout) << ", REJECTED " << m_players[rejected].name << std::endl;
+            m_players[rejected].is_dead = true;
+            checkLastTeamStanding();
+            break;
+        }
+        case 0x20:  // status
+        {
+            std::string mapname = (const char*)(&s[1]);
+            std::uint16_t maxunits = *(std::uint16_t*)(&s[166]);
+            std::uint8_t playerside = s[156] & 0x40 ? 2 : s[150];
+            bool cheats = (s[157] & 0x20) != 0;
+            if (cheats)
+            {
+                m_cheatsEnabled = true;
+            }
+
+            if (mapname != m_mapName)
+            {
+                std::cerr << "  mapname mismatch.  header=" << m_mapName << ", status packet=" << mapname << std::endl;
+                m_suspiciousStatus = true;
+            }
+            if (maxunits != m_maxUnits)
+            {
+                std::cerr << "  Maxunits mismatch.  header=" << m_maxUnits << ", status packet=" << maxunits << std::endl;
+                m_suspiciousStatus = true;
+            }
+            break;
+        }
+        case 0x2c:
+        {
+            m_gameStarted = true;
+            std::uint32_t tick = *(std::uint32_t*)(&s[3]);
+            if (tick >= m_players[packet.sender].tick)
+            {
+                m_players[packet.sender].tick = tick;
+            }
+            break;
+        }
+        };
+    }
+}
+
+std::uint8_t GameMonitor::getPlayerByName(const std::string &name) const
+{
+    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    {
+        if (it->second.name == name)
+        {
+            return it->first;
+        }
+    }
+    return 0u;
+}
+
+std::uint8_t GameMonitor::getPlayerByDplayId(std::uint32_t dplayid) const
+{
+    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    {
+        if (it->second.dplayid == dplayid)
+        {
+            return it->first;
+        }
+    }
+    return 0u;
+}
+
+void GameMonitor::checkLastTeamStanding()
+{
+    if (!m_lastTeamStanding.empty())
+    {
+        // the victory was already flagged, the winners determined
+        return;
+    }
+
+    std::set<std::uint8_t> candidateWinners = getActivePlayers();
+    if (isAllied(candidateWinners))
+    {
+        m_lastTeamStanding = candidateWinners;
+    }
+}
+
+// return player numbers who have neither died nor are watchers
+std::set<std::uint8_t> GameMonitor::getActivePlayers() const
+{
+    std::set<std::uint8_t> activePlayers;
+    for (auto it = m_players.begin(); it != m_players.end(); ++it)
+    {
+        if (!it->second.is_dead && it->second.side != 2)
+        {
+            activePlayers.insert(it->second.number);
+        }
+    }
+    return activePlayers;
+}
+
+// determine whether a set of players are all allied (ie are all on one team)
+bool GameMonitor::isAllied(const std::set<std::uint8_t> &playerIds) const
+{
+    for (std::uint8_t m : playerIds)
+    {
+        for (std::uint8_t n : playerIds)
+        {
+            auto itPlayer = m_players.find(m);
+            if (m != n && itPlayer->second.allies.count(n) == 0)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// based on chat messages "<player1>  allied with player2".
+// not spoofable in-game, but can be spoofed in lobby :(
+// unfortunately, without modifying recorder, I can't see any other way to determine alliances
+void GameMonitor::updateAlliances(std::uint8_t sender, const std::string &chat)
+{
+    if (sender == 0u)
+    {
+        std::size_t senderStart = chat.find_first_of('<');
+        std::size_t senderEnd = chat.find_first_of('>');
+        if (senderStart != std::string::npos && senderEnd != std::string::npos && senderStart == 0u && senderEnd > 1u)
+        {
+            std::string senderName = chat.substr(1, senderEnd - 1);
+            sender = getPlayerByName(senderName);
+        }
+        if (sender == 0u)
+        {
+            return;
+        }
+    }
+
+    // look for: 
+    //     "<name1>  allied with name2"
+    //     "<name1>  broke alliance with name2"
+    // where name1 must match the sender
+    std::size_t lastWordStart = chat.find_last_of(' ');
+    if (lastWordStart != std::string::npos && 1 + lastWordStart < chat.size())
+    {
+        std::string lastWord = chat.substr(1 + lastWordStart);
+        std::uint8_t playernumber2 = getPlayerByName(lastWord);
+        if (playernumber2 == 0u || playernumber2 == sender)
+        {
+            return;
+        }
+
+        // I assume the double ' ' between name and text is the magic that prevents player spoofing the alliance ...
+        std::ostringstream makeAlliancePrototype, breakAlliancePrototype;
+        makeAlliancePrototype << "<" << m_players[sender].name << ">  allied with " << lastWord;
+        breakAlliancePrototype << "<" << m_players[sender].name << ">  broke alliance with " << lastWord;
+
+        if (chat == makeAlliancePrototype.str())
+        {
+            m_players[sender].allies.insert(playernumber2);
+            std::cout << "detected change in alliance: " << chat << std::endl;
+        }
+        else if (chat == breakAlliancePrototype.str())
+        {
+            m_players[sender].allies.erase(playernumber2);
+            std::cout << "detected change in alliance: " << chat << std::endl;
+        }
+    }
+}
