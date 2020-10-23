@@ -1,0 +1,13 @@
+STATUS(LOBBY FINAL)
+
+0x8c uint32: 0x80073804 TCC host allied in lobby
+             0x8002e001 TAC joiner allied in lobby
+0x91 uint32: dplayid
+0x97 uint16: 0x0001 TCC host allied in lobby
+             0x0100 TAC joiner allied in lobby
+0x9c & 0x10: launched
+0x9d       : 0x0e TCC host allied in lobby
+             0x00 TAC joiner allied in lobby
+0x9e & 0x02: allied victory on
+0xa6 uint16: maxunits
+

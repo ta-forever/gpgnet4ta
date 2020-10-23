@@ -99,17 +99,16 @@ namespace TADemo
         int m_numUnitDataRead;
         int m_numPacketsRead;
 
+        // running count of how many times we reached EOF and then later received more data
+        // as a mechanism to distrimincate between a live game and one where user just copied a .tad into the demo folder
+        int m_numTimesNewDataReceived;
+
     public:
 
-        Parser() :
-            m_numExtraSectorsRead(0),
-            m_numPlayersRead(0),
-            m_numPlayerStatusMessagesRead(0),
-            m_numUnitDataRead(0),
-            m_numPacketsRead(0)
-        { }
+        Parser();
 
         virtual bool parse(std::istream *is);
+        virtual int numTimesNewDataReceived() const;
 
         virtual void handle(const Header &header) = 0;
         virtual void handle(const Player &player, int n, int ofTotal) = 0;

@@ -4,18 +4,20 @@
 #include "GameMonitor.h"
 #include "TADemoParser.h"
 
-GameMonitor::PlayerData::PlayerData() :
+PlayerData::PlayerData() :
 is_dead(false),
-tick(0u)
+tick(0u),
+armyNumber(0)
 { }
 
-GameMonitor::PlayerData::PlayerData(const TADemo::Player &player) :
+PlayerData::PlayerData(const TADemo::Player &player) :
 TADemo::Player(player),
 is_dead(false),
-tick(0u)
+tick(0u),
+armyNumber(0)
 { }
 
-std::ostream & GameMonitor::PlayerData::print(std::ostream &s)
+std::ostream & PlayerData::print(std::ostream &s)
 {
     s << "player " << unsigned(this->number) << "(" << this->name << "), tick=" << tick << " is_dead=" << (is_dead ? "yes" : "no");
     return s;
@@ -41,17 +43,42 @@ std::string GameMonitor::getMapName() const
 // returns set of winning players
 bool GameMonitor::isGameOver() const
 {
-    return (!m_lastTeamStanding.empty() || getActivePlayers().empty());
+    return (!m_gameResult.resultByArmy.empty() || getActivePlayers().empty());
 }
 
-std::set<std::string> GameMonitor::getLastTeamStanding() const
+const GameResult & GameMonitor::getGameResult() const
 {
-    std::set<std::string> winningPlayerNames;
-    for (std::uint8_t playernum : m_lastTeamStanding)
+    return m_gameResult;
+}
+
+void GameMonitor::reset()
+{
+    m_gameStarted = false;
+    m_cheatsEnabled = false;
+    m_suspiciousStatus = false;
+    m_mapName.clear();
+    m_lobbyChat.clear();
+    m_players.clear();
+    m_gameResult.resultByArmy.clear();
+    m_gameResult.armyNumbersByPlayerName.clear();
+}
+
+std::set<std::string> GameMonitor::getPlayerNames(bool queryIsPlayer, bool queryIsWatcher) const
+{
+    std::set<std::string> playerNames;
+    for (const auto& player : m_players)
     {
-        winningPlayerNames.insert(m_players.at(playernum).name);
+        if (player.second.side != TADemo::Side::WATCH && queryIsPlayer || player.second.side == TADemo::Side::WATCH && queryIsWatcher)
+        {
+            playerNames.insert(player.second.name);
+        }
     }
-    return winningPlayerNames;
+    return playerNames;
+}
+
+const PlayerData& GameMonitor::getPlayerData(const std::string& name) const
+{
+    return m_players.at(getPlayerByName(name));
 }
 
 void GameMonitor::handle(const TADemo::Header &header)
@@ -71,6 +98,7 @@ void GameMonitor::handle(const TADemo::ExtraSector &es, int n, int ofTotal)
 void GameMonitor::handle(const TADemo::Player &player, int n, int ofTotal)
 {
     m_players[player.number] = player;
+    updatePlayerArmies();   // can't just allocate a new army number, need to ensure consistency across intances
 }
 
 void GameMonitor::handle(const TADemo::PlayerStatusMessage &msg, std::uint32_t dplayid, int n, int ofTotal)
@@ -90,6 +118,7 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
         while (std::getline(test, line, char(0x0d)))
         {
             updateAlliances(0, line);
+            updatePlayerArmies();
         }
         m_lobbyChat.clear();
     }
@@ -101,7 +130,8 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
         case 0x05:  // chat
         {
             std::string chat = (const char*)(&s[1]);
-            updateAlliances(packet.sender, chat);
+            //updateAlliances(packet.sender, chat);
+            //updatePlayerArmies();
             break;
         }
         case 0x0c:  // self dies
@@ -111,7 +141,7 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
             {
                 m_players[packet.sender].print(std::cout) << ", COMMANDER DIED" << std::endl;
                 m_players[packet.sender].is_dead = true;
-                checkLastTeamStanding();
+                checkGameResult();
             }
             break;
         }
@@ -121,7 +151,7 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
             std::uint8_t rejected = getPlayerByDplayId(dplayid);
             m_players[packet.sender].print(std::cout) << ", REJECTED " << m_players[rejected].name << std::endl;
             m_players[rejected].is_dead = true;
-            checkLastTeamStanding();
+            checkGameResult();
             break;
         }
         case 0x20:  // status
@@ -185,26 +215,23 @@ std::uint8_t GameMonitor::getPlayerByDplayId(std::uint32_t dplayid) const
     return 0u;
 }
 
-void GameMonitor::checkLastTeamStanding()
+void GameMonitor::checkGameResult()
 {
-    if (!m_lastTeamStanding.empty())
+    if (!m_gameResult.resultByArmy.empty())
     {
-        // the victory was already flagged, the winners determined
+        // the victory was already flagged and the winners determined
         return;
     }
 
     std::set<std::uint8_t> candidateWinners = getActivePlayers();
-    if (isAllied(candidateWinners))
+    if (candidateWinners.empty())
     {
-        // remaining players are a winning team
-        m_lastTeamStanding = candidateWinners;
+        updateGameResult(0);    // indicate no winners only losers
     }
-
-    // lets pull in dead allies so they can get credit for the team win too
-    for (std::uint8_t nWinner : m_lastTeamStanding)
+    else
     {
-        std::set<std::uint8_t> mutualAlliesOfWinner = getMutualAllies(nWinner);
-        m_lastTeamStanding.insert(mutualAlliesOfWinner.begin(), mutualAlliesOfWinner.end());
+        int winningArmyNumber = m_players.at(*candidateWinners.begin()).armyNumber;
+        updateGameResult(winningArmyNumber);
     }
 }
 
@@ -237,7 +264,6 @@ bool GameMonitor::isAllied(const std::set<std::uint8_t> &playerIds) const
     }
     return true;
 }
-
 
 std::set<std::uint8_t> GameMonitor::getMutualAllies(std::uint8_t playernum) const
 {
@@ -306,5 +332,52 @@ void GameMonitor::updateAlliances(std::uint8_t sender, const std::string &chat)
             m_players[sender].allies.erase(playernumber2);
             std::cout << "detected change in alliance: " << chat << std::endl;
         }
+    }
+}
+
+void GameMonitor::updatePlayerArmies()
+{
+    std::vector<PlayerData*> sortedPlayers;
+    for (auto& player : m_players)
+    {
+        sortedPlayers.push_back(&player.second);
+        player.second.armyNumber = 0;       // reset any previous determination
+    }
+
+    // sort by name
+    std::sort(sortedPlayers.begin(), sortedPlayers.end(),
+        [](const PlayerData* p1, const PlayerData* p2)
+        -> bool { return p1->name < p2->name; });
+
+    // assign army numbers consecutively to each mutually allied set
+    int armyCount = 0;
+    for (PlayerData* sortedPlayer : sortedPlayers)
+    {
+        if (sortedPlayer->armyNumber == 0)
+        {
+            ++armyCount;
+            std::set<std::uint8_t> mutualAllies = getMutualAllies(sortedPlayer->number);
+            mutualAllies.insert(sortedPlayer->number);
+            for (std::uint8_t allynumber : mutualAllies)
+            {
+                if (m_players.at(allynumber).armyNumber == 0)   // this is arbitrary - ie how to deal with someone who's allies aren't allied?
+                {
+                    m_players.at(allynumber).armyNumber = armyCount;
+                }
+            }
+        }
+    }
+}
+
+void GameMonitor::updateGameResult(int winningArmyNumber /* or zero */)
+{
+    m_gameResult.resultByArmy.clear();
+    m_gameResult.armyNumbersByPlayerName.clear();
+
+    for (const auto& player : m_players)
+    {
+        int nArmy = player.second.armyNumber;
+        m_gameResult.resultByArmy[nArmy] = (nArmy == winningArmyNumber) ? +1 : -1;
+        m_gameResult.armyNumbersByPlayerName[player.second.name] = nArmy;
     }
 }

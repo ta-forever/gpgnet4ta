@@ -1,0 +1,44 @@
+p = TPacket.Create(@d[1], Length(d))  # include Decrypt and Decompress
+c = p.RawData2      # fdata.substr(7)
+
+case tastatus 0 (lobby)
+    for s in Tpacket.split2(c,false):
+        s[1]:
+            0x05: chat
+            0x1a: unit data
+            0x02: ping
+            0x18: ??
+            0x20: status packet (playuerside, mapname, maxunits
+            0xfa: !nonserverstart
+            0x23: ally packet
+            0x08: loading started (tastatus=1)
+
+case tastatus 1 (loading)
+    for s in Tpacket.split2(c,false)
+        s[1]:
+            ',' or 0x09: tastatus=2
+
+case tastatus 2 (running?)
+    for s in Tpacket.split2(c,false)
+        s[1]:
+            0x05: chat
+            0x09: starts building
+            0x19: speed
+            0x2c: unitstat+move
+            0x23: ally
+            0x12: is ready built
+            0x0c: dies
+            0x0b: damage
+            0x1b: reject(?) takecmd
+            0x28: playing status (lastsharedm/e, sharedm/e, incomem/e, lasttotalm/e)
+            0x16: share
+            0xfb: recorder-recorder packet
+            0xfc: map position
+        
+        
+        
+        
+log << uint16(packetsize)
+log << uint16(timesincelastpacket)
+log << uint8(sender)
+log << SmartPack(c, from)  # c = p.RawData2

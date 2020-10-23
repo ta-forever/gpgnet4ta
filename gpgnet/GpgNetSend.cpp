@@ -107,4 +107,27 @@ namespace gpgnet
         SendArgument(slot);
     }
 
+    void GpgNetSend::gameEnded()
+    {
+        SendCommand("GameEnded", 0);
+    }
+
+    void GpgNetSend::gameResult(int army, int score)
+    {
+        SendCommand("GameResult", 2);
+        SendArgument(army);
+        if (score > 0)
+        {
+            SendArgument("VICTORY 1");
+        }
+        else if (score == 0)
+        {
+            SendArgument("DRAW 0");
+        }
+        else
+        {
+            SendArgument("DEFEAT -1");
+        }
+    }
+
 };

@@ -491,7 +491,6 @@ bool JDPlay::pollStillActive()
 {
     DWORD exitCode = NULL;
     GetExitCodeProcess(processHandle, &exitCode);
-    cout << "exitCode:" << exitCode << endl;
     return exitCode == STILL_ACTIVE;
 }
 

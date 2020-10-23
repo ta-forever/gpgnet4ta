@@ -8,22 +8,37 @@
 #include "TADemoParser.h"
 
 
+struct GameResult
+{
+    std::map<int /* armynumber */, int /* score */> resultByArmy;
+    std::map < std::string, int > armyNumbersByPlayerName;
+
+    void print(std::ostream& os) const
+    {
+        for (const auto& player : armyNumbersByPlayerName)
+        {
+            os << player.first << ": army=" << player.second << ", score=" << resultByArmy.at(player.second) << std::endl;
+        }
+    }
+};
+
+struct PlayerData : public TADemo::Player
+{
+    PlayerData();
+
+    PlayerData(const TADemo::Player& player);
+
+    std::ostream& print(std::ostream& s);
+
+    std::set<std::uint8_t> allies;
+    bool is_dead;                                   // advertised that their commander died, or was rejected by a player
+    std::uint32_t tick;                             // serial of last 2C packet
+    std::uint32_t dplayid;                          // REJECT commands refer to dplayid so we need to remember this for each player
+    int armyNumber;                                 // for reporting which team this player is allied with
+};
+
 class GameMonitor : public TADemo::Parser
 {
-    struct PlayerData : public TADemo::Player
-    {
-        PlayerData();
-
-        PlayerData(const TADemo::Player &player);
-
-        std::ostream & print(std::ostream &s);
-
-        std::set<std::uint8_t> allies;
-        bool is_dead;                                   // advertised that their commander died, or was rejected by a player
-        std::uint32_t tick;                             // serial of last 2C packet
-        std::uint32_t dplayid;                          // REJECT commands refer to dplayid so we need to remember this for each player
-    };
-
     bool m_gameStarted;                                 // flag to indicate sufficient activity to consider an actual game occurred
     bool m_cheatsEnabled;
     bool m_suspiciousStatus;                            // some irregularity was encountered, you may want to invalidate this game for tourney / ranking purposes
@@ -31,7 +46,7 @@ class GameMonitor : public TADemo::Parser
     std::uint16_t m_maxUnits;
     std::string m_lobbyChat;                            // cached here from ExtraSegment for deferred alliance processing once all players are known
     std::map<std::uint8_t, PlayerData> m_players;       // keyed by PlayerData::number
-    std::set<std::uint8_t> m_lastTeamStanding;          // we'll update this every time someone dies until a winning team is found
+    GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
 
 public:
     GameMonitor();
@@ -39,7 +54,10 @@ public:
     virtual std::string getMapName() const;
     virtual bool isGameStarted() const;
     virtual bool isGameOver() const;
-    virtual std::set<std::string> getLastTeamStanding() const;
+    virtual const GameResult & getGameResult() const;
+    virtual std::set<std::string> getPlayerNames(bool players=true, bool watchers=false) const;
+    virtual const PlayerData& getPlayerData(const std::string& name) const;
+    virtual void reset();
 
     virtual void handle(const TADemo::Header &header);
     virtual void handle(const TADemo::ExtraSector &es, int n, int ofTotal);
@@ -56,8 +74,8 @@ private:
     // returns 0u if not found
     std::uint8_t getPlayerByDplayId(std::uint32_t dplayid) const;
 
-    // check for victory condition and if so, latch m_lastTeamStanding to the winning players
-    virtual void checkLastTeamStanding();
+    // check for victory condition and if so, latch on m_gameResult
+    virtual void checkGameResult();
 
     // return player numbers who have neither died nor are watchers
     virtual std::set<std::uint8_t> getActivePlayers() const;
@@ -72,4 +90,13 @@ private:
     // not spoofable in-game, but can be spoofed in lobby :(
     // unfortunately, without modifying recorder, I can't see any other way to determine alliances
     virtual void updateAlliances(std::uint8_t sender, const std::string &chat);
+
+    // works out mutual alliances and assigns team (army) numbers to each player in a way thats independent of player number
+    // so that it will work the same across all players' instances.
+    // army determinations will change completely everytime alliances change
+    // so just read it out at the time that victory/defeat is detected.
+    virtual void updatePlayerArmies();
+
+    virtual void updateGameResult(int winningArmyNumber /* or zero */);
+
 };

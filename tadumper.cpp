@@ -14,10 +14,17 @@
 int main(int argc, char **argv)
 {
     for (const char *fn : {
+        R"(D:\games\TA\Recorded Games\23_10_2020 - Crystal Maze - TheCoreCommander, TheArmCommander - nr 4.tad)",
+
         R"(D:\games\TA\Recorded Games\ally_unally_TACquits - TCC.tad)",
-        R"(D:\games\TA\Recorded Games\ally in lobby - TCC.tad)",
-        R"(D:\games\TA\Recorded Games\TAC disconnects - TCC.tad)",
         R"(E:\SHARE\m1demos\ally_unally_TACquits - TAC.tad)",
+
+        R"(D:\games\TA\Recorded Games\ally in lobby - TCC.tad)",
+        R"(E:\SHARE\m1demos\ally in lobby - TAC.tad)",
+
+        R"(D:\games\TA\Recorded Games\TAC disconnects - TCC.tad)",
+        R"(E:\SHARE\m1demos\TAC disconnects - TAC.tad)",
+
         R"(D:\games\TA\Recorded Games\spawnradar(TAC),selfdradar(TAC),selfdcom(TCC) - TCC.tad)",
         R"(E:\SHARE\m1demos\spawnradar(TAC),selfdradar(TAC),selfdcom(TCC) - TAC.tad)"
     })
@@ -37,15 +44,10 @@ int main(int argc, char **argv)
                     std::cout << "GAME STARTED" << std::endl;
                 }
 
-                auto winners = monitor.getLastTeamStanding();
-                if (!winners.empty())
+                if (monitor.isGameOver())
                 {
-                    std::cout << "GAME OVER. winners=";
-                    for (auto it = winners.begin(); it != winners.end(); ++it)
-                    {
-                        std::cout << "'" << *it << "' ";
-                    }
-                    std::cout << std::endl;
+                    std::cout << "GAME OVER" << std::endl;
+                    monitor.getGameResult().print(std::cout);
                 }
             }
             catch (std::runtime_error &e)

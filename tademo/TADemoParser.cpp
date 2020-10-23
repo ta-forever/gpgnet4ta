@@ -70,6 +70,15 @@ namespace TADemo
         return record;
     }
 
+    Parser::Parser() :
+        m_numExtraSectorsRead(0),
+        m_numPlayersRead(0),
+        m_numPlayerStatusMessagesRead(0),
+        m_numUnitDataRead(0),
+        m_numPacketsRead(0),
+        m_numTimesNewDataReceived(0)
+    { }
+
     void Parser::load(Header &h)
     {
         bytestring data = m_recordReader(m_is);
@@ -178,15 +187,28 @@ namespace TADemo
             return false;
         }
 
+        int numPacketsRead = m_numPacketsRead;
         try
         {
             doParse();
-            return true;
         }
         catch (RecordReader::DataNotReadyException &)
+        { }
+
+        if (m_numPacketsRead > numPacketsRead)
+        {
+            ++m_numTimesNewDataReceived;
+            return true;
+        }
+        else
         {
             return false;
         }
+    }
+
+    int Parser::numTimesNewDataReceived() const
+    {
+        return m_numTimesNewDataReceived;
     }
 
     void Parser::doParse()

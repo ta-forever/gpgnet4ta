@@ -1,0 +1,27 @@
+dplay dwuser status
+
+0e810800 00000000 000a000a 010305dc     ends,       random/fixed,   mapped,     true,       +/-cheat,   +watch,     open
+16810800 00000004 000a000a 010305dc     deathmatch
+06810800 00000004 000a000a 010305dc     continues
+47810800 00000004 000a000a 010305dc                                 unmapped
+03810800 00000004 000a000a 010305dc                                             circular
+01810800 00000004 000a000a 010305dc                                             permanent
+21010800 00000004 000a000a 010305dc                                                                     -watch
+a1010800 00000004 000a000a 010305dc                                                                                 closed
+21020800 00000004 000a000a 010305dc                                                                                 open        1AI
+21030800 00000004 000a000a 010305dc                                                                                             2AI
+21040800 00000004 000a000a 010305dc                                                                                             2AI+1remote
+21040800 00000004 0064000a 01030014 1kM->10kM
+21040800 00000004 00640064 01030014 1kE->10kE
+
+
+hr = CoInitialize(NULL);
+hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3A,(LPVOID*)&lpDP );
+CoUninitialize();  // unregister the COM
+
+
+exitCode:103
+  session name:TA              [V] Empyrrean I
+      password:
+currentPlayers:1
+        dwUser:e810800 4 a000a 10305dc
