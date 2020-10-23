@@ -14,9 +14,21 @@ add_executable(gpgnet4ta
 target_link_libraries(gpgnet4ta
     jdplay
     tademo
+    gpgnet
     Qt5::Core
     Qt5::Network
     ${DIRECT_PLAY_LIBS})
+
+#add_custom_command(
+#    TARGET gpgnet4ta POST_BUILD
+#    COMMAND "${Qt5_DIR}/../../../bin/windeployqt.exe"
+#    ARGS "$<TARGET_FILE:gpgnet4ta>")
+add_custom_command(
+    TARGET gpgnet4ta POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:Qt5::Core>
+        $<TARGET_FILE:Qt5::Network>
+        $<TARGET_FILE_DIR:gpgnet4ta>)
 
 target_link_directories(gpgnet4ta
     PUBLIC ${DIRECT_PLAY_LIB_DIR})
@@ -29,3 +41,6 @@ target_link_libraries(tadumper
 
 add_subdirectory(jdplay)
 add_subdirectory(tademo)
+add_subdirectory(gpgnet)
+
+install(TARGETS gpgnet4ta tadumper)
