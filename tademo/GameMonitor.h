@@ -34,7 +34,11 @@ struct PlayerData : public TADemo::Player
     bool is_dead;                                   // advertised that their commander died, or was rejected by a player
     std::uint32_t tick;                             // serial of last 2C packet
     std::uint32_t dplayid;                          // REJECT commands refer to dplayid so we need to remember this for each player
-    int armyNumber;                                 // for reporting which team this player is allied with
+    int armyNumber;                                 // like TADemo::Player::number, but consistent across all players' demo recordings 
+    int teamNumber;                                 // reflects alliances at time of launch, and is consistent across all players' demo recordings
+                                                    // 0:invalid, >0:team number.  The no-team-selected / ffa option is not supported
+                                                    // everyone is on a team regardless if that team only has one player
+                                                    // (Forged Alliance reserves team=1 for no-team-selected)
 };
 
 class GameMonitor : public TADemo::Parser
@@ -91,12 +95,14 @@ private:
     // unfortunately, without modifying recorder, I can't see any other way to determine alliances
     virtual void updateAlliances(std::uint8_t sender, const std::string &chat);
 
-    // works out mutual alliances and assigns team (army) numbers to each player in a way thats independent of player number
-    // so that it will work the same across all players' instances.
-    // army determinations will change completely everytime alliances change
-    // so just read it out at the time that victory/defeat is detected.
+    // works out mutual alliances and assigns team and army numbers to each player
+    // in a way that is consistent across all players' demo recordings.
+    // The designations will change completely everytime alliances change.
+    // we could either lock the alliances and designations at the time the victory condition is detected
+    // or we could lock the alliances and designations at launch.
+    // Since FAF server logic requires latter, so thats what we'll do
     virtual void updatePlayerArmies();
 
-    virtual void updateGameResult(int winningArmyNumber /* or zero */);
+    virtual void updateGameResult(int winningTeamNumber /* or zero */);
 
 };

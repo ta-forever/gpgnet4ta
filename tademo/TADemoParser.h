@@ -39,10 +39,9 @@ namespace TADemo
 
     struct Player
     {
-
         std::uint8_t color:8;
         Side side:8;
-        std::uint8_t number:8;
+        std::uint8_t number:8;      // beware not consistent across all players' versions of demo
         std::string name;           // upto 64
     };
 

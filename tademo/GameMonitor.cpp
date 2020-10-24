@@ -7,14 +7,16 @@
 PlayerData::PlayerData() :
 is_dead(false),
 tick(0u),
-armyNumber(0)
+armyNumber(0),
+teamNumber(0)
 { }
 
 PlayerData::PlayerData(const TADemo::Player &player) :
 TADemo::Player(player),
 is_dead(false),
 tick(0u),
-armyNumber(0)
+armyNumber(0),
+teamNumber(0)
 { }
 
 std::ostream & PlayerData::print(std::ostream &s)
@@ -130,8 +132,12 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
         case 0x05:  // chat
         {
             std::string chat = (const char*)(&s[1]);
-            //updateAlliances(packet.sender, chat);
-            //updatePlayerArmies();
+            //FAF server logic requires alliances to be locked at launch, so we don't allow in-game ally
+            if (false)
+            {
+                updateAlliances(packet.sender, chat);
+                updatePlayerArmies();
+            }
             break;
         }
         case 0x0c:  // self dies
@@ -230,8 +236,8 @@ void GameMonitor::checkGameResult()
     }
     else
     {
-        int winningArmyNumber = m_players.at(*candidateWinners.begin()).armyNumber;
-        updateGameResult(winningArmyNumber);
+        int winningTeamNumber = m_players.at(*candidateWinners.begin()).teamNumber;
+        updateGameResult(winningTeamNumber);
     }
 }
 
@@ -286,6 +292,7 @@ std::set<std::uint8_t> GameMonitor::getMutualAllies(std::uint8_t playernum) cons
 // based on chat messages "<player1>  allied with player2".
 // not spoofable in-game, but can be spoofed in lobby :(
 // unfortunately, without modifying recorder, I can't see any other way to determine alliances
+// anyway alliance has to be created mutually to have any effect ...
 void GameMonitor::updateAlliances(std::uint8_t sender, const std::string &chat)
 {
     if (sender == 0u)
@@ -342,34 +349,41 @@ void GameMonitor::updatePlayerArmies()
     {
         sortedPlayers.push_back(&player.second);
         player.second.armyNumber = 0;       // reset any previous determination
+        player.second.teamNumber = 0;       // reset any previous determination
     }
 
-    // sort by name
+    // sort by name to ensure consistent across all players' instances
     std::sort(sortedPlayers.begin(), sortedPlayers.end(),
         [](const PlayerData* p1, const PlayerData* p2)
         -> bool { return p1->name < p2->name; });
 
-    // assign army numbers consecutively to each mutually allied set
-    int armyCount = 0;
+    int teamCount = 0;  // assign team numbers consecutively to each mutually allied set
+    int armyCount = 0;  // assign army number by consecutive sortedPlayer
     for (PlayerData* sortedPlayer : sortedPlayers)
     {
-        if (sortedPlayer->armyNumber == 0)
+        if (sortedPlayer->side == TADemo::Side::WATCH)
         {
-            ++armyCount;
+            continue;
+        }
+        sortedPlayer->armyNumber = ++armyCount;
+        if (sortedPlayer->teamNumber == 0)
+        {
+            ++teamCount;
             std::set<std::uint8_t> mutualAllies = getMutualAllies(sortedPlayer->number);
             mutualAllies.insert(sortedPlayer->number);
             for (std::uint8_t allynumber : mutualAllies)
             {
-                if (m_players.at(allynumber).armyNumber == 0)   // this is arbitrary - ie how to deal with someone who's allies aren't allied?
+                if (m_players.at(allynumber).teamNumber == 0 &&   // this is arbitrary - ie how to deal with someone who's allies aren't allied?
+                    m_players.at(allynumber).side != TADemo::Side::WATCH)
                 {
-                    m_players.at(allynumber).armyNumber = armyCount;
+                    m_players.at(allynumber).teamNumber = teamCount;
                 }
             }
         }
     }
 }
 
-void GameMonitor::updateGameResult(int winningArmyNumber /* or zero */)
+void GameMonitor::updateGameResult(int winningTeamNumber /* or zero */)
 {
     m_gameResult.resultByArmy.clear();
     m_gameResult.armyNumbersByPlayerName.clear();
@@ -377,7 +391,20 @@ void GameMonitor::updateGameResult(int winningArmyNumber /* or zero */)
     for (const auto& player : m_players)
     {
         int nArmy = player.second.armyNumber;
-        m_gameResult.resultByArmy[nArmy] = (nArmy == winningArmyNumber) ? +1 : -1;
+        int nTeam = player.second.teamNumber;
+        if (nArmy == 0 || nTeam == 0)
+        {
+            // either updatePlayerArmies hasn't been called, or player is a watcher
+            continue;
+        }
         m_gameResult.armyNumbersByPlayerName[player.second.name] = nArmy;
+        if (winningTeamNumber > 0)
+        {
+            m_gameResult.resultByArmy[nArmy] = (nTeam == winningTeamNumber) ? +1 : -1;
+        }
+        else
+        {
+            m_gameResult.resultByArmy[nArmy] = 0;
+        }
     }
 }

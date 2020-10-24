@@ -334,10 +334,10 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
                     {
                         const PlayerData& pd = taDemoMonitor.getPlayerData(playerName);
                         QString qPlayerName(playerName.c_str());
-                        gpgSend.playerOption(qPlayerName, "Team", pd.armyNumber);
+                        gpgSend.playerOption(qPlayerName, "Team", 1+pd.teamNumber); // Forged Alliance reserve Team=1 for the team-not-selected team
                         gpgSend.playerOption(qPlayerName, "Army", pd.armyNumber);
-                        gpgSend.playerOption(qPlayerName, "StartSpot", pd.number);
-                        gpgSend.playerOption(qPlayerName, "Color", pd.number);
+                        gpgSend.playerOption(qPlayerName, "StartSpot", pd.teamNumber);
+                        gpgSend.playerOption(qPlayerName, "Color", pd.teamNumber);
                         gpgSend.playerOption(qPlayerName, "Faction", static_cast<int>(pd.side));
                     }
                     gpgSend.gameState(gameState = "Launching");
@@ -353,7 +353,7 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
         }
         else if (gameState == "Joined" || gameState == "Launching") // "Launching" means host hit the start button
         {
-            //qDebug() << "game started:" << (taDemoMonitor.isGameStarted() ? "yes" : "no");
+            qDebug() << "game started:" << taDemoMonitor.numTimesNewDataReceived();
             if (taDemoMonitor.isGameOver() && taDemoMonitor.numTimesNewDataReceived() > 3u)
             {
                 // send results
