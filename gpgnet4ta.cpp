@@ -39,16 +39,17 @@ using namespace gpgnet;
 
 QString buildPlayerName(QString baseName, int mean, int deviation, int numgames, QString country)
 {
-    QString playerName = baseName;
-    if (country.size() > 0)
-    {
-        playerName += QString("-%1").arg(country);
-    }
-    if (numgames > 10)
-    {
-        playerName += QString("-%1").arg(mean - 2 * deviation);
-    }
-    return playerName;
+    return baseName;
+    //QString playerName = baseName;
+    //if (country.size() > 0)
+    //{
+    //    playerName += QString("-%1").arg(country);
+    //}
+    //if (numgames > 10)
+    //{
+    //    playerName += QString("-%1").arg(mean - 2 * deviation);
+    //}
+    //return playerName;
 }
 
 
@@ -194,13 +195,21 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
     std::shared_ptr<std::istream> taDemoStream;
 
     gpgSend.gameState(gameState = "Idle");
+    QString previousState = gameState;
     while (socket.isOpen())
     {
         // look for commands from server
         QVariantList serverCommand;
         QString cmd;
+
+        if (previousState == gameState)
+        {
+            socket.waitForReadyRead(3000);
+        }
+        previousState = gameState;
         if (socket.bytesAvailable() > 0)
         {
+            qDebug() << "GpgNetReceive::GetCommand";
             serverCommand = GpgNetReceive::GetCommand(ds);
             cmd = serverCommand[0].toString();
         }
@@ -209,10 +218,10 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
         if (!taDemoStream && gameState != "Ended")
         {
             QStringList nowTaDemoFiles = GetTaDemoFiles(taDemoPaths);
+            qDebug() << "GetTaDemoFiles:" << nowTaDemoFiles.size();
             QStringList newTaDemoFiles = StringListDiff(nowTaDemoFiles, oldTaDemos);
             if (newTaDemoFiles.size() > 0)
             {
-                qDebug() << "newTaDemoFiles" << newTaDemoFiles;
                 taDemoStream.reset(new std::ifstream(newTaDemoFiles.at(0).toStdString(), std::ios::in | std::ios::binary));
                 oldTaDemos = nowTaDemoFiles;
 
@@ -220,14 +229,20 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
                 if (taDemoMonitor.isGameOver())
                 {
                     // user probably just copied a tad into the directory.  ignore it
+                    qDebug() << "new tademo seems a complete game. ignoring" << newTaDemoFiles;
                     taDemoStream.reset();
                     taDemoMonitor.reset();
+                }
+                else
+                {
+                    qDebug() << "new tademo found" << newTaDemoFiles;
                 }
             }
         }
         else if (taDemoStream)
         {
             taDemoMonitor.parse(taDemoStream.get());
+            qDebug() << "taDemoMonitor.parse" << taDemoMonitor.numTimesNewDataReceived();
         }
 
         if (gameState == "Idle" && !cmd.compare("CreateLobby"))
@@ -238,20 +253,20 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
             qDebug() << "CreateLobby(playerName:" << playerName << ")";
             jdplay.updatePlayerName(playerName.toStdString().c_str());
             gpgSend.gameState(gameState = "Lobby");
-            continue;
         }
         else if (gameState == "Lobby" && !cmd.compare("HostGame"))
         {
             HostGameCommand hgc(serverCommand);
             QString sessionName = createLobbyCommand.playerName + "'s Game";
             CreateTAInitFile(iniTemplate, iniTarget, sessionName, hgc.mapName, playerLimit, lockOptions);
+            qDebug() << "jdplay.initialize(host): guid=" << guid << "mapname=" << hgc.mapName;
             bool ret = jdplay.initialize(guid.toStdString().c_str(), "0.0.0.0", true, 10);
             if (!ret)
             {
                 qDebug() << "unable to initialise dplay";
                 return;
             }
-            qDebug() << "HostGame(guid=" << guid << ", mapName=" << hgc.mapName << ")";
+            qDebug() << "jdplay.launch(host)";
             ret = jdplay.launch(true);
             if (!ret)
             {
@@ -262,90 +277,87 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
             gpgSend.gameOption("Slots", 10);
             QString playerName = createLobbyCommand.playerName;
             gameState = "Hosted";
-            continue;
         }
         else if (gameState == "Lobby" && !cmd.compare("JoinGame"))
         {
             JoinGameCommand jgc(serverCommand);
-            qDebug() << "JoinGame(guid = " << guid << ", hostip = " << jgc.hostAndPort << ")";
+            qDebug() << "JoinGame guid:" << guid << "hostip:" << jgc.hostAndPort;
 
             QStringList candidateHostIps = jgc.hostAndPort.split(":")[0].split(";");
-            Q_FOREACH(QString _hostip, candidateHostIps)
+            for (int nTry = 0; nTry < 3 && gameState != "Joined"; ++nTry)
             {
-                char hostip[257] = { 0 };
-                std::strncpy(hostip, _hostip.toStdString().c_str(), 256);
-
-                qDebug() << "searching at hostip" << hostip << "...";
-                bool ret = jdplay.initialize(guid.toStdString().c_str(), hostip, false, 10);
-                if (!ret)
+                Q_FOREACH(QString _hostip, candidateHostIps)
                 {
-                    qDebug() << "unable to initialise dplay";
-                    return;
-                }
+                    char hostip[257] = { 0 };
+                    std::strncpy(hostip, _hostip.toStdString().c_str(), 256);
 
-                bool sessionFound = false;
-                for (int n = 0; n < 3 && !sessionFound; ++n)
-                {
-                    sessionFound = jdplay.searchOnce();
-                }
-                if (!sessionFound)
-                {
-                    continue;
-                }
+                    qDebug() << "jdplay.initialize(join):" << hostip;
+                    bool ret = jdplay.initialize(guid.toStdString().c_str(), hostip, false, 10);
+                    if (!ret)
+                    {
+                        qDebug() << "unable to initialise dplay";
+                        return;
+                    }
 
-                qDebug() << "game found.  Launching ...";
-                ret = jdplay.launch(true);
-                jdplay.releaseDirectPlay();
+                    if (jdplay.searchOnce())
+                    {
+                        qDebug() << "jdplay.launch(join):" << hostip;
+                        ret = jdplay.launch(true);
+                        jdplay.releaseDirectPlay();
 
-                QString playerName = createLobbyCommand.playerName;
-                gameState = "Joined";
-                break;
+                        QString playerName = createLobbyCommand.playerName;
+                        gameState = "Joined";
+                        break;
+                    }
+                }
             }
             if (gameState != "Joined")
             {
                 qDebug() << "unable to find game at any candidate hosts ... quitting";
                 return;
             }
-            continue;
         }
         else if (gameState == "Hosted")
         {
             bool active = jdplay.pollStillActive();
             if (active)
             {
-                jdplay.pollSessionStatus();
-                jdplay.printSessionDesc();
-                qDebug() << "-----";
-
-                int numPlayers = jdplay.getUserData1() >> 16 & 0x0f;
-                bool closed = jdplay.getUserData1() & 0x80000000;
-                std::string mapName = jdplay.getAdvertisedSessionName();
-                qDebug() << "dplay map name:" << mapName.c_str();
-                if (mapName.size() > 16)
-                {
-                    mapName = mapName.substr(16);
-                    gpgSend.gameOption("MapName", QString::fromStdString(mapName));
-                }
-
                 if (taDemoMonitor.isGameStarted())
                 {
+                    qDebug() << "gamestate Hosted: game started";
                     gpgSend.gameOption("MapName", QString::fromStdString(taDemoMonitor.getMapName()));
                     for (const std::string &playerName: taDemoMonitor.getPlayerNames())
                     {
                         const PlayerData& pd = taDemoMonitor.getPlayerData(playerName);
                         QString qPlayerName(playerName.c_str());
-                        gpgSend.playerOption(qPlayerName, "Team", 1+pd.teamNumber); // Forged Alliance reserve Team=1 for the team-not-selected team
+                        gpgSend.playerOption(qPlayerName, "Team", 1+pd.teamNumber); // Forged Alliance reserves Team=1 for the team-not-selected team
                         gpgSend.playerOption(qPlayerName, "Army", pd.armyNumber);
                         gpgSend.playerOption(qPlayerName, "StartSpot", pd.teamNumber);
                         gpgSend.playerOption(qPlayerName, "Color", pd.teamNumber);
                         gpgSend.playerOption(qPlayerName, "Faction", static_cast<int>(pd.side));
                     }
                     gpgSend.gameState(gameState = "Launching");
-                    continue;
+                }
+                else
+                {
+                    qDebug() << "gamestate Hosted: polling dplay lobby";
+                    jdplay.pollSessionStatus();
+                    jdplay.printSessionDesc();
+
+                    int numPlayers = jdplay.getUserData1() >> 16 & 0x0f;
+                    bool closed = jdplay.getUserData1() & 0x80000000;
+                    QString mapName = QString::fromStdString(jdplay.getAdvertisedSessionName()).trimmed();
+                    qDebug() << "dplay map name:" << mapName;
+                    if (mapName.size() > 16)
+                    {
+                        mapName = mapName.mid(16);
+                        gpgSend.gameOption("MapName", mapName);
+                    }
                 }
             }
             else
             {
+                qDebug() << "gamestate Hosted: jdplay not active. terminating";
                 jdplay.releaseDirectPlay();
                 gpgSend.gameState(gameState = "Ended");
                 return;
@@ -353,9 +365,9 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
         }
         else if (gameState == "Joined" || gameState == "Launching") // "Launching" means host hit the start button
         {
-            qDebug() << "game started:" << taDemoMonitor.numTimesNewDataReceived();
-            if (taDemoMonitor.isGameOver() && taDemoMonitor.numTimesNewDataReceived() > 3u)
+            if (taDemoMonitor.isGameOver()) // && taDemoMonitor.numTimesNewDataReceived() > 3u)
             {
+                qDebug() << "gameState Joined/Launching: game over";
                 // send results
                 const GameResult &gameResult = taDemoMonitor.getGameResult();
                 for (const auto& result : gameResult.resultByArmy)
@@ -367,9 +379,16 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
                 gameState = "Ended";
                 //gpgSend.gameState(gameState = "Ended");
             }
+            else
+            {
+                qDebug() << "gameState Joined/Launching: game in progress";
+            }
 
             if (!jdplay.pollStillActive())
             {
+                qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
+                // this closes the game on server side and triggers rating update
+                jdplay.releaseDirectPlay();
                 gpgSend.gameEnded();
                 return;
             }
@@ -378,12 +397,17 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
         {
             if (!jdplay.pollStillActive())
             {
+                // this closes the game on server side and triggers rating update
+                qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
+                jdplay.releaseDirectPlay();
                 gpgSend.gameEnded();
                 return;
             }
+            else
+            {
+                qDebug() << "gameState Ended";
+            }
         }
-
-        socket.waitForReadyRead(3000);
     }
 }
 

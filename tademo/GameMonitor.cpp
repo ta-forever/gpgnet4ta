@@ -45,7 +45,7 @@ std::string GameMonitor::getMapName() const
 // returns set of winning players
 bool GameMonitor::isGameOver() const
 {
-    return (!m_gameResult.resultByArmy.empty() || getActivePlayers().empty());
+    return (!m_gameResult.resultByArmy.empty() || m_gameStarted && getActivePlayers().empty());
 }
 
 const GameResult & GameMonitor::getGameResult() const
@@ -171,8 +171,9 @@ void GameMonitor::handle(const TADemo::Packet& packet, const std::vector<TADemo:
                 m_cheatsEnabled = true;
             }
 
-            if (mapname != m_mapName)
+            if (false && mapname != m_mapName)
             {
+                // this is typical of a joiner.  m_mapName is correct
                 std::cerr << "  mapname mismatch.  header=" << m_mapName << ", status packet=" << mapname << std::endl;
                 m_suspiciousStatus = true;
             }
