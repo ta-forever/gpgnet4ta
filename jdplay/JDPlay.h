@@ -26,7 +26,7 @@
  *  Also you will need the Windows Platform SDK for ATL.
  */
 
-/****************************************************************************************************************/
+ /****************************************************************************************************************/
 
 #include <dplay.h>
 #include <dplobby.h>
@@ -34,57 +34,57 @@
 
 BOOL FAR PASCAL EnumSessionsCallback(LPCDPSESSIONDESC2 lpThisSD, LPDWORD lpdwTimeOut, DWORD dwFlags, LPVOID lpContext);
 
-class JDPlay{
-	private:
-		static JDPlay*		instance;		// needed for callback function to access a method
+class JDPlay {
+private:
+    static JDPlay* instance;		// needed for callback function to access a method
 
-		bool				debug;
-		int					curRetry;
-		int					searchValidationCount;
-		bool				foundLobby;
-		bool				isInitialized;
-		bool				lpDPIsOpen;
-        std::string         enumCallbackSessionName;
-        std::string         enumCallbackSessionPassword;
+    bool debug;
+    int curRetry;
+    int searchValidationCount;
+    bool foundLobby;
+    bool isInitialized;
+    bool lpDPIsOpen;
+    std::string enumCallbackSessionName;
+    std::string enumCallbackSessionPassword;
 
-		LPDIRECTPLAY3A		lpDP;			// directplay interface pointer
-		LPDIRECTPLAYLOBBY3A	lpDPLobby;		// lobby interface pointer
-		
-		DPNAME				dpName;			// player description
-		DPSESSIONDESC2		dpSessionDesc;          // session description
-		DPLCONNECTION		dpConn;			// connection description
+    LPDIRECTPLAY3A lpDP;		// directplay interface pointer
+    LPDIRECTPLAYLOBBY3A	lpDPLobby;	// lobby interface pointer
 
-		DPID				dPid;			// player ID (currently unused)
-		DWORD				appID;			// game process ID
-		DWORD				sessionFlags;   // either Host or Join Session
-		DWORD				playerFlags;    // either Host or not
-        HANDLE              processHandle;  // of game after launching
+    DPNAME dpName;			// player description
+    DPSESSIONDESC2 dpSessionDesc;       // session description
+    DPLCONNECTION dpConn;		// connection description
 
-	public:
-		JDPlay(const char* playerName, int searchValidationCount, bool debug);
-		~JDPlay();
+    DPID dPid;			        // player ID (currently unused)
+    DWORD appID;			// game process ID
+    DWORD sessionFlags;                 // either Host or Join Session
+    DWORD playerFlags;                  // either Host or not
+    HANDLE processHandle;               // of game after launching
 
-		void updatePlayerName(const char* playerName);
-		bool initialize(const char* gameGUID, char* hostIP, bool isHost, int maxPlayers);
-		bool searchOnce();
-		bool launch(bool startGame);
-        bool pollStillActive();
-        void pollSessionStatus(LPDIRECTPLAY3A dplay=NULL);
-        void printSessionDesc();
-        bool isHost();
-        void releaseDirectPlay();
-        void releaseLobby();
-        std::string getAdvertisedSessionName();
-        std::string getAdvertisedPlayerName();
-        DWORD_PTR getUserData1() { return dpSessionDesc.dwUser1; }
-        DWORD_PTR getUserData2() { return dpSessionDesc.dwUser2; }
-        DWORD_PTR getUserData3() { return dpSessionDesc.dwUser3; }
-        DWORD_PTR getUserData4() { return dpSessionDesc.dwUser4; }
+public:
+    JDPlay(const char* playerName, int searchValidationCount, bool debug);
+    ~JDPlay();
 
-        void updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD); //has to be public for the callback function
-		static JDPlay* getInstance(); //makes the object available to the callback function
+    void updatePlayerName(const char* playerName);
+    bool initialize(const char* gameGUID, char* hostIP, bool isHost, int maxPlayers);
+    bool searchOnce();
+    bool launch(bool startGame);
+    bool pollStillActive();
+    void pollSessionStatus(LPDIRECTPLAY3A dplay = NULL);
+    void printSessionDesc();
+    bool isHost();
+    void releaseDirectPlay();
+    void releaseLobby();
+    std::string getAdvertisedSessionName();
+    std::string getAdvertisedPlayerName();
+    DWORD_PTR getUserData1() { return dpSessionDesc.dwUser1; }
+    DWORD_PTR getUserData2() { return dpSessionDesc.dwUser2; }
+    DWORD_PTR getUserData3() { return dpSessionDesc.dwUser3; }
+    DWORD_PTR getUserData4() { return dpSessionDesc.dwUser4; }
+
+    void updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD); //has to be public for the callback function
+    static JDPlay* getInstance(); //makes the object available to the callback function
 
 private:
     void deInitialize();
-		const char* getDPERR(HRESULT hr);
+    const char* getDPERR(HRESULT hr);
 };
