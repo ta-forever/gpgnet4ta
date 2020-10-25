@@ -53,9 +53,9 @@ namespace gpgnet
     }
 
     JoinGameCommand::JoinGameCommand() :
-        hostAndPort("127.0.0.1:47625"),
+        remoteHost("127.0.0.1"),
         remotePlayerName("ACDC"),
-        remotePlayerId(1973)
+        remotePlayerId(0)
     { }
 
     JoinGameCommand::JoinGameCommand(QVariantList qvl)
@@ -70,15 +70,47 @@ namespace gpgnet
         {
             throw std::runtime_error("Unexpected command");
         }
-        hostAndPort = command[1].toString();
+        remoteHost = command[1].toString();
         remotePlayerName = command[2].toString();
         remotePlayerId = command[3].toInt();
 
         QStringList playerParts = remotePlayerName.split("@");
         if (playerParts.size() == 2)
         {
+            // the command[1] host is probably just the local ICE proxy (which TA can't use)
             remotePlayerName = playerParts[0];
-            hostAndPort = playerParts[1];
+            remoteHost = playerParts[1];
+        }
+    }
+
+    ConnectToPeerCommand::ConnectToPeerCommand() :
+        host("127.0.0.1"),
+        playerName("ACDC"),
+        playerId(0)
+    { }
+
+    ConnectToPeerCommand::ConnectToPeerCommand(QVariantList qvl)
+    {
+        Set(qvl);
+    }
+
+    void ConnectToPeerCommand::Set(QVariantList command)
+    {
+        QString cmd = command[0].toString();
+        if (cmd.compare("ConnectToPeer"))
+        {
+            throw std::runtime_error("Unexpected command");
+        }
+        host = command[1].toString();
+        playerName = command[2].toString();
+        playerId = command[3].toInt();
+
+        QStringList playerParts = playerName.split("@");
+        if (playerParts.size() == 2)
+        {
+            // the command[1] host is probably just the local ICE proxy (which TA can't use)
+            playerName = playerParts[0];
+            host = playerParts[1];
         }
     }
 

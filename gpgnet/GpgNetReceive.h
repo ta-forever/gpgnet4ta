@@ -31,12 +31,23 @@ namespace gpgnet
 
     struct JoinGameCommand
     {
-        QString hostAndPort;
+        QString remoteHost;
         QString remotePlayerName;
         int remotePlayerId;
 
         JoinGameCommand();
         JoinGameCommand(QVariantList qvl);
+        void Set(QVariantList command);
+    };
+
+    struct ConnectToPeerCommand
+    {
+        QString host;
+        QString playerName;
+        int playerId;
+
+        ConnectToPeerCommand();
+        ConnectToPeerCommand(QVariantList qvl);
         void Set(QVariantList command);
     };
 

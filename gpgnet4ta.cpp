@@ -193,6 +193,7 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
     QStringList oldTaDemos = GetTaDemoFiles(taDemoPaths);
     GameMonitor taDemoMonitor;
     std::shared_ptr<std::istream> taDemoStream;
+    QMap<QString, int> gpgPlayerIds;    // remember gpgnet player ids for purpose of settings PlayerOptions
 
     gpgSend.gameState(gameState = "Idle");
     QString previousState = gameState;
@@ -209,9 +210,16 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
         previousState = gameState;
         if (socket.bytesAvailable() > 0)
         {
-            qDebug() << "GpgNetReceive::GetCommand";
             serverCommand = GpgNetReceive::GetCommand(ds);
             cmd = serverCommand[0].toString();
+            qDebug() << "gpgnet command received:" << cmd;
+        }
+
+        if (cmd == "ConnectToPeer")
+        {
+            ConnectToPeerCommand qtp(serverCommand);
+            gpgPlayerIds[qtp.playerName] = qtp.playerId;
+            qDebug() << "connect to peer: playername=" << qtp.playerName << "playerId=" << qtp.playerId;
         }
 
         // look for a new demo file
@@ -250,6 +258,8 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
             createLobbyCommand.Set(serverCommand);
             QString playerName = buildPlayerName(
                 createLobbyCommand.playerName, mean, deviation, numGames, country);
+            gpgPlayerIds[playerName] = createLobbyCommand.playerId;
+
             qDebug() << "CreateLobby(playerName:" << playerName << ")";
             jdplay.updatePlayerName(playerName.toStdString().c_str());
             gpgSend.gameState(gameState = "Lobby");
@@ -275,15 +285,15 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
             }
 
             gpgSend.gameOption("Slots", 10);
-            QString playerName = createLobbyCommand.playerName;
             gameState = "Hosted";
         }
         else if (gameState == "Lobby" && !cmd.compare("JoinGame"))
         {
             JoinGameCommand jgc(serverCommand);
-            qDebug() << "JoinGame guid:" << guid << "hostip:" << jgc.hostAndPort;
+            gpgPlayerIds[jgc.remotePlayerName] = jgc.remotePlayerId;
+            qDebug() << "JoinGame guid:" << guid << "remoteHost:" << jgc.remoteHost;
 
-            QStringList candidateHostIps = jgc.hostAndPort.split(":")[0].split(";");
+            QStringList candidateHostIps = jgc.remoteHost.split(";");
             for (int nTry = 0; nTry < 3 && gameState != "Joined"; ++nTry)
             {
                 Q_FOREACH(QString _hostip, candidateHostIps)
@@ -304,8 +314,6 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
                         qDebug() << "jdplay.launch(join):" << hostip;
                         ret = jdplay.launch(true);
                         jdplay.releaseDirectPlay();
-
-                        QString playerName = createLobbyCommand.playerName;
                         gameState = "Joined";
                         break;
                     }
@@ -329,12 +337,12 @@ void RunGpgNet(QCoreApplication *app, QString iniTemplate, QString iniTarget, QS
                     for (const std::string &playerName: taDemoMonitor.getPlayerNames())
                     {
                         const PlayerData& pd = taDemoMonitor.getPlayerData(playerName);
-                        QString qPlayerName(playerName.c_str());
-                        gpgSend.playerOption(qPlayerName, "Team", 1+pd.teamNumber); // Forged Alliance reserves Team=1 for the team-not-selected team
-                        gpgSend.playerOption(qPlayerName, "Army", pd.armyNumber);
-                        gpgSend.playerOption(qPlayerName, "StartSpot", pd.teamNumber);
-                        gpgSend.playerOption(qPlayerName, "Color", pd.teamNumber);
-                        gpgSend.playerOption(qPlayerName, "Faction", static_cast<int>(pd.side));
+                        QString playerId = QString::number(gpgPlayerIds.value(QString::fromStdString(playerName)));
+                        gpgSend.playerOption(playerId, "Team", 1+pd.teamNumber); // Forged Alliance reserves Team=1 for the team-not-selected team
+                        gpgSend.playerOption(playerId, "Army", pd.armyNumber);
+                        gpgSend.playerOption(playerId, "StartSpot", pd.teamNumber);
+                        gpgSend.playerOption(playerId, "Color", pd.teamNumber);
+                        gpgSend.playerOption(playerId, "Faction", static_cast<int>(pd.side));
                     }
                     gpgSend.gameState(gameState = "Launching");
                 }
