@@ -8,8 +8,24 @@ set(DIRECT_PLAY_INCLUDE_DIR "${DIRECTX_SDK_DIR}/Include")
 set(DIRECT_PLAY_LIB_DIR "${DIRECTX_SDK_DIR}/Lib/x86")
 set(DIRECT_PLAY_LIBS "dplayx;dxguid")
 
+set(MINIUPNP_DIR "" CACHE PATH "Path to MiniUPnp binaries http://miniupnp.free.fr/files/")
+set(MINIUPNP_INCLUDE_DIR "${MINIUPNP_DIR}/include")
+set(MINIUPNP_LIB_DIR "${MINIUPNP_DIR}/lib")
+set(MINIUPNP_LIBS_DYNAMIC "miniupnpc")
+set(MINIUPNP_LIBS_STATIC "libminiupnpc")
+
 add_executable(gpgnet4ta
     gpgnet4ta.cpp)
+
+target_include_directories(gpgnet4ta 
+    PUBLIC
+    ${MINIUPNP_INCLUDE_DIR}
+)
+
+target_link_directories(gpgnet4ta
+    PUBLIC
+	${DIRECT_PLAY_LIB_DIR} 
+	${MINIUPNP_LIB_DIR})
 
 target_link_libraries(gpgnet4ta
     jdplay
@@ -17,7 +33,10 @@ target_link_libraries(gpgnet4ta
     gpgnet
     Qt5::Core
     Qt5::Network
-    ${DIRECT_PLAY_LIBS})
+	ws2_32
+	iphlpapi
+    ${DIRECT_PLAY_LIBS}
+	${MINIUPNP_LIBS_STATIC})
 
 #add_custom_command(
 #    TARGET gpgnet4ta POST_BUILD
@@ -29,9 +48,6 @@ add_custom_command(
         $<TARGET_FILE:Qt5::Core>
         $<TARGET_FILE:Qt5::Network>
         $<TARGET_FILE_DIR:gpgnet4ta>)
-
-target_link_directories(gpgnet4ta
-    PUBLIC ${DIRECT_PLAY_LIB_DIR})
 
 add_executable(tadumper
     tadumper.cpp)
