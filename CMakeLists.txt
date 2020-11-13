@@ -14,6 +14,8 @@ set(MINIUPNP_LIB_DIR "${MINIUPNP_DIR}/lib")
 set(MINIUPNP_LIBS_DYNAMIC "miniupnpc")
 set(MINIUPNP_LIBS_STATIC "libminiupnpc")
 
+# -------------- GPGNET4TA -------------
+
 add_executable(gpgnet4ta
     gpgnet4ta.cpp)
 
@@ -49,11 +51,30 @@ add_custom_command(
         $<TARGET_FILE:Qt5::Network>
         $<TARGET_FILE_DIR:gpgnet4ta>)
 
+
+# -------------- TADUMPER -------------
+
 add_executable(tadumper
     tadumper.cpp)
 
 target_link_libraries(tadumper
     tademo)
+
+
+# -------------- TAPROXY -------------
+
+add_executable(taproxy
+	taproxy.cpp)
+
+target_link_directories(taproxy
+    PUBLIC)
+
+target_link_libraries(taproxy
+	tademo
+    Qt5::Core
+    Qt5::Network)
+
+# ----------------------
 
 add_subdirectory(jdplay)
 add_subdirectory(tademo)
