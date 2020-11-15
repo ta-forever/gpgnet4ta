@@ -8,127 +8,95 @@
 
 using namespace tafnet;
 
-
-void TafnetNode::onNewConnection()
+TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort) :
+    m_playerId(playerId),
+    m_hostPlayerId(isHost ? playerId : 0u)
 {
-    QTcpSocket* clientSocket = m_tcpServer.nextPendingConnection();
-    qDebug() << "[TafnetNode::onNewConnection]" << m_tafnetId << "from" << clientSocket->peerAddress().toString();
-    QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &TafnetNode::onReadyRead);
-    QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &TafnetNode::onSocketStateChanged);
-    m_remoteTafnetIds[clientSocket] = 0u;
+    qDebug() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << bindAddress.toString() << ":" << bindPort;
+    m_lobbySocket.bind(bindAddress, bindPort);
+    QObject::connect(&m_lobbySocket, &QUdpSocket::readyRead, this, &TafnetNode::onReadyRead);
 }
 
-void TafnetNode::onSocketStateChanged(QAbstractSocket::SocketState socketState)
-{
-    if (socketState == QAbstractSocket::UnconnectedState)
-    {
-        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
-        std::uint32_t remoteTafnetId = m_remoteTafnetIds[sender];
-        qDebug() << "[TafnetNode::onSocketStateChanged/disconnect]" << m_tafnetId << "from" << sender->peerAddress().toString() << remoteTafnetId;
-        m_remoteTafnetIds.remove(sender);
-        m_tcpSockets.remove(remoteTafnetId);
-        delete sender;
-    }
-}
 
 void TafnetNode::onReadyRead()
 {
-    QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
-    QByteArray datas = sender->readAll();
+    QUdpSocket* sender = static_cast<QUdpSocket*>(QObject::sender());
 
-    char* ptr = datas.data();
-    int remain = datas.size();
-    while (ptr < datas.data() + datas.size())
+    while (sender->hasPendingDatagrams())
     {
+        QByteArray datas;
+        datas.resize(sender->pendingDatagramSize());
+        QHostAddress senderAddress;
+        quint16 senderPort;
+        sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+        HostAndPort senderHostAndPort(senderAddress, senderPort);
+        if (datas.size() < sizeof(TafnetMessageHeader))
+        {
+            continue;
+        }
+
+        auto it = m_peerPlayerIds.find(senderHostAndPort);
+        if (it == m_peerPlayerIds.end())
+        {
+            qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
+            continue;
+        }
+        std::uint32_t peerPlayerId = it->second;
+
+        char* ptr = datas.data();
         const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)ptr;
         ptr += sizeof(TafnetMessageHeader);
-        remain -= sizeof(TafnetMessageHeader);
 
-        qDebug() << "[TafnetNode::onReadyRead]" << m_tafnetId << "from" << tafheader->sourceId << ", action=" << tafheader->action;
-
-        if (m_remoteTafnetIds[sender] == 0u &&
-            tafheader->action == TafnetMessageHeader::ACTION_HELLO)
-        {
-            m_remoteTafnetIds[sender] = tafheader->sourceId;
-            m_tcpSockets[tafheader->sourceId] = sender;
-            if (tafheader->destId == 0)
-            {
-                // source doesn't know who we are.  reply the hello
-                sendHello(sender);
-            }
-        }
-
-        if (remain >= (int)tafheader->data_bytes)
-        {
-            handleMessage(*tafheader, ptr, tafheader->data_bytes);
-        }
-        ptr += tafheader->data_bytes;
-        remain -= tafheader->data_bytes;
+        qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "from" << peerPlayerId << ", action=" << tafheader->action;
+        handleMessage(*tafheader, peerPlayerId, ptr, datas.size() - sizeof(TafnetMessageHeader));
     }
 }
 
-void TafnetNode::sendHello(QTcpSocket* socket)
+void TafnetNode::handleMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len)
 {
-    TafnetMessageHeader header;
-    header.action = TafnetMessageHeader::ACTION_HELLO;
-    header.sourceId = m_tafnetId;
-    header.destId = m_remoteTafnetIds[socket];  // 0 if unknown
-    header.data_bytes = 0;
-    socket->write((const char*)&header, sizeof(header));
-    socket->flush();
+    m_handleMessage(tafheader, peerPlayerId, data, len);
 }
 
-void TafnetNode::handleMessage(const TafnetMessageHeader& tafheader, char* data, int len)
-{
-    m_handleMessage(tafheader, data, len);
-}
-
-TafnetNode::TafnetNode(std::uint32_t tafnetId, QHostAddress bindAddress, quint16 bindPort) :
-    m_tafnetId(tafnetId)
-{
-    qDebug() << "[TafnetNode::TafnetNode] node" << m_tafnetId << "tcp binding to" << bindAddress.toString() << ":" << bindPort;
-    m_tcpServer.listen(bindAddress, bindPort);
-    QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &TafnetNode::onNewConnection);
-}
-
-void TafnetNode::setHandler(const std::function<void(const TafnetMessageHeader&, char*, int)>& f)
+void TafnetNode::setHandler(const std::function<void(const TafnetMessageHeader&, std::uint32_t, char*, int)>& f)
 {
     m_handleMessage = f;
 }
 
-std::uint32_t TafnetNode::getTafnetId()
+std::uint32_t TafnetNode::getPlayerId() const
 {
-    return m_tafnetId;
+    return m_playerId;
 }
 
-bool TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort)
+std::uint32_t TafnetNode::getHostPlayerId() const
 {
-    qDebug() << "[TafnetNode::connectToPeer] node" << m_tafnetId << "connecting to" << peer.toString() << ":" << peerPort;
-    QTcpSocket* socket = new QTcpSocket();
-    socket->connectToHost(peer, peerPort);
-    socket->waitForConnected(2000);
-    if (socket->isOpen())
-    {
-        QObject::connect(socket, &QTcpSocket::readyRead, this, &TafnetNode::onReadyRead);
-        QObject::connect(socket, &QTcpSocket::stateChanged, this, &TafnetNode::onSocketStateChanged);
-        m_remoteTafnetIds[socket] = 0;
-        sendHello(socket);
-        return true;
-    }
-    else
-    {
-        delete socket;
-        return false;
-    }
+    return m_hostPlayerId;
 }
 
-void TafnetNode::forwardGameData(std::uint32_t destNodeId, std::uint32_t action, char* data, int len)
+void TafnetNode::joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId)
 {
-    qDebug() << "[TafnetNode::forwardGameData] node" << m_tafnetId << "forwarding to node" << destNodeId << ", action=" << action;
-    if (m_tcpSockets.count(destNodeId) == 0)
+    connectToPeer(peer, peerPort, peerPlayerId);
+    m_hostPlayerId = peerPlayerId;
+}
+
+void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId)
+{
+    qDebug() << "[TafnetNode::connectToPeer]" << m_playerId << "connecting to" << peer.toString() << ":" << peerPort << peerPlayerId;
+    HostAndPort hostAndPort(peer, peerPort);
+    m_peerAddresses[peerPlayerId] = hostAndPort;
+    m_peerPlayerIds[hostAndPort] = peerPlayerId;
+    forwardGameData(peerPlayerId, TafnetMessageHeader::ACTION_HELLO, "", 0);
+}
+
+void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int len)
+{
+    auto it = m_peerAddresses.find(destPlayerId);
+    if (it == m_peerAddresses.end())
     {
+        qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "ERROR peer" << destPlayerId << "not known";
         return;
     }
+    HostAndPort& hostAndPort = it->second;
+    qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "forwarding to" << destPlayerId << ", action=" << action;
 
 #ifdef _DEBUG
     TADemo::HexDump(data, len, std::cout);
@@ -138,13 +106,9 @@ void TafnetNode::forwardGameData(std::uint32_t destNodeId, std::uint32_t action,
     buf.resize(sizeof(TafnetMessageHeader) + len);
 
     TafnetMessageHeader* header = (TafnetMessageHeader*)buf.data();
-    header->sourceId = this->getTafnetId();
-    header->destId = destNodeId;
     header->action = action;
-    header->data_bytes = len;
-    std::memcpy(buf.data() + sizeof(header), data, len);
+    std::memcpy(buf.data() + sizeof(TafnetMessageHeader), data, len);
 
-    QTcpSocket* socket = m_tcpSockets[destNodeId];
-    socket->write(buf);
-    socket->flush();
+    m_lobbySocket.writeDatagram(buf.data(), buf.size(), QHostAddress(hostAndPort.ipv4addr), hostAndPort.port);
+    m_lobbySocket.flush();
 }

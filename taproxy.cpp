@@ -24,8 +24,8 @@ int main(int argc, char* argv[])
     const int proxyGamePort1 = 2310;
     const int proxyGamePort2 = 2311;
 
-    TafnetNode node1(1, QHostAddress("192.168.1.109"), 6112);
-    TafnetNode node2(2, QHostAddress("192.168.1.109"), 6113);
+    TafnetNode node1(1, true, QHostAddress("192.168.1.109"), 6112);
+    TafnetNode node2(2, false, QHostAddress("192.168.1.109"), 6113);
 
     quint16 nextPort = 2310;
     TafnetGameNode ta1(
@@ -37,7 +37,8 @@ int main(int argc, char* argv[])
         []() { return new GameSender(QHostAddress("192.168.1.104"), 47624); },
         [&nextPort](GameSender* sender) { return new GameReceiver(QHostAddress("192.168.1.109"), 47624, nextPort++, nextPort++, sender); });
 
-    node1.connectToPeer(QHostAddress("192.168.1.109"), 6113);
+    node2.joinGame(QHostAddress("192.168.1.109"), 6112, 1);
+    node1.connectToPeer(QHostAddress("192.168.1.109"), 6113, 2);
 
     return app.exec();
 }

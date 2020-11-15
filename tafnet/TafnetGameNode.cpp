@@ -19,9 +19,9 @@ GameReceiver* TafnetGameNode::getGameReceiver(std::uint32_t remoteTafnetId, Game
     if (!gameReceiver)
     {
         gameReceiver.reset(m_gameReceiverFactory(sender));
-        if (m_remoteTafnetIds.count(gameReceiver->getTcpListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getTcpListenPort()] = remoteTafnetId;
-        if (m_remoteTafnetIds.count(gameReceiver->getUdpListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getUdpListenPort()] = remoteTafnetId;
-        if (m_remoteTafnetIds.count(gameReceiver->getEnumListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getEnumListenPort()] = remoteTafnetId;
+        if (m_remotePlayerIds.count(gameReceiver->getTcpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getTcpListenPort()] = remoteTafnetId;
+        if (m_remotePlayerIds.count(gameReceiver->getUdpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getUdpListenPort()] = remoteTafnetId;
+        if (m_remotePlayerIds.count(gameReceiver->getEnumListenPort()) == 0) m_remotePlayerIds[gameReceiver->getEnumListenPort()] = remoteTafnetId;
         gameReceiver->setHandler([this](QAbstractSocket* receivingSocket, int channelCode, char* data, int len) {
             this->handleGameData(receivingSocket, channelCode, data, len);
         });
@@ -32,12 +32,12 @@ GameReceiver* TafnetGameNode::getGameReceiver(std::uint32_t remoteTafnetId, Game
 void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len)
 {
     qDebug() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
-    if (m_remoteTafnetIds.count(receivingSocket->localPort()) == 0)
+    if (m_remotePlayerIds.count(receivingSocket->localPort()) == 0)
     {
         return;
     }
 
-    std::uint32_t destNodeId = m_remoteTafnetIds[receivingSocket->localPort()];
+    std::uint32_t destNodeId = m_remotePlayerIds[receivingSocket->localPort()];
     if (destNodeId == 0)
     {
         qDebug() << "ERROR: unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
@@ -58,12 +58,12 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     }
 }
 
-void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, char* data, int len)
+void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len)
 {
-    GameSender* gameSender = getGameSender(tafheader.sourceId);
-    GameReceiver* gameReceiver = getGameReceiver(tafheader.sourceId, gameSender);
+    GameSender* gameSender = getGameSender(peerPlayerId);
+    GameReceiver* gameReceiver = getGameReceiver(peerPlayerId, gameSender);
     quint16 replyPorts[2];
-    qDebug() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getTafnetId() << "to=" << tafheader.destId << "from=" << tafheader.sourceId << "action=" << tafheader.action;
+    qDebug() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getPlayerId() << "from=" << peerPlayerId << "action=" << tafheader.action;
     switch (tafheader.action)
     {
     case TafnetMessageHeader::ACTION_HELLO:
@@ -85,7 +85,7 @@ void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, c
         gameSender->sendUdpData(data, len);
         break;
     default:
-        qDebug() << "[TafnetGameNode::<tafmsg handler>] ERROR unknown action!";
+        qDebug() << "[TafnetGameNode::<tafmsg handleTafnetMessage>] ERROR unknown action!";
         break;
     };
 }
@@ -95,7 +95,7 @@ TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender 
     m_gameSenderFactory(gameSenderFactory),
     m_gameReceiverFactory(gameReceiverFactory)
 {
-    m_tafnetNode->setHandler([this](const TafnetMessageHeader& tafheader, char* data, int len) {
-        this->handleTafnetMessage(tafheader, data, len);
+    m_tafnetNode->setHandler([this](const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len) {
+        this->handleTafnetMessage(tafheader, peerPlayerId, data, len);
     });
 }
