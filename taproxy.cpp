@@ -6,6 +6,8 @@
 #include <QtNetwork/qudpsocket.h>
 
 #include <cinttypes>
+#include <memory>
+#include <functional>
 
 #include "tademo/HexDump.h"
 #include "tademo/TPacket.h"
@@ -29,19 +31,47 @@ const std::uint16_t* skipCWStr(const std::uint16_t* p)
 struct DPAddress
 {
     std::uint16_t family;
-    std::uint16_t port;
-    std::uint32_t ipv4;
+    std::uint16_t _port;
+    std::uint32_t _ipv4;
     std::uint8_t pad[8];
+
+    std::uint16_t port() const {
+        return NetworkByteOrder(_port);
+    }
+
+    void port(std::uint16_t port)
+    {
+        _port = NetworkByteOrder(port);
+    }
+
+    std::uint32_t address() const {
+        return NetworkByteOrder(_ipv4);
+    }
+
+    void address(std::uint32_t addr) {
+        _ipv4 = NetworkByteOrder(addr);
+    }
+
 };
 
 struct DPHeader
 {
-    unsigned size() {
+    unsigned size() const {
         return size_and_token & 0x000fffff;
     }
-    unsigned token() {
+    unsigned token() const {
         return size_and_token >> 20;
     }
+    bool looksOk() const
+    {
+        return
+            size() >= sizeof(DPHeader) &&
+            (token() == 0xfab || token() == 0xcab || token() == 0xbab) &&
+            address.family == 2 &&   // AF_INET
+            //dialect == 0x0e && // dplay 9
+            std::memcmp(address.pad, "\0\0\0\0\0\0\0\0", 8) == 0;
+    }
+
     std::uint32_t size_and_token;
     DPAddress address;
     char actionstring[4];
@@ -69,13 +99,15 @@ struct DPPackedPlayer
 class DplayAddressTranslater
 {
     std::uint32_t newIpv4Address;
-    std::uint16_t newPort;
+    std::uint16_t newPorts[2];
 
 public:
-    DplayAddressTranslater(std::uint32_t newIpv4Address, std::uint16_t newPort):
-        newIpv4Address(newIpv4Address),
-        newPort(newPort)
-    { }
+    DplayAddressTranslater(std::uint32_t newIpv4Address, std::uint16_t _newPorts[2]):
+        newIpv4Address(newIpv4Address)
+    { 
+        newPorts[0] = _newPorts[0];
+        newPorts[1] = _newPorts[1];
+    }
 
     void operator()(char *buf, int len)
     {
@@ -93,13 +125,9 @@ public:
     bool translateHeader(char* buf, int len)
     {
         DPHeader* dp = (DPHeader*)buf;
-        if (dp->size() >= sizeof(DPHeader) &&
-            (dp->token() == 0xfab || dp->token() == 0xcab || dp->token() == 0xbab) &&
-            dp->address.family == 2 &&   // AF_INET
-            //dp->dialect == 0x0e && // dplay 9
-            std::memcmp(dp->address.pad, "\0\0\0\0\0\0\0\0", 8) == 0)
+        if (dp->looksOk())
         {
-            translateAddress(dp->address);
+            translateAddress(dp->address, newPorts[0]);
             return true;
         }
         else
@@ -108,12 +136,12 @@ public:
         }
     }
 
-    void translateAddress(DPAddress& address)
+    void translateAddress(DPAddress& address, std::uint16_t newPort)
     {
-        qDebug() << "address translate" << QHostAddress(address.ipv4) << NetworkByteOrder(address.port)
-            << "->" << QHostAddress(newIpv4Address) << newPort;
-        address.port = NetworkByteOrder(newPort);
-        address.ipv4 = NetworkByteOrder(newIpv4Address);
+        qDebug() << "address translate" << QHostAddress(address.address()).toString() << address.port()
+            << "->" << QHostAddress(newIpv4Address).toString() << newPort;
+        address.port(newPort);
+        address.address(newIpv4Address);
     }
 
     bool translateForwardOrCreateRequest(char* buf, int len)
@@ -143,9 +171,9 @@ public:
             return false;
         }
         DPAddress* addr = (DPAddress*)(&req->sentinel + req->player.short_name_length + req->player.long_name_length);
-        for (unsigned n = 0u; n < req->player.service_provider_data_size; n += sizeof(DPAddress))
+        for (unsigned n = 0u; n*sizeof(DPAddress) < req->player.service_provider_data_size; ++n)
         {
-            translateAddress(*addr++);
+            translateAddress(*addr++, newPorts[n]);
         }
         return true;
     }
@@ -224,9 +252,9 @@ public:
                 ptr += 2;
             }
             DPAddress* addr = (DPAddress*)ptr;
-            translateAddress(*addr);
+            translateAddress(*addr, newPorts[0]);
             addr += 1;
-            translateAddress(*addr);
+            translateAddress(*addr, newPorts[1]);
             player = (DPSuperPackedPlayer*)(addr + 1);
         }
         return true;
@@ -234,182 +262,537 @@ public:
 };
 
 
-class DplayUdpPortProxy : public QObject
+struct TafnetMessageHeader
 {
-    QString m_tahost;
-    int m_taport;
-    QUdpSocket m_taSocket;
-    QUdpSocket m_proxySocket;
-    DplayAddressTranslater m_addrTranslate;
-    DplayUdpPortProxy* m_peer;
+    static const unsigned ACTION_HELLO = 1;
+    static const unsigned ACTION_ENUM = 2;
+    static const unsigned ACTION_TCP_OPEN = 3;
+    static const unsigned ACTION_TCP_DATA = 4;
+    static const unsigned ACTION_TCP_CLOSE = 5;
+    static const unsigned ACTION_UDP_DATA = 6;
 
-    void onReadyRead()
-    {
-        qDebug() << m_tahost << m_taport << "udp onReadyRead";
-        QByteArray datas;
-        datas.resize(m_proxySocket.pendingDatagramSize());
-        QHostAddress sender;
-        quint16 senderPort;
-        m_proxySocket.readDatagram(datas.data(), datas.size(), &sender, &senderPort);
-        m_peer->handlePeerData(datas);
-    }
-
-public:
-    DplayUdpPortProxy(QString tahost, int taport, QString proxyBindAddress, int proxyBindPort, DplayAddressTranslater addrTranslate) :
-        m_tahost(tahost),
-        m_taport(taport),
-        m_taSocket(this),
-        m_proxySocket(this),
-        m_addrTranslate(addrTranslate),
-        m_peer(NULL)
-    {
-        if (proxyBindPort > 0)
-        {
-            m_proxySocket.bind(QHostAddress(proxyBindAddress), proxyBindPort);
-            QObject::connect(&m_proxySocket, &QUdpSocket::readyRead, this, &DplayUdpPortProxy::onReadyRead);
-        }
-    }
-
-    DplayUdpPortProxy* getPeer() {
-        return m_peer;
-    }
-
-    void setPeer(DplayUdpPortProxy* peer) {
-        m_peer = peer;
-    }
-
-    // peer received data from game, we need to forward to our game
-    void handlePeerData(QByteArray datas)
-    {
-        qDebug() << m_tahost << m_taport << "udp handlePeerData";
-#ifdef _DEBUG
-        TADemo::HexDump(datas.data(), datas.size(), std::cout);
-#endif
-        m_addrTranslate(datas.data(), datas.size());
-#ifdef _DEBUG
-        TADemo::HexDump(datas.data(), datas.size(), std::cout);
-#endif
-        m_taSocket.writeDatagram(datas, QHostAddress(m_tahost), m_taport);
-        m_taSocket.flush();
-    }
+    std::uint32_t action : 3;
+    std::uint32_t sourceId : 8;
+    std::uint32_t destId : 8;
+    std::uint32_t data_bytes : 13;
 };
 
 
-class DplayTcpPortProxy : public QObject
+class TafnetNode: public QObject
 {
-    QString m_tahost;
-    int m_taport;
-    QTcpSocket m_taSocket;
-    QTcpServer m_proxyService;
-    QList<QTcpSocket*> m_proxySockets;
-    DplayAddressTranslater m_addrTranslate;
-    DplayTcpPortProxy* m_peer;
+    const std::uint32_t m_tafnetId;
+    QTcpServer m_tcpServer;
+    QMap<QTcpSocket*, std::uint32_t> m_remoteTafnetIds;
+    QMap<std::uint32_t, QTcpSocket*> m_tcpSockets;
+    QList<QUdpSocket*> m_udpSockets;    // maybe later
+    std::function<void(const TafnetMessageHeader&, char*, int)> m_handleMessage;
 
-    void onNewConnection()
+    virtual void onNewConnection()
     {
-        qDebug() << m_tahost << m_taport << "tcp onNewConnection";
-        if (m_peer && m_peer->handlePeerConnect())
-        {
-            QTcpSocket* clientSocket = m_proxyService.nextPendingConnection();
-            QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &DplayTcpPortProxy::onReadyRead);
-            QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &DplayTcpPortProxy::onSocketStateChanged);
-            m_proxySockets.push_back(clientSocket);
-        }
+        QTcpSocket* clientSocket = m_tcpServer.nextPendingConnection();
+        qDebug() << "[TafnetNode::onNewConnection]" << m_tafnetId << "from" << clientSocket->peerAddress().toString();
+        QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &TafnetNode::onReadyRead);
+        QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &TafnetNode::onSocketStateChanged);
+        m_remoteTafnetIds[clientSocket] = 0u;
     }
 
-    void onSocketStateChanged(QAbstractSocket::SocketState socketState)
+    virtual void onSocketStateChanged(QAbstractSocket::SocketState socketState)
     {
-        qDebug() << m_tahost << m_taport << "tcp onSocketStateChanged" << socketState;
         if (socketState == QAbstractSocket::UnconnectedState)
         {
-            m_peer->handlePeerDisconnect();
             QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
-            sender->close();
-            m_proxySockets.removeOne(sender);
+            std::uint32_t remoteTafnetId = m_remoteTafnetIds[sender];
+            qDebug() << "[TafnetNode::onSocketStateChanged/disconnect]" << m_tafnetId << "from" << sender->peerAddress().toString() << remoteTafnetId;
+            m_remoteTafnetIds.remove(sender);
+            m_tcpSockets.remove(remoteTafnetId);
+            delete sender;
         }
     }
 
-    void onReadyRead()
+    virtual void onReadyRead()
     {
-        qDebug() << m_tahost << m_taport << "tcp onReadyRead";
         QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
         QByteArray datas = sender->readAll();
-        m_peer->handlePeerData(datas);
+
+        char* ptr = datas.data();
+        int remain = datas.size();
+        while (remain >= sizeof(TafnetMessageHeader))
+        {
+            const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)ptr;
+            ptr += sizeof(TafnetMessageHeader);
+            remain -= sizeof(TafnetMessageHeader);
+
+            qDebug() << "[TafnetNode::onReadyRead]" << m_tafnetId << "from" << tafheader->sourceId << ", action=" << tafheader->action;
+
+            if (m_remoteTafnetIds[sender] == 0u &&
+                tafheader->action == TafnetMessageHeader::ACTION_HELLO)
+            {
+                m_remoteTafnetIds[sender] = tafheader->sourceId;
+                m_tcpSockets[tafheader->sourceId] = sender;
+                if (tafheader->destId == 0)
+                {
+                    // source doesn't know who we are.  reply the hello
+                    sendHello(sender);
+                }
+            }
+
+            if (remain >= (int)tafheader->data_bytes)
+            {
+                handleMessage(*tafheader, ptr, tafheader->data_bytes);
+            }
+            ptr += tafheader->data_bytes;
+            remain -= tafheader->data_bytes;
+        }
+    }
+
+    void sendHello(QTcpSocket* socket)
+    {
+        TafnetMessageHeader header;
+        header.action = TafnetMessageHeader::ACTION_HELLO;
+        header.sourceId = m_tafnetId;
+        header.destId = m_remoteTafnetIds[socket];  // 0 if unknown
+        header.data_bytes = 0;
+        socket->write((const char*)&header, sizeof(header));
+        socket->flush();
+    }
+
+    virtual void handleMessage(const TafnetMessageHeader& tafheader, char* data, int len)
+    {
+        m_handleMessage(tafheader, data, len);
     }
 
 public:
-    DplayTcpPortProxy(QString tahost, int taport, QString proxyBindAddress, int proxyBindPort, DplayAddressTranslater addrTranslate) :
-        m_tahost(tahost),
-        m_taport(taport),
-        m_taSocket(this),
-        m_proxyService(this),
-        m_addrTranslate(addrTranslate),
-        m_peer(NULL)
+    TafnetNode(std::uint32_t tafnetId, QHostAddress bindAddress, quint16 bindPort):
+        m_tafnetId(tafnetId)
     {
-        if (proxyBindPort > 0)
-        {
-            m_proxyService.listen(QHostAddress(proxyBindAddress), proxyBindPort);
-            QObject::connect(&m_proxyService, &QTcpServer::newConnection, this, &DplayTcpPortProxy::onNewConnection);
-        }
+        qDebug() << "[TafnetNode::TafnetNode] node" << m_tafnetId << "tcp binding to" << bindAddress.toString() << ":" << bindPort;
+        m_tcpServer.listen(bindAddress, bindPort);
+        QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &TafnetNode::onNewConnection);
     }
 
-    DplayTcpPortProxy* getPeer() {
-        return m_peer;
-    }
-
-    void setPeer(DplayTcpPortProxy* peer) {
-        m_peer = peer;
-    }
-
-    bool handlePeerConnect()
+    void setHandler(const std::function<void(const TafnetMessageHeader&, char*, int)>& f)
     {
-        qDebug() << m_tahost << m_taport << "tcp handlePeerConnect";
-        m_taSocket.connectToHost(QHostAddress(m_tahost), m_taport);
-        m_taSocket.waitForConnected(2000);
-        if (m_taSocket.isOpen())
+        m_handleMessage = f;
+    }
+
+    std::uint32_t getTafnetId()
+    {
+        return m_tafnetId;
+    }
+
+    bool connectToPeer(QHostAddress peer, quint16 peerPort)
+    {
+        qDebug() << "[TafnetNode::connectToPeer] node" << m_tafnetId << "connecting to" << peer.toString() << ":" << peerPort;
+        QTcpSocket* socket = new QTcpSocket();
+        socket->connectToHost(peer, peerPort);
+        socket->waitForConnected(2000);
+        if (socket->isOpen())
         {
+            QObject::connect(socket, &QTcpSocket::readyRead, this, &TafnetNode::onReadyRead);
+            QObject::connect(socket, &QTcpSocket::stateChanged, this, &TafnetNode::onSocketStateChanged);
+            m_remoteTafnetIds[socket] = 0;
+            sendHello(socket);
             return true;
         }
         else
         {
+            delete socket;
             return false;
         }
     }
 
-    void handlePeerDisconnect()
+    void forwardGameData(std::uint32_t destNodeId, std::uint32_t action, char* data, int len)
     {
-        qDebug() << m_tahost << m_taport << "tcp handlePeerDisconnect";
-        m_taSocket.disconnect();
-    }
-
-    // peer received data from game, we need to forward to our game
-    void handlePeerData(QByteArray datas)
-    {
-        if (!m_taSocket.isOpen())
+        qDebug() << "[TafnetNode::forwardGameData] node" << m_tafnetId << "forwarding to node" << destNodeId << ", action=" << action;
+        if (m_tcpSockets.count(destNodeId) == 0)
         {
-            handlePeerConnect();
+            return;
         }
-        if (m_taSocket.isOpen())
-        {
-            qDebug() << m_tahost << m_taport << "tcp handlePeerData";
+
 #ifdef _DEBUG
-            TADemo::HexDump(datas.data(), datas.size(), std::cout);
-#endif
-            m_addrTranslate(datas.data(), datas.size());
-#ifdef _DEBUG
-            TADemo::HexDump(datas.data(), datas.size(), std::cout);
+        TADemo::HexDump(data, len, std::cout);
 #endif
 
-            m_taSocket.write(datas.data(), datas.size());
-            m_taSocket.flush();
-        }
-        else
-        {
-            qDebug() << m_tahost << m_taport << "tcp handlePeerData: ta socket is closed!";
-        }
+        QByteArray buf;
+        buf.resize(sizeof(TafnetMessageHeader) + len);
+
+        TafnetMessageHeader* header = (TafnetMessageHeader*)buf.data();
+        header->sourceId = this->getTafnetId();
+        header->destId = destNodeId;
+        header->action = action;
+        header->data_bytes = len;
+        std::memcpy(buf.data()+sizeof(header), data, len);
+
+        QTcpSocket* socket = m_tcpSockets[destNodeId];
+        socket->write(buf);
+        socket->flush();
     }
 };
 
+
+class GameSender : public QObject
+{
+    QTcpSocket m_enumSocket;
+    QTcpSocket m_tcpSocket;
+    QSharedPointer<QUdpSocket> m_udpSocket;
+
+    QHostAddress m_gameAddress;
+    quint16 m_enumPort;
+    quint16 m_tcpPort;
+    quint16 m_udpPort;
+
+
+
+public:
+    GameSender(QHostAddress gameAddress, quint16 enumPort) :
+        m_gameAddress(gameAddress),
+        m_enumPort(enumPort),
+        m_udpSocket(new QUdpSocket()),
+        m_tcpPort(0),
+        m_udpPort(0)
+    { }
+
+    virtual void setTcpPort(quint16 port)
+    {
+        m_tcpPort = port;
+    }
+
+    virtual void setUdpPort(quint16 port)
+    {
+        m_udpPort = port;
+    }
+
+    virtual void enumSessions(char* data, int len, QHostAddress replyAddress, quint16 replyPorts[2])
+    {
+        qDebug() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort << "/ reply to" << replyAddress.toString() << ":" << replyPorts[0] << '/' << replyPorts[1];
+        DplayAddressTranslater(replyAddress.toIPv4Address(), replyPorts)(data, len);
+        //m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
+        //m_enumSocket.flush();
+        m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
+        m_enumSocket.waitForConnected(30);
+        m_enumSocket.write(data, len);
+        m_enumSocket.flush();
+        m_enumSocket.disconnectFromHost();
+    }
+
+    virtual bool openTcpSocket(int timeoutMillisecond)
+    {
+        if (m_tcpPort > 0 && !m_tcpSocket.isOpen())
+        {
+            qDebug() << "[GameSender::openTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
+            m_tcpSocket.connectToHost(m_gameAddress, m_tcpPort);
+            m_tcpSocket.waitForConnected(timeoutMillisecond);
+        }
+        return m_tcpSocket.isOpen();
+    }
+
+    virtual void sendTcpData(char* data, int len, QHostAddress replyAddress, quint16 replyPorts[2])
+    {
+        if (!m_tcpSocket.isOpen())
+        {
+            openTcpSocket(3);
+        }
+        qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort << "/ reply to" << replyAddress.toString() << ":" << replyPorts[0] << '/' << replyPorts[1];
+        DplayAddressTranslater(replyAddress.toIPv4Address(), replyPorts)(data, len);
+#ifdef _DEBUG
+        TADemo::HexDump(data, len, std::cout);
+#endif
+        m_tcpSocket.write(data, len);
+        m_tcpSocket.flush();
+    }
+
+    virtual void closeTcpSocket()
+    {
+        qDebug() << "[GameSender::closeTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
+        m_tcpSocket.disconnectFromHost();
+    }
+
+    virtual void sendUdpData(char* data, int len)
+    {
+        if (m_udpPort > 0)
+        {
+            qDebug() << "[GameSender::sendUdpData]" << m_gameAddress.toString() << ":" << m_udpPort;
+#ifdef _DEBUG
+            TADemo::HexDump(data, len, std::cout);
+#endif
+            m_udpSocket->writeDatagram(data, len, m_gameAddress, m_udpPort);
+            m_udpSocket->flush();
+        }
+    }
+
+    virtual QSharedPointer<QUdpSocket> getUdpSocket()
+    {
+        return m_udpSocket;
+    }
+};
+
+
+class GameReceiver: public QObject
+{
+    QHostAddress m_bindAddress;
+    quint16 m_enumPort;
+    quint16 m_tcpPort;
+    quint16 m_udpPort;
+    GameSender* m_sender;
+
+    QTcpServer m_tcpServer;
+    QTcpServer m_enumServer;
+    QSharedPointer<QUdpSocket> m_udpSocket;
+    QList<QAbstractSocket*> m_sockets;   // those associated with m_tcpServer, and also those not
+    std::function<void(QAbstractSocket*, int, char*, int)> m_handleMessage;
+
+    int getChannelCodeFromSocket(QAbstractSocket* socket)
+    {
+        if (socket->localPort() == m_enumPort)
+        {
+            return CHANNEL_ENUM;
+        }
+        else if (socket->socketType() == QAbstractSocket::SocketType::TcpSocket && socket->localPort() == m_tcpPort)
+        {
+            return CHANNEL_TCP;
+        }
+        else if (socket->socketType() == QAbstractSocket::SocketType::UdpSocket && socket->localPort() == m_udpPort)
+        {
+            return CHANNEL_UDP;
+        }
+        return 0;
+    }
+
+    virtual void onNewConnection()
+    {
+        QTcpSocket* clientSocket = m_tcpServer.nextPendingConnection();
+        if (clientSocket == NULL)
+        {
+            clientSocket = m_enumServer.nextPendingConnection();
+        }
+        if (clientSocket == NULL)
+        {
+            qDebug() << "[GameReceiver::onNewConnection] unexpected connection";
+            return;
+        }
+        qDebug() << "[GameReceiver::onNewConnection]" << clientSocket->localAddress().toString() << ":" << clientSocket->localPort() << "from" << clientSocket->peerAddress().toString();
+        QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadTcp);
+        QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &GameReceiver::onSocketStateChanged);
+        m_sockets.push_back(clientSocket);
+    }
+
+    virtual void onSocketStateChanged(QAbstractSocket::SocketState socketState)
+    {
+        if (socketState == QAbstractSocket::UnconnectedState)
+        {
+            QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+            qDebug() << "[GameReceiver::onSocketStateChanged/UnconnectedState]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString();
+            m_sockets.removeOne(sender);
+            //delete sender;
+        }
+    }
+
+    virtual void setSenderGamePorts(char *data, int len)
+    {
+        DPHeader* header = (DPHeader*)data;
+        if (m_sender && len >= sizeof(DPHeader) && header->looksOk())
+        {
+            m_sender->setTcpPort(header->address.port());
+            m_sender->setUdpPort(header->address.port() + 50);
+            m_sender = NULL;
+        }
+    }
+
+    virtual void onReadyReadTcp()
+    {
+        QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
+        qDebug() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        QByteArray datas = sender->readAll();
+        setSenderGamePorts(datas.data(), datas.size());
+        handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
+    }
+
+    virtual void onReadyReadUdp()
+    {
+        //QByteArray datas;
+        //datas.resize(m_proxySocket.pendingDatagramSize());
+        //QHostAddress sender;
+        //quint16 senderPort;
+        //m_proxySocket.readDatagram(datas.data(), datas.size(), &sender, &senderPort);
+        QUdpSocket* sender = dynamic_cast<QUdpSocket*>(QObject::sender());
+        qDebug() << "[GameReceiver::onReadyReadUdp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        QByteArray datas;
+        datas.resize(sender->pendingDatagramSize());
+        QHostAddress senderAddress;
+        quint16 senderPort;
+        sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+        handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
+    }
+
+    virtual void handleMessage(QAbstractSocket* receivingSocket, int channel, char* data, int len)
+    {
+        m_handleMessage(receivingSocket, channel, data, len);
+    }
+
+public:
+    static const int CHANNEL_ENUM = 1;
+    static const int CHANNEL_TCP = 2;
+    static const int CHANNEL_UDP = 3;
+
+    GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, GameSender *sender):
+        m_bindAddress(bindAddress),
+        m_enumPort(enumPort),
+        m_tcpPort(tcpPort),
+        m_udpPort(udpPort),
+        m_sender(sender),
+        m_udpSocket(sender->getUdpSocket())
+    {
+        qDebug() << "[GameReceiver::GameReceiver] tcp binding to" << bindAddress.toString() << ":" << tcpPort;
+        m_tcpServer.listen(bindAddress, tcpPort);
+        QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
+
+        qDebug() << "[GameReceiver::GameReceiver] tcp binding to" << bindAddress.toString() << ":" << enumPort;
+        m_enumServer.listen(bindAddress, enumPort);
+        QObject::connect(&m_enumServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
+
+        QUdpSocket* udpSocket = m_udpSocket.data(); //new QUdpSocket();
+        qDebug() << "[GameReceiver::GameReceiver] udp binding to" << bindAddress.toString() << ":" << udpPort;
+        udpSocket->bind(bindAddress, udpPort);
+        QObject::connect(udpSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadUdp);
+    }
+
+    void setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f)
+    {
+        m_handleMessage = f;
+    }
+
+    QHostAddress getBindAddress()
+    {
+        return m_tcpServer.serverAddress();
+    }
+
+    quint16 getEnumListenPort()
+    {
+        return m_enumPort;
+    }
+
+    quint16 getTcpListenPort()
+    {
+        return m_tcpPort;
+    }
+
+    quint16 getUdpListenPort()
+    {
+        return m_udpPort;
+    }
+
+    quint16* getListenPorts(quint16 ports[2])
+    {
+        ports[0] = m_tcpPort;
+        ports[1] = m_udpPort;
+        return ports;
+    }
+};
+
+
+class TafnetGameNode
+{
+    TafnetNode* m_tafnetNode;
+    QMap<std::uint32_t, QSharedPointer<GameSender> > m_gameSenders;     // keyed by Tafnet sourceId
+    QMap<std::uint32_t, QSharedPointer<GameReceiver> > m_gameReceivers; // keyed by Tafnet sourceId
+    QMap<quint32, std::uint32_t> m_remoteTafnetIds;                     // keyed by gameReceiver's receive socket port (both tcp and udp)
+
+    std::function<GameSender * ()> m_gameSenderFactory;
+    std::function<GameReceiver * (GameSender*)> m_gameReceiverFactory;
+
+    GameSender* getGameSender(std::uint32_t remoteTafnetId)
+    {
+        QSharedPointer<GameSender>& gameSender = m_gameSenders[remoteTafnetId];
+        if (!gameSender)
+        {
+            gameSender.reset(m_gameSenderFactory());
+        }
+        return gameSender.data();
+    }
+
+    GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, GameSender* sender)
+    {
+        QSharedPointer<GameReceiver>& gameReceiver = m_gameReceivers[remoteTafnetId];
+        if (!gameReceiver)
+        {
+            gameReceiver.reset(m_gameReceiverFactory(sender));
+            if (m_remoteTafnetIds.count(gameReceiver->getTcpListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getTcpListenPort()] = remoteTafnetId;
+            if (m_remoteTafnetIds.count(gameReceiver->getUdpListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getUdpListenPort()] = remoteTafnetId;
+            if (m_remoteTafnetIds.count(gameReceiver->getEnumListenPort()) == 0) m_remoteTafnetIds[gameReceiver->getEnumListenPort()] = remoteTafnetId;
+            gameReceiver->setHandler([this](QAbstractSocket* receivingSocket, int channelCode, char* data, int len) {
+                this->handleGameData(receivingSocket, channelCode, data, len);
+            });
+        }
+        return gameReceiver.data();
+    }
+
+    virtual void handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len)
+    {
+        qDebug() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
+        if (m_remoteTafnetIds.count(receivingSocket->localPort()) == 0)
+        {
+            return;
+        }
+
+        std::uint32_t destNodeId = m_remoteTafnetIds[receivingSocket->localPort()];
+        if (destNodeId == 0)
+        {
+            qDebug() << "ERROR: unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
+            return;
+        }
+
+        if (channelCode == GameReceiver::CHANNEL_UDP)
+        {
+            m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_UDP_DATA, data, len);
+        }
+        else if (channelCode == GameReceiver::CHANNEL_TCP)
+        {
+            m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_TCP_DATA, data, len);
+        }
+        else if (channelCode == GameReceiver::CHANNEL_ENUM)
+        {
+            m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_ENUM, data, len);
+        }
+    }
+
+public:
+    TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (GameSender*)> gameReceiverFactory) :
+        m_tafnetNode(tafnetNode),
+        m_gameSenderFactory(gameSenderFactory),
+        m_gameReceiverFactory(gameReceiverFactory)
+    {
+        m_tafnetNode->setHandler([this](const TafnetMessageHeader& tafheader, char* data, int len) {
+            GameSender* gameSender = getGameSender(tafheader.sourceId);
+            GameReceiver* gameReceiver = getGameReceiver(tafheader.sourceId, gameSender);
+            quint16 replyPorts[2];
+            qDebug() << "[TafnetGameNode::<tafmsg handler>] me=" << m_tafnetNode->getTafnetId() << "to=" << tafheader.destId << "from=" << tafheader.sourceId << "action=" << tafheader.action;
+            switch (tafheader.action)
+            {
+            case TafnetMessageHeader::ACTION_HELLO:
+                // no further action beyond creating a gameSender/Receiver required
+                break;
+            case TafnetMessageHeader::ACTION_ENUM:
+                gameSender->enumSessions(data, len, gameReceiver->getBindAddress(), gameReceiver->getListenPorts(replyPorts));
+                break;
+            case TafnetMessageHeader::ACTION_TCP_OPEN:
+                gameSender->openTcpSocket(3);
+                break;
+            case TafnetMessageHeader::ACTION_TCP_DATA:
+                gameSender->sendTcpData(data, len, gameReceiver->getBindAddress(), gameReceiver->getListenPorts(replyPorts));
+                break;
+            case TafnetMessageHeader::ACTION_TCP_CLOSE:
+                gameSender->closeTcpSocket();
+                break;
+            case TafnetMessageHeader::ACTION_UDP_DATA:
+                gameSender->sendUdpData(data, len);
+                break;
+            default:
+                qDebug() << "[TafnetGameNode::<tafmsg handler>] ERROR unknown action!";
+                break;
+            };
+        });
+    }
+};
 
 
 int main(int argc, char* argv[])
@@ -432,22 +815,7 @@ int main(int argc, char* argv[])
     const int proxyGamePort1 = 2310;
     const int proxyGamePort2 = 2311;
 
-    //DplayAddressTranslater tx1(QHostAddress(parser.value("proxyaddr")).toIPv4Address(), proxyGamePort1);
-    //DplayAddressTranslater tx2(QHostAddress(parser.value("proxyaddr")).toIPv4Address(), proxyGamePort2);
-    //DplayTcpPortProxy ta1Enum(parser.value("host1"), 47624, parser.value("proxyaddr"), 47624, tx1);
-    //DplayTcpPortProxy ta2Enum(parser.value("host2"), 47624, parser.value("proxyaddr"), 0, tx2);
-    //DplayTcpPortProxy ta1Game(parser.value("host1"), parser.value("port1").toInt(), parser.value("proxyaddr"), proxyGamePort1, tx1);
-    //DplayTcpPortProxy ta2Game(parser.value("host2"), parser.value("port2").toInt(), parser.value("proxyaddr"), proxyGamePort2, tx2);
-
-    //DplayAddressTranslater tx1(QHostAddress("192.168.1.109").toIPv4Address(), 2310);
-    //DplayAddressTranslater tx2(QHostAddress("14.203.145.183").toIPv4Address(), 2311);
-    //DplayAddressTranslater tx1(QHostAddress("0.0.0.0").toIPv4Address(), 2310);
-    //DplayAddressTranslater tx2(QHostAddress("0.0.0.0").toIPv4Address(), 2311);
-    //DplayTcpPortProxy ta1Enum("192.168.1.109", 47624, "192.168.1.109", 0, tx1);
-    //DplayTcpPortProxy ta2Enum("139.180.169.179", 47624, "192.168.1.109", 47625, tx2);
-    //DplayTcpPortProxy ta1Game("192.168.1.109", 2300, "192.168.1.109", 2310, tx1);
-    //DplayTcpPortProxy ta2Game("139.180.169.179", 2300, "192.168.1.109", 2311, tx2);
-
+    /*
     DplayAddressTranslater tx1(QHostAddress("192.168.1.109").toIPv4Address(), 2310);
     DplayAddressTranslater tx2(QHostAddress("192.168.1.109").toIPv4Address(), 2311);
     DplayTcpPortProxy ta1Enum("127.0.0.1", 47624, "192.168.1.109", 47624, tx1);
@@ -463,6 +831,22 @@ int main(int argc, char* argv[])
     ta2tcp.setPeer(&ta1tcp);
     ta1udp.setPeer(&ta2udp);
     ta2udp.setPeer(&ta1udp);
+    */
+
+    TafnetNode node1(1, QHostAddress("192.168.1.109"), 6112);
+    TafnetNode node2(2, QHostAddress("192.168.1.109"), 6113);
+
+    quint16 nextPort = 2310;
+    TafnetGameNode ta1(
+        &node1,
+        []() { return new GameSender(QHostAddress("127.0.0.1"), 47624); },
+        [&nextPort](GameSender* sender) { return new GameReceiver(QHostAddress("127.0.0.1"), 47625, nextPort++, nextPort++, sender); });
+    TafnetGameNode ta2(
+        &node2,
+        []() { return new GameSender(QHostAddress("192.168.1.104"), 47624); },
+        [&nextPort](GameSender* sender) { return new GameReceiver(QHostAddress("192.168.1.109"), 47624, nextPort++, nextPort++, sender); });
+
+    node1.connectToPeer(QHostAddress("192.168.1.109"), 6113);
 
     return app.exec();
 }
