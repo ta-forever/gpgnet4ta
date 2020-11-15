@@ -71,6 +71,7 @@ target_link_directories(taproxy
 
 target_link_libraries(taproxy
 	tademo
+	tafnet
     Qt5::Core
     Qt5::Network)
 
@@ -79,5 +80,6 @@ target_link_libraries(taproxy
 add_subdirectory(jdplay)
 add_subdirectory(tademo)
 add_subdirectory(gpgnet)
+add_subdirectory(tafnet)
 
-install(TARGETS gpgnet4ta tadumper)
+install(TARGETS gpgnet4ta tadumper taproxy)
