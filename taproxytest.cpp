@@ -24,21 +24,22 @@ int main(int argc, char* argv[])
     const int proxyGamePort1 = 2310;
     const int proxyGamePort2 = 2311;
 
-    TafnetNode node1(1, true, QHostAddress("192.168.1.109"), 6112);
-    TafnetNode node2(2, false, QHostAddress("192.168.1.109"), 6113);
+    TafnetNode node1(1, true, QHostAddress("127.0.0.1"), 6112);
+    TafnetNode node2(2, false, QHostAddress("127.0.0.1"), 6113);
 
-    quint16 nextPort = 2310;
     TafnetGameNode ta1(
         &node1,
         []() { return new GameSender(QHostAddress("127.0.0.1"), 47624); },
-        [&nextPort](GameSender* sender) { return new GameReceiver(QHostAddress("127.0.0.1"), 47625, nextPort++, nextPort++, sender); });
+        [](GameSender* sender) { return new GameReceiver(QHostAddress("127.0.0.1"), 47625, 0, 0, sender); });
     TafnetGameNode ta2(
         &node2,
         []() { return new GameSender(QHostAddress("192.168.1.104"), 47624); },
-        [&nextPort](GameSender* sender) { return new GameReceiver(QHostAddress("192.168.1.109"), 47624, nextPort++, nextPort++, sender); });
+        [](GameSender* sender) { return new GameReceiver(QHostAddress("192.168.1.109"), 47624, 0, 0, sender); });
 
-    node2.joinGame(QHostAddress("192.168.1.109"), 6112, 1);
-    node1.connectToPeer(QHostAddress("192.168.1.109"), 6113, 2);
+    node2.joinGame(QHostAddress("127.0.0.1"), 6112, 1);
+    node1.connectToPeer(QHostAddress("127.0.0.1"), 6113, 2);
+    ta1.registerRemotePlayer(2);
+    ta2.registerRemotePlayer(1);
 
     return app.exec();
 }

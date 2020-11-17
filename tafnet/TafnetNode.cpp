@@ -84,7 +84,7 @@ void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_
     HostAndPort hostAndPort(peer, peerPort);
     m_peerAddresses[peerPlayerId] = hostAndPort;
     m_peerPlayerIds[hostAndPort] = peerPlayerId;
-    forwardGameData(peerPlayerId, TafnetMessageHeader::ACTION_HELLO, "", 0);
+    //forwardGameData(peerPlayerId, TafnetMessageHeader::ACTION_HELLO, "", 0);
 }
 
 void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int len)

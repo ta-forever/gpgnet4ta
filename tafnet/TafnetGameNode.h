@@ -36,6 +36,9 @@ namespace tafnet
 
     public:
         TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (GameSender*)> gameReceiverFactory);
+      
+        virtual void registerRemotePlayer(std::uint32_t remotePlayerId);
+
     };
 
 }

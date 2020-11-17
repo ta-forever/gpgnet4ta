@@ -53,8 +53,8 @@ namespace gpgnet
     }
 
     JoinGameCommand::JoinGameCommand() :
-        remoteHost("127.0.0.1"),
-        remotePlayerName("ACDC"),
+        _remoteHost("127.0.0.1"),
+        _remotePlayerName("ACDC"),
         remotePlayerId(0)
     { }
 
@@ -70,22 +70,39 @@ namespace gpgnet
         {
             throw std::runtime_error("Unexpected command");
         }
-        remoteHost = command[1].toString();
-        remotePlayerName = command[2].toString();
+        _remoteHost = command[1].toString();
+        _remotePlayerName = command[2].toString();
         remotePlayerId = command[3].toInt();
-
-        QStringList playerParts = remotePlayerName.split("@");
-        if (playerParts.size() == 2)
-        {
-            // the command[1] host is probably just the local ICE proxy (which TA can't use)
-            remotePlayerName = playerParts[0];
-            remoteHost = playerParts[1];
-        }
     }
 
+    QString JoinGameCommand::remotePlayerName() const
+    {
+        return _remotePlayerName.split("@")[0];
+    }
+
+    QString JoinGameCommand::remoteHost() const
+    {
+        return _remoteHost;
+    }
+
+    QStringList JoinGameCommand::remoteHostCandidateList() const
+    {
+        QStringList candidates = _remotePlayerName.split("@");
+        if (candidates.size() == 1)
+        {
+            candidates[0] = remoteHost();
+        }
+        else if (candidates.size() > 1)
+        {
+            candidates = candidates[1].split(';');
+        }
+        return candidates;
+    }
+        
+
     ConnectToPeerCommand::ConnectToPeerCommand() :
-        host("127.0.0.1"),
-        playerName("ACDC"),
+        _host("127.0.0.1"),
+        _playerName("ACDC"),
         playerId(0)
     { }
 
@@ -101,17 +118,36 @@ namespace gpgnet
         {
             throw std::runtime_error("Unexpected command");
         }
-        host = command[1].toString();
-        playerName = command[2].toString();
+        _host = command[1].toString();
+        _playerName = command[2].toString();
         playerId = command[3].toInt();
+    }
 
-        QStringList playerParts = playerName.split("@");
-        if (playerParts.size() == 2)
+    // _remotePlayerName might be in the format player@address1;address2. remotePlayerName() makes sure we get just a player name
+    QString ConnectToPeerCommand::playerName() const
+    {
+        return _playerName.split("@")[0];
+    }
+
+    // the remote host actually in _remoteHost field
+    QString ConnectToPeerCommand::host() const
+    {
+        return _host;
+    }
+
+    // the host list after the @ in _remotePlayerName if there is one.  otherwise just _remoteHost
+    QStringList ConnectToPeerCommand::hostCandidateList() const
+    {
+        QStringList candidates = _playerName.split("@");
+        if (candidates.size() == 1)
         {
-            // the command[1] host is probably just the local ICE proxy (which TA can't use)
-            playerName = playerParts[0];
-            host = playerParts[1];
+            candidates[0] = host();
         }
+        else if (candidates.size() > 1)
+        {
+            candidates = candidates[1].split(';');
+        }
+        return candidates;
     }
 
     std::uint8_t GpgNetReceive::GetByte(QDataStream& is)

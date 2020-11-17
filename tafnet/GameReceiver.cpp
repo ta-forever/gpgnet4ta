@@ -6,6 +6,31 @@
 
 using namespace tafnet;
 
+GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, GameSender* sender) :
+    m_bindAddress(bindAddress),
+    m_enumPort(enumPort),
+    m_tcpPort(tcpPort),
+    m_udpPort(udpPort),
+    m_sender(sender),
+    m_udpSocket(sender->getUdpSocket())
+{
+    m_enumServer.listen(bindAddress, enumPort);
+    m_enumPort = m_enumServer.serverPort();
+    qDebug() << "[GameReceiver::GameReceiver] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumPort;
+    QObject::connect(&m_enumServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
+
+    m_tcpServer.listen(bindAddress, tcpPort);
+    m_tcpPort = m_tcpServer.serverPort();
+    qDebug() << "[GameReceiver::GameReceiver] tcp data server binding to" << m_tcpServer.serverAddress().toString() << ":" << m_tcpPort;
+    QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
+
+    QUdpSocket* udpSocket = m_udpSocket.data(); //new QUdpSocket();
+    udpSocket->bind(bindAddress, udpPort);
+    m_udpPort = udpSocket->localPort();
+    qDebug() << "[GameReceiver::GameReceiver] udp data socket binding" << udpSocket->localAddress().toString() << ":" << m_udpPort;
+    QObject::connect(udpSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadUdp);
+}
+
 int GameReceiver::getChannelCodeFromSocket(QAbstractSocket* socket)
 {
     if (socket->localPort() == m_enumPort)
@@ -59,7 +84,7 @@ void GameReceiver::setSenderGamePorts(char* data, int len)
     {
         m_sender->setTcpPort(header->address.port());
         m_sender->setUdpPort(header->address.port() + 50);
-        m_sender = NULL;
+        //m_sender = NULL;
     }
 }
 
@@ -86,34 +111,13 @@ void GameReceiver::onReadyReadUdp()
     QHostAddress senderAddress;
     quint16 senderPort;
     sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+    setSenderGamePorts(datas.data(), datas.size());
     handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
 }
 
 void GameReceiver::handleMessage(QAbstractSocket* receivingSocket, int channel, char* data, int len)
 {
     m_handleMessage(receivingSocket, channel, data, len);
-}
-
-GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, GameSender* sender) :
-    m_bindAddress(bindAddress),
-    m_enumPort(enumPort),
-    m_tcpPort(tcpPort),
-    m_udpPort(udpPort),
-    m_sender(sender),
-    m_udpSocket(sender->getUdpSocket())
-{
-    qDebug() << "[GameReceiver::GameReceiver] tcp binding to" << bindAddress.toString() << ":" << tcpPort;
-    m_tcpServer.listen(bindAddress, tcpPort);
-    QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
-
-    qDebug() << "[GameReceiver::GameReceiver] tcp binding to" << bindAddress.toString() << ":" << enumPort;
-    m_enumServer.listen(bindAddress, enumPort);
-    QObject::connect(&m_enumServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
-
-    QUdpSocket* udpSocket = m_udpSocket.data(); //new QUdpSocket();
-    qDebug() << "[GameReceiver::GameReceiver] udp binding to" << bindAddress.toString() << ":" << udpPort;
-    udpSocket->bind(bindAddress, udpPort);
-    QObject::connect(udpSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadUdp);
 }
 
 void GameReceiver::setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f)

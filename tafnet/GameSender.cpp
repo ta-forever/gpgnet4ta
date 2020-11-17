@@ -28,13 +28,13 @@ void GameSender::enumSessions(char* data, int len, QHostAddress replyAddress, qu
 {
     qDebug() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort << "/ reply to" << replyAddress.toString() << ":" << replyPorts[0] << '/' << replyPorts[1];
     GameAddressTranslater(replyAddress.toIPv4Address(), replyPorts)(data, len);
-    //m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
-    //m_enumSocket.flush();
-    m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
-    m_enumSocket.waitForConnected(30);
-    m_enumSocket.write(data, len);
+    m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     m_enumSocket.flush();
-    m_enumSocket.disconnectFromHost();
+    //m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
+    //m_enumSocket.waitForConnected(30);
+    //m_enumSocket.write(data, len);
+    //m_enumSocket.flush();
+    //m_enumSocket.disconnectFromHost();
 }
 
 bool GameSender::openTcpSocket(int timeoutMillisecond)

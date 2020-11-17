@@ -10,7 +10,7 @@ namespace tafnet
 
     class GameSender : public QObject
     {
-        QTcpSocket m_enumSocket;                // game responds to messages on this socket by advertising any hosted sessions
+        QUdpSocket m_enumSocket;                // game responds to messages on this socket by advertising any hosted sessions
         QTcpSocket m_tcpSocket;                 // game receives tcp data on this socket, typically dplay session messages during game setup
         QSharedPointer<QUdpSocket> m_udpSocket; // shared with GameReceiver. game receives udp data on this socket, typically game data
 

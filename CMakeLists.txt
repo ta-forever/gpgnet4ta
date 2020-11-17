@@ -14,9 +14,43 @@ set(MINIUPNP_LIB_DIR "${MINIUPNP_DIR}/lib")
 set(MINIUPNP_LIBS_DYNAMIC "miniupnpc")
 set(MINIUPNP_LIBS_STATIC "libminiupnpc")
 
+add_subdirectory(jdplay)
+add_subdirectory(tademo)
+add_subdirectory(gpgnet)
+add_subdirectory(tafnet)
+
+# -------------- TADUMPER -------------
+
+add_executable(tadumper
+    tadumper.cpp)
+
+target_link_libraries(tadumper
+    tademo)
+
+
+# -------------- TAPROXYTEST -------------
+
+add_executable(taproxytest
+	taproxytest.cpp)
+
+target_link_directories(taproxytest
+    PUBLIC)
+
+target_link_libraries(taproxytest
+	tademo
+	tafnet
+    Qt5::Core
+    Qt5::Network)
+
 # -------------- GPGNET4TA -------------
 
+set(CMAKE_AUTOMOC ON)
+
 add_executable(gpgnet4ta
+	TaLobby.h
+	TaLobby.cpp
+	GpgNetRunner.h
+	GpgNetRunner.cpp
     gpgnet4ta.cpp)
 
 target_include_directories(gpgnet4ta 
@@ -32,6 +66,7 @@ target_link_directories(gpgnet4ta
 target_link_libraries(gpgnet4ta
     jdplay
     tademo
+	tafnet
     gpgnet
     Qt5::Core
     Qt5::Network
@@ -52,34 +87,6 @@ add_custom_command(
         $<TARGET_FILE_DIR:gpgnet4ta>)
 
 
-# -------------- TADUMPER -------------
-
-add_executable(tadumper
-    tadumper.cpp)
-
-target_link_libraries(tadumper
-    tademo)
-
-
-# -------------- TAPROXY -------------
-
-add_executable(taproxy
-	taproxy.cpp)
-
-target_link_directories(taproxy
-    PUBLIC)
-
-target_link_libraries(taproxy
-	tademo
-	tafnet
-    Qt5::Core
-    Qt5::Network)
-
 # ----------------------
 
-add_subdirectory(jdplay)
-add_subdirectory(tademo)
-add_subdirectory(gpgnet)
-add_subdirectory(tafnet)
-
-install(TARGETS gpgnet4ta tadumper taproxy)
+install(TARGETS gpgnet4ta tadumper)

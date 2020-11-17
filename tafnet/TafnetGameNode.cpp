@@ -85,7 +85,7 @@ void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, s
         gameSender->sendUdpData(data, len);
         break;
     default:
-        qDebug() << "[TafnetGameNode::<tafmsg handleTafnetMessage>] ERROR unknown action!";
+        qDebug() << "[TafnetGameNode::handleTafnetMessage] ERROR unknown action!";
         break;
     };
 }
@@ -98,4 +98,11 @@ TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender 
     m_tafnetNode->setHandler([this](const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len) {
         this->handleTafnetMessage(tafheader, peerPlayerId, data, len);
     });
+}
+
+void TafnetGameNode::registerRemotePlayer(std::uint32_t remotePlayerId)
+{
+    qDebug() << "[TafnetGameNode::registerRemotePlayer]" << m_tafnetNode->getPlayerId() << "registering player" << remotePlayerId;
+    GameSender* gameSender = getGameSender(remotePlayerId);
+    GameReceiver* gameReceiver = getGameReceiver(remotePlayerId, gameSender);
 }
