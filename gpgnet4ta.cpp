@@ -198,7 +198,6 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
     parser.addOption(QCommandLineOption("testlaunch", "Launch TA straight away."));
-    parser.addOption(QCommandLineOption("tunnelbindaddress", "The local IP address on which to host a udp tunnel to TA. leave blank to disable", "tunnelbindaddress", "127.0.0.1"));
     parser.process(app);
 
     QString dplayGuid = QUuid::createUuidV5(QUuid(DEFAULT_DPLAY_REGISTERED_GAME_GUID), parser.value("gamemod").toUpper()).toString();
