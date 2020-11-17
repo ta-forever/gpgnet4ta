@@ -24,10 +24,9 @@ void GameSender::setUdpPort(quint16 port)
     m_udpPort = port;
 }
 
-void GameSender::enumSessions(char* data, int len, QHostAddress replyAddress, quint16 replyPorts[2])
+void GameSender::enumSessions(char* data, int len)
 {
-    qDebug() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort << "/ reply to" << replyAddress.toString() << ":" << replyPorts[0] << '/' << replyPorts[1];
-    GameAddressTranslater(replyAddress.toIPv4Address(), replyPorts)(data, len);
+    qDebug() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort;
     m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     m_enumSocket.flush();
     //m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
@@ -48,14 +47,13 @@ bool GameSender::openTcpSocket(int timeoutMillisecond)
     return m_tcpSocket.isOpen();
 }
 
-void GameSender::sendTcpData(char* data, int len, QHostAddress replyAddress, quint16 replyPorts[2])
+void GameSender::sendTcpData(char* data, int len)
 {
     if (!m_tcpSocket.isOpen())
     {
         openTcpSocket(3);
     }
-    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort << "/ reply to" << replyAddress.toString() << ":" << replyPorts[0] << '/' << replyPorts[1];
-    GameAddressTranslater(replyAddress.toIPv4Address(), replyPorts)(data, len);
+    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort;
 #ifdef _DEBUG
     TADemo::HexDump(data, len, std::cout);
 #endif

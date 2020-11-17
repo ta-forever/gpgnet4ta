@@ -29,10 +29,12 @@ namespace tafnet
         std::function<GameSender * ()> m_gameSenderFactory;
         std::function<GameReceiver * (GameSender*)> m_gameReceiverFactory;
 
-        GameSender* getGameSender(std::uint32_t remoteTafnetId);
-        GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, GameSender* sender);
+        virtual GameSender* getGameSender(std::uint32_t remoteTafnetId);
+        virtual GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, GameSender* sender);
         virtual void handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len);
         virtual void handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len);
+        virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
+        virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
 
     public:
         TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (GameSender*)> gameReceiverFactory);

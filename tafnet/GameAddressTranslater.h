@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cinttypes>
+#include <functional>
+#include <map>
 #include <string>
 
 namespace tafnet
@@ -54,17 +56,27 @@ namespace tafnet
 
     class GameAddressTranslater
     {
-        std::uint32_t newIpv4Address;
-        std::uint16_t newPorts[2];
+        std::uint32_t replyAddress;
+        std::uint16_t replyPorts[2];
+        std::function<bool(DPAddress & address, int /* 0:tcp, 1:udp */)> translatePlayerSPA;
 
     public:
-        GameAddressTranslater(std::uint32_t newIpv4Address, std::uint16_t _newPorts[2]);
+        typedef std::function<bool(DPAddress & address, int /* 0:tcp, 1:udp */)> TranslatePlayerSPA;
 
-        void operator()(char* buf, int len);
-        bool translateHeader(char* buf, int len);
-        void translateAddress(DPAddress& address, std::uint16_t newPort);
-        bool translateForwardOrCreateRequest(char* buf, int len);
-        bool translateSuperEnumPlayersReply(char* buf, int len);
+        GameAddressTranslater(std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
+
+        GameAddressTranslater(
+            std::uint32_t replyAddress, const std::uint16_t replyPorts[],
+            const TranslatePlayerSPA & translatePlayerSPAddress);
+
+        void operator()(char* buf, int len) const;
+
+        bool translateHeader(char* buf, int len) const;
+        bool translateForwardOrCreateRequest(char* buf, int len) const;
+        bool translateSuperEnumPlayersReply(char* buf, int len) const;
+
+    private:
+        void translateReplyAddress(DPAddress& address, int index) const;
     };
 
 }

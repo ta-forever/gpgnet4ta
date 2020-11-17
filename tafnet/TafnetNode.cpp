@@ -96,7 +96,7 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
         return;
     }
     HostAndPort& hostAndPort = it->second;
-    qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "forwarding to" << destPlayerId << ", action=" << action;
+    qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "forwarding to" << destPlayerId << "port=" << hostAndPort.port << "action=" << action;
 
 #ifdef _DEBUG
     TADemo::HexDump(data, len, std::cout);

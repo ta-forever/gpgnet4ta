@@ -71,15 +71,26 @@ bool DPHeader::looksOk() const
 }
 
 
-
-GameAddressTranslater::GameAddressTranslater(std::uint32_t newIpv4Address, std::uint16_t _newPorts[2]) :
-    newIpv4Address(newIpv4Address)
+GameAddressTranslater::GameAddressTranslater(std::uint32_t _replyAddress, const std::uint16_t _replyPorts[]) :
+    replyAddress(_replyAddress),
+    translatePlayerSPA([] (DPAddress &, int) { return false; })
 {
-    newPorts[0] = _newPorts[0];
-    newPorts[1] = _newPorts[1];
+    replyPorts[0] = _replyPorts[0];
+    replyPorts[1] = _replyPorts[1];
 }
 
-void GameAddressTranslater::operator()(char* buf, int len)
+
+GameAddressTranslater::GameAddressTranslater(
+    std::uint32_t _replyAddress, const std::uint16_t _replyPorts[],
+    const TranslatePlayerSPA &_translate) :
+    replyAddress(_replyAddress),
+    translatePlayerSPA(_translate)
+{
+    replyPorts[0] = _replyPorts[0];
+    replyPorts[1] = _replyPorts[1];
+}
+
+void GameAddressTranslater::operator()(char* buf, int len) const
 {
     for (char* ptr = buf; ptr < buf + len;) {
         DPHeader* hdr = (DPHeader*)ptr;
@@ -92,12 +103,12 @@ void GameAddressTranslater::operator()(char* buf, int len)
     }
 }
 
-bool GameAddressTranslater::translateHeader(char* buf, int len)
+bool GameAddressTranslater::translateHeader(char* buf, int len) const
 {
     DPHeader* dp = (DPHeader*)buf;
     if (dp->looksOk())
     {
-        translateAddress(dp->address, newPorts[0]);
+        translateReplyAddress(dp->address, 0);
         return true;
     }
     else
@@ -106,22 +117,20 @@ bool GameAddressTranslater::translateHeader(char* buf, int len)
     }
 }
 
-void GameAddressTranslater::translateAddress(DPAddress& address, std::uint16_t newPort)
+void GameAddressTranslater::translateReplyAddress(DPAddress &address, int index) const
 {
 #ifdef _DEBUG
     std::cout << "[GameAddressTranslater:translateAddress] " << address.debugString();
 #endif
-
-    address.port(newPort);
-    address.address(newIpv4Address);
-
+    address.address(replyAddress);
+    address.port(replyPorts[index]);
 #ifdef _DEBUG
     std::cout << " -> " << address.debugString() << std::endl;;
 #endif
-
 }
 
-bool GameAddressTranslater::translateForwardOrCreateRequest(char* buf, int len)
+
+bool GameAddressTranslater::translateForwardOrCreateRequest(char* buf, int len) const
 {
     DPHeader* dp = (DPHeader*)buf;
     if (dp->command != 0x2e && // DPSP_MSG_ADDFORWARD
@@ -148,14 +157,17 @@ bool GameAddressTranslater::translateForwardOrCreateRequest(char* buf, int len)
         return false;
     }
     DPAddress* addr = (DPAddress*)(&req->sentinel + req->player.short_name_length + req->player.long_name_length);
-    for (unsigned n = 0u; n * sizeof(DPAddress) < req->player.service_provider_data_size; ++n)
+    for (unsigned n = 0u; n * sizeof(DPAddress) < req->player.service_provider_data_size; ++n, ++addr)
     {
-        translateAddress(*addr++, newPorts[n]);
+        if (!translatePlayerSPA(*addr, n))
+        {
+            translateReplyAddress(*addr, n);
+        }
     }
     return true;
 }
 
-bool GameAddressTranslater::translateSuperEnumPlayersReply(char* buf, int len)
+bool GameAddressTranslater::translateSuperEnumPlayersReply(char* buf, int len) const
 {
     DPHeader* dp = (DPHeader*)buf;
     if (dp->command != 0x0029) // Super Enum Players Reply
@@ -229,10 +241,14 @@ bool GameAddressTranslater::translateSuperEnumPlayersReply(char* buf, int len)
             ptr += 2;
         }
         DPAddress* addr = (DPAddress*)ptr;
-        translateAddress(*addr, newPorts[0]);
-        addr += 1;
-        translateAddress(*addr, newPorts[1]);
-        player = (DPSuperPackedPlayer*)(addr + 1);
+        for (int i = 0; i < 2; ++i, ++addr)
+        {
+            if (!translatePlayerSPA(*addr, i))
+            {
+                translateReplyAddress(*addr, i);
+            }
+        }
+        player = (DPSuperPackedPlayer*)(addr);
     }
     return true;
 }
