@@ -30,7 +30,7 @@ void GameSender::enumSessions(char* data, int len)
     m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     m_enumSocket.flush();
     //m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
-    //m_enumSocket.waitForConnected(30);
+    //m_enumSocket.waitForConnected(100);
     //m_enumSocket.write(data, len);
     //m_enumSocket.flush();
     //m_enumSocket.disconnectFromHost();
@@ -51,10 +51,10 @@ void GameSender::sendTcpData(char* data, int len)
 {
     if (!m_tcpSocket.isOpen())
     {
-        openTcpSocket(3);
+        openTcpSocket(100);
     }
-    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort;
 #ifdef _DEBUG
+    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort;
     TADemo::HexDump(data, len, std::cout);
 #endif
     m_tcpSocket.write(data, len);
@@ -71,8 +71,8 @@ void GameSender::sendUdpData(char* data, int len)
 {
     if (m_udpPort > 0)
     {
-        qDebug() << "[GameSender::sendUdpData]" << m_gameAddress.toString() << ":" << m_udpPort;
 #ifdef _DEBUG
+        qDebug() << "[GameSender::sendUdpData]" << m_gameAddress.toString() << ":" << m_udpPort;
         TADemo::HexDump(data, len, std::cout);
 #endif
         m_udpSocket->writeDatagram(data, len, m_gameAddress, m_udpPort);

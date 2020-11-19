@@ -12,8 +12,8 @@ class TaLobby : public QObject
 {
     Q_OBJECT
 
-    const QHostAddress m_lobbyBindAddress;
-    const quint16 m_lobbyPortOverride;
+    QHostAddress m_lobbyBindAddress;
+    quint16 m_lobbyPortOverride;
     const QHostAddress m_gameReceiveBindAddress;
     const QHostAddress m_gameAddress;
 
@@ -22,8 +22,7 @@ class TaLobby : public QObject
 
 public:
     TaLobby(
-        QString lobbyBindAddress, quint16 lobbyPortOverride,
-        QString gameReceiveBindAddress, QString gameAddress);
+        QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
 
 public slots:
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);

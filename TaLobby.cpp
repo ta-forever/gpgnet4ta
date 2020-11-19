@@ -18,13 +18,14 @@ void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& port)
 }
 
 TaLobby::TaLobby(
-    QString lobbyBindAddress, quint16 lobbyPortOverride,
-    QString gameReceiveBindAddress, QString gameAddress):
-    m_lobbyBindAddress(lobbyBindAddress),
-    m_lobbyPortOverride(lobbyPortOverride),
+    QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress):
+    m_lobbyBindAddress("127.0.0.1"),
+    m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
     m_gameAddress(gameAddress)
-{ }
+{
+    SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
+}
 
 void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
 {

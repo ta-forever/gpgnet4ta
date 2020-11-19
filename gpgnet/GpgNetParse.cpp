@@ -1,4 +1,4 @@
-#include "GpgNetReceive.h"
+#include "GpgNetParse.h"
 
 #include <QtCore/qdatastream.h>
 #include <QtCore/qsharedpointer.h>
@@ -150,21 +150,21 @@ namespace gpgnet
         return candidates;
     }
 
-    std::uint8_t GpgNetReceive::GetByte(QDataStream& is)
+    std::uint8_t GpgNetParse::GetByte(QDataStream& is)
     {
         std::uint8_t byte;
         is.readRawData((char*)&byte, 1);
         return byte;
     }
 
-    std::uint32_t GpgNetReceive::GetInt(QDataStream& is)
+    std::uint32_t GpgNetParse::GetInt(QDataStream& is)
     {
         std::uint32_t word;
         is.readRawData((char*)&word, 4);
         return word;
     }
 
-    QString GpgNetReceive::GetString(QDataStream& is)
+    QString GpgNetParse::GetString(QDataStream& is)
     {
         std::uint32_t size = GetInt(is);
         QSharedPointer<char> buffer(new char[1 + size]);
@@ -173,16 +173,16 @@ namespace gpgnet
         return QString(buffer.data());
     }
 
-    GpgNetReceive::GpgNetReceive(QDataStream& is) :
+    GpgNetParse::GpgNetParse(QDataStream& is) :
         m_is(is)
     { }
 
-    QVariantList GpgNetReceive::GetCommand()
+    QVariantList GpgNetParse::GetCommand()
     {
         return GetCommand(m_is);
     }
 
-    QVariantList GpgNetReceive::GetCommand(QDataStream& is)
+    QVariantList GpgNetParse::GetCommand(QDataStream& is)
     {
         QVariantList commandAndArgs;
 

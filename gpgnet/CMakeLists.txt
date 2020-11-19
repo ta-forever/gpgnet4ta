@@ -1,7 +1,7 @@
 
 add_library(gpgnet
-    GpgNetReceive.h
-    GpgNetReceive.cpp
+	GpgNetParse.h
+	GpgNetParse.cpp
     GpgNetSend.h
     GpgNetSend.cpp)
 

@@ -16,18 +16,18 @@ GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 t
 {
     m_enumServer.listen(bindAddress, enumPort);
     m_enumPort = m_enumServer.serverPort();
-    qDebug() << "[GameReceiver::GameReceiver] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumPort;
+    qDebug() << "[GameReceiver::GameReceiver] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumServer.serverPort();
     QObject::connect(&m_enumServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
 
     m_tcpServer.listen(bindAddress, tcpPort);
     m_tcpPort = m_tcpServer.serverPort();
-    qDebug() << "[GameReceiver::GameReceiver] tcp data server binding to" << m_tcpServer.serverAddress().toString() << ":" << m_tcpPort;
+    qDebug() << "[GameReceiver::GameReceiver] tcp data server binding to" << m_tcpServer.serverAddress().toString() << ":" << m_tcpServer.serverPort();
     QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
 
     QUdpSocket* udpSocket = m_udpSocket.data(); //new QUdpSocket();
     udpSocket->bind(bindAddress, udpPort);
     m_udpPort = udpSocket->localPort();
-    qDebug() << "[GameReceiver::GameReceiver] udp data socket binding" << udpSocket->localAddress().toString() << ":" << m_udpPort;
+    qDebug() << "[GameReceiver::GameReceiver] udp data socket binding" << udpSocket->localAddress().toString() << ":" << udpSocket->localPort();
     QObject::connect(udpSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadUdp);
 }
 
@@ -91,7 +91,7 @@ void GameReceiver::setSenderGamePorts(char* data, int len)
 void GameReceiver::onReadyReadTcp()
 {
     QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
-    qDebug() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+    //qDebug() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
     QByteArray datas = sender->readAll();
     setSenderGamePorts(datas.data(), datas.size());
     handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
@@ -105,7 +105,7 @@ void GameReceiver::onReadyReadUdp()
     //quint16 senderPort;
     //m_proxySocket.readDatagram(datas.data(), datas.size(), &sender, &senderPort);
     QUdpSocket* sender = dynamic_cast<QUdpSocket*>(QObject::sender());
-    qDebug() << "[GameReceiver::onReadyReadUdp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+    //qDebug() << "[GameReceiver::onReadyReadUdp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
     QByteArray datas;
     datas.resize(sender->pendingDatagramSize());
     QHostAddress senderAddress;

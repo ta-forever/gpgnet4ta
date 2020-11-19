@@ -54,7 +54,7 @@ void TafnetGameNode::translateMessageFromLocalGame(char* data, int len, std::uin
 
 void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len)
 {
-    qDebug() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
+    //qDebug() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
     if (m_remotePlayerIds.count(receivingSocket->localPort()) == 0)
     {
         return;
@@ -117,7 +117,7 @@ void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, s
     quint16 replyPorts[2];
     gameReceiver->getListenPorts(replyPorts);
 
-    qDebug() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getPlayerId() << "from=" << peerPlayerId << "action=" << tafheader.action;
+    //qDebug() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getPlayerId() << "from=" << peerPlayerId << "action=" << tafheader.action;
     switch (tafheader.action)
     {
     case TafnetMessageHeader::ACTION_HELLO:

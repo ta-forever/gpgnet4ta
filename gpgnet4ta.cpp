@@ -18,7 +18,7 @@
 #include <fstream>
 
 #include "jdplay/JDPlay.h"
-#include "gpgnet/GpgNetReceive.h"
+#include "gpgnet/GpgNetParse.h"
 #include "gpgnet/GpgNetSend.h"
 #include "tademo/TADemoParser.h"
 #include "tademo/GameMonitor.h"
@@ -35,7 +35,8 @@ bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QS
     QString registryPath = QString(R"(%1\%2)").arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
     QSettings registry(registryPath, QSettings::NativeFormat);
     QStringList applications = registry.childGroups();
-    //qDebug() << "\nCHECK:" << guid << path << file << commandLine << currentDirectory;
+
+    qDebug() << "\nCHECK:" << guid << path << file << commandLine << currentDirectory;
     Q_FOREACH(QString appName, applications)
     {
         QString nthGuid = registry.value(appName + "/Guid").toString();
@@ -49,10 +50,10 @@ bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QS
             QString::compare(commandLine, nthCommandLine) == 0 &&
             QString::compare(currentDirectory, nthCurrentDirectory, Qt::CaseInsensitive) ==0)
         {
-            //qDebug() << "MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
+            qDebug() << "MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
             return true;
         }
-        //qDebug() << "NO MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
+        qDebug() << "NO MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
 
     }
     return false;
@@ -197,7 +198,10 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
     parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
-    parser.addOption(QCommandLineOption("testlaunch", "Launch TA straight away."));
+    parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface", "lobbybindaddress", "127.0.0.1"));
+    parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
+    parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
+    parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
     parser.process(app);
 
     QString dplayGuid = QUuid::createUuidV5(QUuid(DEFAULT_DPLAY_REGISTERED_GAME_GUID), parser.value("gamemod").toUpper()).toString();
@@ -295,11 +299,31 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (parser.isSet("testlaunch"))
+    if (parser.isSet("createlobby"))
     {
-        CreateLobbyCommand createLobbyCommand;
-        JDPlay jdplay(createLobbyCommand.playerName.toStdString().c_str(), 3, false);
-        bool ret = jdplay.initialize(dplayGuid.toStdString().c_str(), "0.0.0.0", true, 10);
+        TaLobby lobby(parser.value("lobbybindaddress"), "127.0.0.1", "127.0.0.1");
+        QString playerName = parser.value("lobbybindaddress").split(':')[0];
+        std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
+        lobby.onCreateLobby(0, 6112, parser.value("lobbybindaddress"), playerId, 0);
+
+        if (parser.isSet("joingame"))
+        {
+            QString hostaddr = parser.value("joingame");
+            QString playerName = hostaddr.split(':')[0];
+            std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
+            lobby.onJoinGame(hostaddr, playerName, playerId);
+        }
+        for (QString peer : parser.values("connecttopeer"))
+        {
+            QString playerName = peer.split(':')[0];
+            std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
+            lobby.onConnectToPeer(peer, playerName, playerId);
+        }
+
+        const bool createAsHost = !parser.isSet("joingame");
+        JDPlay jdplay(playerName.toStdString().c_str(), 3, false);
+        bool ret = jdplay.initialize(dplayGuid.toStdString().c_str(), createAsHost ? "0.0.0.0" : "127.0.0.1", createAsHost, 10);
+
         if (!ret)
         {
             qDebug() << "unable to initialise jdplay";
@@ -311,10 +335,8 @@ int main(int argc, char* argv[])
             qDebug() << "unable to launch jdplay";
             return 1;
         }
-        while (jdplay.pollStillActive())
-        {
-            QThread::msleep(1000);
-        };
+
+        app.exec();
     }
 
     if (parser.isSet("gpgnet"))
@@ -332,7 +354,7 @@ int main(int argc, char* argv[])
             parser.value("players").toInt(),
             parser.isSet("lockoptions"));
 
-        TaLobby lobby("127.0.0.1", 0, "127.0.0.1", "127.0.0.1");
+        TaLobby lobby("127.0.0.1", "127.0.0.1", "127.0.0.1");
         QObject::connect(&gpgnet, &GpgNetRunner::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgnet, &GpgNetRunner::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgnet, &GpgNetRunner::connectToPeer, &lobby, &TaLobby::onConnectToPeer);

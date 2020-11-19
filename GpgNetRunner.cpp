@@ -1,6 +1,6 @@
 #include "GpgNetRunner.h"
 #include "gpgnet/GpgNetSend.h"
-#include "gpgnet/GpgNetReceive.h"
+#include "gpgnet/GpgNetParse.h"
 #include "jdplay/JDPlay.h"
 #include "tademo/GameMonitor.h"
 
@@ -170,7 +170,7 @@ void GpgNetRunner::run()
         previousState = gameState;
         if (socket.bytesAvailable() > 0)
         {
-            serverCommand = GpgNetReceive::GetCommand(ds);
+            serverCommand = GpgNetParse::GetCommand(ds);
             cmd = serverCommand[0].toString();
             qDebug() << "gpgnet command received:" << cmd;
         }
@@ -202,7 +202,6 @@ void GpgNetRunner::run()
         if (!taDemoStream && gameState != "Ended")
         {
             QStringList nowTaDemoFiles = GetTaDemoFiles(taDemoPaths);
-            qDebug() << "GetTaDemoFiles:" << nowTaDemoFiles.size();
             QStringList newTaDemoFiles = StringListDiff(nowTaDemoFiles, oldTaDemos);
             if (newTaDemoFiles.size() > 0)
             {
@@ -226,7 +225,6 @@ void GpgNetRunner::run()
         else if (taDemoStream)
         {
             taDemoMonitor.parse(taDemoStream.get());
-            qDebug() << "taDemoMonitor.parse" << taDemoMonitor.numTimesNewDataReceived();
         }
 
         if (gameState == "Idle" && !cmd.compare("CreateLobby"))
@@ -303,7 +301,7 @@ void GpgNetRunner::run()
             {
                 if (taDemoMonitor.isGameStarted())
                 {
-                    qDebug() << "gamestate Hosted: game started";
+                    //qDebug() << "gamestate Hosted: game started";
                     gpgSend.gameOption("MapName", QString::fromStdString(taDemoMonitor.getMapName()));
                     for (const std::string& playerName : taDemoMonitor.getPlayerNames())
                     {
@@ -319,14 +317,14 @@ void GpgNetRunner::run()
                 }
                 else
                 {
-                    qDebug() << "gamestate Hosted: polling dplay lobby";
+                    //qDebug() << "gamestate Hosted: polling dplay lobby";
                     jdplay.pollSessionStatus();
                     jdplay.printSessionDesc();
 
                     int numPlayers = jdplay.getUserData1() >> 16 & 0x0f;
                     bool closed = jdplay.getUserData1() & 0x80000000;
                     QString mapName = QString::fromStdString(jdplay.getAdvertisedSessionName()).trimmed();
-                    qDebug() << "dplay map name:" << mapName;
+                    //qDebug() << "dplay map name:" << mapName;
                     if (mapName.size() > 16)
                     {
                         mapName = mapName.mid(16);

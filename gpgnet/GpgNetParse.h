@@ -5,6 +5,7 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qvariant.h>
 
+
 namespace gpgnet
 {
     struct CreateLobbyCommand
@@ -69,7 +70,7 @@ namespace gpgnet
         QStringList hostCandidateList() const;
     };
 
-    class GpgNetReceive
+    class GpgNetParse
     {
         QDataStream& m_is;
 
@@ -78,8 +79,9 @@ namespace gpgnet
         static QString GetString(QDataStream& is);
 
     public:
-        GpgNetReceive(QDataStream& is);
+        GpgNetParse(QDataStream& is);
         QVariantList GetCommand();
         static QVariantList GetCommand(QDataStream& is);
     };
+
 }
