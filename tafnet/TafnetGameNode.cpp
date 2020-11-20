@@ -10,16 +10,18 @@ GameSender* TafnetGameNode::getGameSender(std::uint32_t remoteTafnetId)
     if (!gameSender)
     {
         gameSender.reset(m_gameSenderFactory());
+        gameSender->setTcpPort(m_gameTcpPort);
+        gameSender->setUdpPort(m_gameUdpPort);
     }
     return gameSender.get();
 }
 
-GameReceiver* TafnetGameNode::getGameReceiver(std::uint32_t remoteTafnetId, GameSender* sender)
+GameReceiver* TafnetGameNode::getGameReceiver(std::uint32_t remoteTafnetId, QSharedPointer<QUdpSocket> udpSocket)
 {
     std::shared_ptr<GameReceiver>& gameReceiver = m_gameReceivers[remoteTafnetId];
     if (!gameReceiver)
     {
-        gameReceiver.reset(m_gameReceiverFactory(sender));
+        gameReceiver.reset(m_gameReceiverFactory(udpSocket));
         if (m_remotePlayerIds.count(gameReceiver->getTcpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getTcpListenPort()] = remoteTafnetId;
         if (m_remotePlayerIds.count(gameReceiver->getUdpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getUdpListenPort()] = remoteTafnetId;
         if (m_remotePlayerIds.count(gameReceiver->getEnumListenPort()) == 0) m_remotePlayerIds[gameReceiver->getEnumListenPort()] = remoteTafnetId;
@@ -65,6 +67,11 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     {
         qDebug() << "ERROR: unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
         return;
+    }
+
+    if (m_gameTcpPort == 0 || m_gameUdpPort == 0)
+    {
+        updateGameSenderPorts(data, len);
     }
 
     if (channelCode == GameReceiver::CHANNEL_UDP)
@@ -113,7 +120,7 @@ void TafnetGameNode::translateMessageFromRemoteGame(char* data, int len, std::ui
 void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len)
 {
     GameSender* gameSender = getGameSender(peerPlayerId);
-    GameReceiver* gameReceiver = getGameReceiver(peerPlayerId, gameSender);
+    GameReceiver* gameReceiver = getGameReceiver(peerPlayerId, gameSender->getUdpSocket());
     quint16 replyPorts[2];
     gameReceiver->getListenPorts(replyPorts);
 
@@ -152,8 +159,10 @@ void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, s
     };
 }
 
-TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (GameSender*)> gameReceiverFactory) :
+TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory) :
     m_tafnetNode(tafnetNode),
+    m_gameTcpPort(0),
+    m_gameUdpPort(0),
     m_gameSenderFactory(gameSenderFactory),
     m_gameReceiverFactory(gameReceiverFactory)
 {
@@ -166,5 +175,20 @@ void TafnetGameNode::registerRemotePlayer(std::uint32_t remotePlayerId)
 {
     qDebug() << "[TafnetGameNode::registerRemotePlayer]" << m_tafnetNode->getPlayerId() << "registering player" << remotePlayerId;
     GameSender* gameSender = getGameSender(remotePlayerId);
-    GameReceiver* gameReceiver = getGameReceiver(remotePlayerId, gameSender);
+    GameReceiver* gameReceiver = getGameReceiver(remotePlayerId, gameSender->getUdpSocket());
+}
+
+void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
+{
+    DPHeader* header = (DPHeader*)data;
+    if (header->looksOk())
+    {
+        m_gameTcpPort = header->address.port();
+        m_gameUdpPort = header->address.port() + 50;
+        for (auto& pair : m_gameSenders)
+        {
+            pair.second->setTcpPort(m_gameTcpPort);
+            pair.second->setUdpPort(m_gameUdpPort);
+        }
+    }
 }

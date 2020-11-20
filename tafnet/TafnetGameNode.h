@@ -26,18 +26,23 @@ namespace tafnet
         std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer playerId
         std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // keyed by gameReceiver's receive socket port (both tcp and udp)
 
+        // these only discovered once some data received from game
+        std::uint16_t m_gameTcpPort;
+        std::uint16_t m_gameUdpPort;
+
         std::function<GameSender * ()> m_gameSenderFactory;
-        std::function<GameReceiver * (GameSender*)> m_gameReceiverFactory;
+        std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> m_gameReceiverFactory;
 
         virtual GameSender* getGameSender(std::uint32_t remoteTafnetId);
-        virtual GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, GameSender* sender);
+        virtual GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, QSharedPointer<QUdpSocket> udpSocket);
         virtual void handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len);
         virtual void handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len);
         virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
+        virtual void updateGameSenderPorts(const char *data, int len);
 
     public:
-        TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (GameSender*)> gameReceiverFactory);
+        TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
       
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId);
 

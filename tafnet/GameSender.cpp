@@ -51,7 +51,7 @@ void GameSender::sendTcpData(char* data, int len)
 {
     if (!m_tcpSocket.isOpen())
     {
-        openTcpSocket(100);
+        openTcpSocket(3);
     }
 #ifdef _DEBUG
     qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort;

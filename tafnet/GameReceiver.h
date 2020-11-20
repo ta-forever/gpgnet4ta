@@ -26,7 +26,6 @@ namespace tafnet
         virtual int getChannelCodeFromSocket(QAbstractSocket* socket);
         virtual void onNewConnection();
         virtual void onSocketStateChanged(QAbstractSocket::SocketState socketState);
-        virtual void setSenderGamePorts(char* data, int len);
         virtual void onReadyReadTcp();
         virtual void onReadyReadUdp();
         virtual void handleMessage(QAbstractSocket* receivingSocket, int channel, char* data, int len);
@@ -36,7 +35,7 @@ namespace tafnet
         static const int CHANNEL_TCP = 2;
         static const int CHANNEL_UDP = 3;
 
-        GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, GameSender* sender);
+        GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket);
         void setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f);
         QHostAddress getBindAddress();
         quint16 getEnumListenPort();

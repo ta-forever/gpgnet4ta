@@ -38,7 +38,7 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
     m_game.reset(new tafnet::TafnetGameNode(
         m_proxy.data(),
         [this]() { return new tafnet::GameSender(this->m_gameAddress, 47624); },
-        [this](tafnet::GameSender* sender) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 47624, 0, 0, sender);
+        [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 47624, 0, 0, udpSocket);
     }));
 }
 
