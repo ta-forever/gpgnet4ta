@@ -358,6 +358,7 @@ int main(int argc, char* argv[])
         QObject::connect(&gpgnet, &GpgNetRunner::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgnet, &GpgNetRunner::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgnet, &GpgNetRunner::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
+        QObject::connect(&gpgnet, &GpgNetRunner::remoteGameSessionDetected, &lobby, &TaLobby::onRemoteGameSessionDetected);
         QObject::connect(&gpgnet, &GpgNetRunner::finished, &app, &QCoreApplication::quit);
 
         gpgnet.start();

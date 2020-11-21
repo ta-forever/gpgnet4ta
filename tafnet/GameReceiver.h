@@ -15,7 +15,6 @@ namespace tafnet
         quint16 m_enumPort;         // we'll listen for enumeration requests from game on this port
         quint16 m_tcpPort;          // we'll listen for game tcp data (typically dplay game setup data) on this port
         quint16 m_udpPort;          // we'll listen for game udp data (typically actual game data) on this port
-        GameSender* m_sender;       // we need to inform the sender of the ports that the game is using which we only discover once we've received some data from it
 
         QTcpServer m_tcpServer;
         QTcpServer m_enumServer;
@@ -36,11 +35,12 @@ namespace tafnet
         static const int CHANNEL_UDP = 3;
 
         GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket);
-        void setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f);
-        QHostAddress getBindAddress();
-        quint16 getEnumListenPort();
-        quint16 getTcpListenPort();
-        quint16 getUdpListenPort();
-        quint16* getListenPorts(quint16 ports[2]);
+        virtual void setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f);
+        virtual QHostAddress getBindAddress();
+        virtual quint16 getEnumListenPort();
+        virtual quint16 getTcpListenPort();
+        virtual quint16 getUdpListenPort();
+        virtual quint16* getListenPorts(quint16 ports[2]);
+        virtual void resetGameConnection();
     };
 }

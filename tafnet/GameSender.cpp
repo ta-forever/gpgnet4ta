@@ -65,6 +65,7 @@ void GameSender::closeTcpSocket()
 {
     qDebug() << "[GameSender::closeTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
     m_tcpSocket.disconnectFromHost();
+    m_tcpSocket.close();
 }
 
 void GameSender::sendUdpData(char* data, int len)
@@ -83,4 +84,11 @@ void GameSender::sendUdpData(char* data, int len)
 QSharedPointer<QUdpSocket> GameSender::getUdpSocket()
 {
     return m_udpSocket;
+}
+
+void GameSender::resetGameConnection()
+{
+    m_tcpPort = 0;
+    m_udpPort = 0;
+    closeTcpSocket();
 }

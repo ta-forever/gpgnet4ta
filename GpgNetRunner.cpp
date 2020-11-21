@@ -147,7 +147,7 @@ void GpgNetRunner::run()
 
     QString gameState;
     CreateLobbyCommand createLobbyCommand;
-    JDPlay jdplay(createLobbyCommand.playerName.toStdString().c_str(), 0, false);
+    std::shared_ptr<JDPlay> jdplay(new JDPlay(createLobbyCommand.playerName.toStdString().c_str(), 0, false));
 
     QStringList taDemoPaths = GetPossibleTADemoSaveDirs();
     QStringList oldTaDemos = GetTaDemoFiles(taDemoPaths);
@@ -230,7 +230,7 @@ void GpgNetRunner::run()
         if (gameState == "Idle" && !cmd.compare("CreateLobby"))
         {
             qDebug() << "CreateLobby(playerName:" << createLobbyCommand.playerName << ")";
-            jdplay.updatePlayerName(createLobbyCommand.playerName.toStdString().c_str());
+            jdplay->updatePlayerName(createLobbyCommand.playerName.toStdString().c_str());
             gpgSend.gameState(gameState = "Lobby");
         }
         else if (gameState == "Lobby" && !cmd.compare("HostGame"))
@@ -239,14 +239,14 @@ void GpgNetRunner::run()
             QString sessionName = createLobbyCommand.playerName + "'s Game";
             CreateTAInitFile(iniTemplate, iniTarget, sessionName, hgc.mapName, playerLimit, lockOptions);
             qDebug() << "jdplay.initialize(host): guid=" << guid << "mapname=" << hgc.mapName;
-            bool ret = jdplay.initialize(guid.toStdString().c_str(), "0.0.0.0", true, 10);
+            bool ret = jdplay->initialize(guid.toStdString().c_str(), "0.0.0.0", true, 10);
             if (!ret)
             {
                 qDebug() << "unable to initialise dplay";
                 return;
             }
             qDebug() << "jdplay.launch(host)";
-            ret = jdplay.launch(true);
+            ret = jdplay->launch(true);
             if (!ret)
             {
                 qDebug() << "unable to launch game";
@@ -270,17 +270,22 @@ void GpgNetRunner::run()
                 std::strncpy(hostip, hostOn47624, 256);
 
                 qDebug() << "jdplay.initialize(join):" << hostip;
-                bool ret = jdplay.initialize(guid.toStdString().c_str(), hostip, false, 10);
+                bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
                 if (!ret)
                 {
                     qDebug() << "unable to initialise dplay";
                     return;
                 }
 
-                if (true)//jdplay.searchOnce())
+                if (jdplay->searchOnce())
                 {
+                    jdplay->releaseDirectPlay();
+                    jdplay.reset(new JDPlay(createLobbyCommand.playerName.toStdString().c_str(), 0, false));
+                    bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
+                    emit remoteGameSessionDetected();
+                    QThread::msleep(100); // give TafnetGameNode plenty time to reset GameSender ports
                     qDebug() << "jdplay.launch(join):" << hostip;
-                    ret = jdplay.launch(true);
+                    ret = jdplay->launch(true);
                     gpgSend.playerOption(QString::number(gpgPlayerIds.value(buildPlayerName(
                         createLobbyCommand.playerName, mean, deviation, numGames, country))), "Color", 1);
                     gameState = "Joined";
@@ -290,13 +295,13 @@ void GpgNetRunner::run()
             if (gameState != "Joined")
             {
                 qDebug() << "unable to find game at any candidate hosts ... quitting";
-                jdplay.releaseDirectPlay();
+                jdplay->releaseDirectPlay();
                 return;
             }
         }
         else if (gameState == "Hosted")
         {
-            bool active = jdplay.pollStillActive();
+            bool active = jdplay->pollStillActive();
             if (active)
             {
                 if (taDemoMonitor.isGameStarted())
@@ -318,12 +323,12 @@ void GpgNetRunner::run()
                 else
                 {
                     //qDebug() << "gamestate Hosted: polling dplay lobby";
-                    jdplay.pollSessionStatus();
-                    jdplay.printSessionDesc();
+                    jdplay->pollSessionStatus();
+                    jdplay->printSessionDesc();
 
-                    int numPlayers = jdplay.getUserData1() >> 16 & 0x0f;
-                    bool closed = jdplay.getUserData1() & 0x80000000;
-                    QString mapName = QString::fromStdString(jdplay.getAdvertisedSessionName()).trimmed();
+                    int numPlayers = jdplay->getUserData1() >> 16 & 0x0f;
+                    bool closed = jdplay->getUserData1() & 0x80000000;
+                    QString mapName = QString::fromStdString(jdplay->getAdvertisedSessionName()).trimmed();
                     //qDebug() << "dplay map name:" << mapName;
                     if (mapName.size() > 16)
                     {
@@ -335,7 +340,7 @@ void GpgNetRunner::run()
             else
             {
                 qDebug() << "gamestate Hosted: jdplay not active. terminating";
-                jdplay.releaseDirectPlay();
+                jdplay->releaseDirectPlay();
                 gpgSend.gameState(gameState = "Ended");
                 return;
             }
@@ -361,22 +366,22 @@ void GpgNetRunner::run()
                 qDebug() << "gameState Joined/Launching: game in progress";
             }
 
-            if (!jdplay.pollStillActive())
+            if (!jdplay->pollStillActive())
             {
                 qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
                 // this closes the game on server side and triggers rating update
-                jdplay.releaseDirectPlay();
+                jdplay->releaseDirectPlay();
                 gpgSend.gameEnded();
                 return;
             }
         }
         else if (gameState == "Ended")
         {
-            if (!jdplay.pollStillActive())
+            if (!jdplay->pollStillActive())
             {
                 // this closes the game on server side and triggers rating update
                 qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
-                jdplay.releaseDirectPlay();
+                jdplay->releaseDirectPlay();
                 gpgSend.gameEnded();
                 return;
             }

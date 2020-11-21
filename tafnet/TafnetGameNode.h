@@ -46,6 +46,10 @@ namespace tafnet
       
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId);
 
+        // GpgNetRunner uses a different dplay instance to check for when the host is up.
+        // Once thats done we need to reset the ports so future replies go to the actual game, not gpgnetrunner instance
+        virtual void resetGameConnection();
+
     };
 
 }

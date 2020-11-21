@@ -185,10 +185,25 @@ void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
     {
         m_gameTcpPort = header->address.port();
         m_gameUdpPort = header->address.port() + 50;
+        qDebug() << "[TafnetGameNode::updateGameSenderPorts] tcp:" << m_gameTcpPort << " udp:" << m_gameUdpPort;
         for (auto& pair : m_gameSenders)
         {
             pair.second->setTcpPort(m_gameTcpPort);
             pair.second->setUdpPort(m_gameUdpPort);
         }
+    }
+}
+
+void TafnetGameNode::resetGameConnection()
+{
+    qDebug() << "[TafnetGameNode::resetGameConnection]";
+    m_gameTcpPort = m_gameUdpPort = 0;
+    for (auto &pair : m_gameSenders)
+    {
+        pair.second->resetGameConnection();
+    }
+    for (auto &pair : m_gameReceivers)
+    {
+        pair.second->resetGameConnection();
     }
 }

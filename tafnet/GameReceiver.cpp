@@ -136,3 +136,11 @@ quint16* GameReceiver::getListenPorts(quint16 ports[2])
     ports[1] = m_udpPort;
     return ports;
 }
+
+void GameReceiver::resetGameConnection()
+{
+    for (QAbstractSocket *gameSocket : m_sockets)
+    {
+        gameSocket->close();
+    }
+}

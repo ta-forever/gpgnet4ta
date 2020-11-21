@@ -69,3 +69,8 @@ void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
     m_proxy->connectToPeer(host, port, playerId);
     m_game->registerRemotePlayer(playerId);
 }
+
+void TaLobby::onRemoteGameSessionDetected()
+{
+    m_game->resetGameConnection();
+}
