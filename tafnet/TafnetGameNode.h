@@ -39,7 +39,7 @@ namespace tafnet
         virtual void killGameReceiver(std::uint32_t remoteTafnetId);
 
         virtual void handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len);
-        virtual void handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len);
+        virtual void handleTafnetMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
         virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void updateGameSenderPorts(const char *data, int len);

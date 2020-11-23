@@ -33,13 +33,17 @@ add_executable(taproxytest
 	taproxytest.cpp)
 
 target_link_directories(taproxytest
-    PUBLIC)
+    PUBLIC
+    ${MINIUPNP_INCLUDE_DIR})
 
 target_link_libraries(taproxytest
 	tademo
 	tafnet
     Qt5::Core
-    Qt5::Network)
+    Qt5::Network
+	ws2_32
+	iphlpapi
+    ${MINIUPNP_LIBS_STATIC})
 
 # -------------- GPGNET4TA -------------
 

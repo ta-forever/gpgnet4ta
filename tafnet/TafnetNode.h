@@ -8,16 +8,59 @@
 namespace tafnet
 {
 
-    struct TafnetMessageHeader
+    struct Payload
     {
+        static const unsigned ACTION_INVALID = 0;
+
         static const unsigned ACTION_HELLO = 1;
-        static const unsigned ACTION_ENUM = 2;
-        static const unsigned ACTION_TCP_OPEN = 3;
-        static const unsigned ACTION_TCP_DATA = 4;
+        static const unsigned ACTION_UDP_DATA = 3;
+        static const unsigned ACTION_TCP_OPEN = 4;
         static const unsigned ACTION_TCP_CLOSE = 5;
-        static const unsigned ACTION_UDP_DATA = 6;
+
+        static const unsigned ACTION_TCP_DATA = 6;
+        static const unsigned ACTION_TCP_ACK = 7;
+        static const unsigned ACTION_TCP_RESEND = 8;
+        static const unsigned ACTION_TCP_SEQ_REBASE = 9;
+        static const unsigned ACTION_ENUM = 10;
 
         std::uint8_t action;
+        QSharedPointer<QByteArray> buf;
+
+        Payload();
+        void set(std::uint8_t action, const char *data, int len);
+    };
+
+    class DataBuffer
+    {
+
+        std::map<std::uint32_t, Payload > m_data;
+        std::uint32_t m_nextPopSeq;
+        std::uint32_t m_nextPushSeq;
+
+    public:
+        DataBuffer();
+        void insert(std::uint32_t seq, std::uint8_t action, const char *data, int len);
+        std::uint32_t push_back(std::uint8_t action, const char *data, int len);
+        Payload pop();
+        Payload get(std::uint32_t seq);
+        std::size_t size();
+      
+        void ackData(std::uint32_t seq);
+        bool readyRead();
+        std::uint32_t nextExpectedPopSeq();
+    };
+
+    struct TafnetMessageHeader
+    {
+
+        std::uint8_t action;
+    };
+
+    struct TafnetBufferedHeader
+    {
+
+        std::uint8_t action;
+        std::uint32_t seq;
     };
 
     class TafnetNode : public QObject
@@ -48,14 +91,18 @@ namespace tafnet
         QUdpSocket m_lobbySocket;                               // send receive to peer TafnetNodes
         std::map<std::uint32_t, HostAndPort> m_peerAddresses;   // keyed by peer player id
         std::map<HostAndPort, std::uint32_t> m_peerPlayerIds;
-        std::function<void(const TafnetMessageHeader&, std::uint32_t, char*, int)> m_handleMessage; // optional hook for handleMessage
+        std::function<void(std::uint8_t, std::uint32_t, char*, int)> m_handleMessage; // optional hook for handleMessage
+
+        std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer player id
+        std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer player id
 
         virtual void onReadyRead();
-        virtual void handleMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len);
+        virtual void handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
+        virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len);
 
     public:
         TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
-        virtual void setHandler(const std::function<void(const TafnetMessageHeader&, std::uint32_t, char*, int)>& f);
+        virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;
         virtual std::uint32_t getHostPlayerId() const;
 

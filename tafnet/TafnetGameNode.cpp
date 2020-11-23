@@ -99,7 +99,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
 
     if (channelCode == GameReceiver::CHANNEL_UDP)
     {
-        m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_UDP_DATA, data, len);
+        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_DATA, data, len);
     }
 
     else if (channelCode == GameReceiver::CHANNEL_TCP)
@@ -108,13 +108,13 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         // what is important is the playerId that translateMessageFromLocalGame substitutes into the address field
         static const quint16 dummyports[] = { 0xdead, 0xbeef };
         translateMessageFromLocalGame(data, len, 0, dummyports);
-        m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_TCP_DATA, data, len);
+        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_TCP_DATA, data, len);
     }
 
     else if (channelCode == GameReceiver::CHANNEL_ENUM)
     {
         qInfo() << "[TafnetGameNode::handleGameData] Forwarding enum session request to" << destNodeId;
-        m_tafnetNode->forwardGameData(destNodeId, TafnetMessageHeader::ACTION_ENUM, data, len);
+        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_ENUM, data, len);
     }
 }
 
@@ -141,7 +141,7 @@ void TafnetGameNode::translateMessageFromRemoteGame(char* data, int len, std::ui
 }
 
 
-void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len)
+void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len)
 {
     GameSender* gameSender = getGameSender(peerPlayerId);
     GameReceiver* gameReceiver = getGameReceiver(peerPlayerId, gameSender->getUdpSocket());
@@ -149,31 +149,31 @@ void TafnetGameNode::handleTafnetMessage(const TafnetMessageHeader& tafheader, s
     gameReceiver->getListenPorts(replyPorts);
 
     //qInfo() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getPlayerId() << "from=" << peerPlayerId << "action=" << tafheader.action;
-    switch (tafheader.action)
+    switch (action)
     {
-    case TafnetMessageHeader::ACTION_HELLO:
+    case Payload::ACTION_HELLO:
         // no further action beyond creating a gameSender/Receiver required
         break;
 
-    case TafnetMessageHeader::ACTION_ENUM:
+    case Payload::ACTION_ENUM:
         GameAddressTranslater (gameReceiver->getBindAddress().toIPv4Address(), replyPorts)(data, len);
         gameSender->enumSessions(data, len);
         break;
 
-    case TafnetMessageHeader::ACTION_TCP_OPEN:
+    case Payload::ACTION_TCP_OPEN:
         gameSender->openTcpSocket(3);
         break;
 
-    case TafnetMessageHeader::ACTION_TCP_DATA:
+    case Payload::ACTION_TCP_DATA:
         translateMessageFromRemoteGame(data, len, gameReceiver->getBindAddress().toIPv4Address(), replyPorts);
         gameSender->sendTcpData(data, len);
         break;
 
-    case TafnetMessageHeader::ACTION_TCP_CLOSE:
+    case Payload::ACTION_TCP_CLOSE:
         gameSender->closeTcpSocket();
         break;
 
-    case TafnetMessageHeader::ACTION_UDP_DATA:
+    case Payload::ACTION_UDP_DATA:
         gameSender->sendUdpData(data, len);
         break;
 
@@ -190,8 +190,8 @@ TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender 
     m_gameSenderFactory(gameSenderFactory),
     m_gameReceiverFactory(gameReceiverFactory)
 {
-    m_tafnetNode->setHandler([this](const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len) {
-        this->handleTafnetMessage(tafheader, peerPlayerId, data, len);
+    m_tafnetNode->setHandler([this](std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len) {
+        this->handleTafnetMessage(action, peerPlayerId, data, len);
     });
 }
 
