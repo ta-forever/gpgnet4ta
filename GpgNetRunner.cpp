@@ -32,7 +32,7 @@ QStringList GetPossibleTADemoSaveDirs()
         }
         if (defdir.size() > 0 && QDir(defdir).exists())
         {
-            qDebug() << organisation << defdir;
+            qInfo() << organisation << defdir;
             result.append(defdir);
         }
     }
@@ -85,7 +85,7 @@ QString buildPlayerName(QString baseName, int mean, int deviation, int numgames,
 
 void CreateTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions)
 {
-    qDebug() << "Loading ta ini template:" << tmplateFilename;
+    qInfo() << "Loading ta ini template:" << tmplateFilename;
     QFile tmplt(tmplateFilename);
     if (!tmplt.open(QFile::ReadOnly | QFile::Text))
     {
@@ -99,7 +99,7 @@ void CreateTAInitFile(QString tmplateFilename, QString iniFilename, QString sess
     txt.replace("{playerlimit}", QString::number(max(2, min(playerLimit, 10))));
     txt.replace("{lockoptions}", lockOptions ? "1" : "0");
 
-    qDebug() << "saving ta ini:" << iniFilename;
+    qInfo() << "saving ta ini:" << iniFilename;
     QFile ini(iniFilename);
     if (!ini.open(QFile::WriteOnly | QFile::Text))
     {
@@ -129,17 +129,17 @@ void GpgNetRunner::run()
 {
     QTcpSocket socket;
     {
-        qDebug() << "Connecting to GPGNet " << gpgneturl;
+        qInfo() << "Connecting to GPGNet " << gpgneturl;
         QStringList hostAndPort = gpgneturl.split(QRegExp("\\:"));
         socket.connectToHost(hostAndPort[0], hostAndPort[1].toInt());
 
         if (!socket.waitForConnected(10000))
         {
-            qDebug() << "Unable to connect";
+            qInfo() << "Unable to connect";
             return;
         }
     }
-    qDebug() << "Connected";
+    qInfo() << "Connected";
 
     QDataStream ds(&socket);
     ds.setByteOrder(QDataStream::LittleEndian);
@@ -172,7 +172,7 @@ void GpgNetRunner::run()
         {
             serverCommand = GpgNetParse::GetCommand(ds);
             cmd = serverCommand[0].toString();
-            qDebug() << "gpgnet command received:" << cmd;
+            qInfo() << "gpgnet command received:" << cmd;
         }
 
         if (cmd == "CreateLobby")
@@ -186,16 +186,23 @@ void GpgNetRunner::run()
         else if (cmd == "JoinGame")
         {
             JoinGameCommand jgc(serverCommand);
-            qDebug() << "join game: playername=" << jgc.remotePlayerName() << "playerId=" << jgc.remotePlayerId;
+            qInfo() << "join game: playername=" << jgc.remotePlayerName() << "playerId=" << jgc.remotePlayerId;
             gpgPlayerIds[jgc.remotePlayerName()] = jgc.remotePlayerId;
             emit joinGame(jgc.remoteHost(), jgc.remotePlayerName(), jgc.remotePlayerId);
         }
         else if (cmd == "ConnectToPeer")
         {
             ConnectToPeerCommand ctp(serverCommand);
-            qDebug() << "connect to peer: playername=" << ctp.playerName() << "playerId=" << ctp.playerId;
+            qInfo() << "connect to peer: playername=" << ctp.playerName() << "playerId=" << ctp.playerId;
             gpgPlayerIds[ctp.playerName()] = ctp.playerId;
             emit connectToPeer(ctp.host(), ctp.playerName(), ctp.playerId);
+        }
+        else if (cmd == "DisconnectFromPeer")
+        {
+            DisconnectFromPeerCommand ctp(serverCommand);
+            qInfo() << "disconnect from peer: playerid=" << ctp.playerId;
+            //gpgPlayerIds erase where value == ctp.playerId; // not super important
+            emit disconnectFromPeer(ctp.playerId);
         }
 
         // look for a new demo file
@@ -212,13 +219,13 @@ void GpgNetRunner::run()
                 if (taDemoMonitor.isGameOver())
                 {
                     // user probably just copied a tad into the directory.  ignore it
-                    qDebug() << "new tademo seems a complete game. ignoring" << newTaDemoFiles;
+                    qInfo() << "new tademo seems a complete game. ignoring" << newTaDemoFiles;
                     taDemoStream.reset();
                     taDemoMonitor.reset();
                 }
                 else
                 {
-                    qDebug() << "new tademo found" << newTaDemoFiles;
+                    qInfo() << "new tademo found" << newTaDemoFiles;
                 }
             }
         }
@@ -229,7 +236,7 @@ void GpgNetRunner::run()
 
         if (gameState == "Idle" && !cmd.compare("CreateLobby"))
         {
-            qDebug() << "CreateLobby(playerName:" << createLobbyCommand.playerName << ")";
+            qInfo() << "CreateLobby(playerName:" << createLobbyCommand.playerName << ")";
             jdplay->updatePlayerName(createLobbyCommand.playerName.toStdString().c_str());
             gpgSend.gameState(gameState = "Lobby");
         }
@@ -238,18 +245,18 @@ void GpgNetRunner::run()
             HostGameCommand hgc(serverCommand);
             QString sessionName = createLobbyCommand.playerName + "'s Game";
             CreateTAInitFile(iniTemplate, iniTarget, sessionName, hgc.mapName, playerLimit, lockOptions);
-            qDebug() << "jdplay.initialize(host): guid=" << guid << "mapname=" << hgc.mapName;
-            bool ret = jdplay->initialize(guid.toStdString().c_str(), "0.0.0.0", true, 10);
+            qInfo() << "jdplay.initialize(host): guid=" << guid << "mapname=" << hgc.mapName;
+            bool ret = jdplay->initialize(guid.toStdString().c_str(), "127.0.0.1", true, 10);
             if (!ret)
             {
-                qDebug() << "unable to initialise dplay";
+                qInfo() << "unable to initialise dplay";
                 return;
             }
-            qDebug() << "jdplay.launch(host)";
+            qInfo() << "jdplay.launch(host)";
             ret = jdplay->launch(true);
             if (!ret)
             {
-                qDebug() << "unable to launch game";
+                qInfo() << "unable to launch game";
                 return;
             }
 
@@ -262,29 +269,29 @@ void GpgNetRunner::run()
         {
             JoinGameCommand jgc(serverCommand);
             const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
-            qDebug() << "JoinGame guid:" << guid;
+            qInfo() << "JoinGame guid:" << guid;
 
             for (int nTry = 0; nTry < 3; ++nTry)
             {
                 char hostip[257] = { 0 };
                 std::strncpy(hostip, hostOn47624, 256);
 
-                qDebug() << "jdplay.initialize(join):" << hostip;
+                qInfo() << "jdplay.initialize(join):" << hostip;
                 bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
                 if (!ret)
                 {
-                    qDebug() << "unable to initialise dplay";
+                    qInfo() << "unable to initialise dplay";
                     return;
                 }
 
-                if (jdplay->searchOnce())
+                if (true)//jdplay->searchOnce())
                 {
-                    jdplay->releaseDirectPlay();
-                    jdplay.reset(new JDPlay(createLobbyCommand.playerName.toStdString().c_str(), 0, false));
-                    bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
-                    emit remoteGameSessionDetected();
-                    QThread::msleep(100); // give TafnetGameNode plenty time to reset GameSender ports
-                    qDebug() << "jdplay.launch(join):" << hostip;
+                    //jdplay->releaseDirectPlay();
+                    //jdplay.reset(new JDPlay(createLobbyCommand.playerName.toStdString().c_str(), 0, false));
+                    //bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
+                    //emit remoteGameSessionDetected();
+                    //QThread::msleep(100); // give TafnetGameNode plenty time to reset GameSender ports
+                    qInfo() << "jdplay.launch(join):" << hostip;
                     ret = jdplay->launch(true);
                     gpgSend.playerOption(QString::number(gpgPlayerIds.value(buildPlayerName(
                         createLobbyCommand.playerName, mean, deviation, numGames, country))), "Color", 1);
@@ -294,7 +301,7 @@ void GpgNetRunner::run()
             }
             if (gameState != "Joined")
             {
-                qDebug() << "unable to find game at any candidate hosts ... quitting";
+                qInfo() << "unable to find game at any candidate hosts ... quitting";
                 jdplay->releaseDirectPlay();
                 return;
             }
@@ -306,7 +313,7 @@ void GpgNetRunner::run()
             {
                 if (taDemoMonitor.isGameStarted())
                 {
-                    //qDebug() << "gamestate Hosted: game started";
+                    //qInfo() << "gamestate Hosted: game started";
                     gpgSend.gameOption("MapName", QString::fromStdString(taDemoMonitor.getMapName()));
                     for (const std::string& playerName : taDemoMonitor.getPlayerNames())
                     {
@@ -322,24 +329,24 @@ void GpgNetRunner::run()
                 }
                 else
                 {
-                    //qDebug() << "gamestate Hosted: polling dplay lobby";
-                    jdplay->pollSessionStatus();
-                    jdplay->printSessionDesc();
+                    ////qInfo() << "gamestate Hosted: polling dplay lobby";
+                    //jdplay->pollSessionStatus();
+                    //jdplay->printSessionDesc();
 
-                    int numPlayers = jdplay->getUserData1() >> 16 & 0x0f;
-                    bool closed = jdplay->getUserData1() & 0x80000000;
-                    QString mapName = QString::fromStdString(jdplay->getAdvertisedSessionName()).trimmed();
-                    //qDebug() << "dplay map name:" << mapName;
-                    if (mapName.size() > 16)
-                    {
-                        mapName = mapName.mid(16);
-                        gpgSend.gameOption("MapName", mapName);
-                    }
+                    //int numPlayers = jdplay->getUserData1() >> 16 & 0x0f;
+                    //bool closed = jdplay->getUserData1() & 0x80000000;
+                    //QString mapName = QString::fromStdString(jdplay->getAdvertisedSessionName()).trimmed();
+                    ////qInfo() << "dplay map name:" << mapName;
+                    //if (mapName.size() > 16)
+                    //{
+                    //    mapName = mapName.mid(16);
+                    //    gpgSend.gameOption("MapName", mapName);
+                    //}
                 }
             }
             else
             {
-                qDebug() << "gamestate Hosted: jdplay not active. terminating";
+                qInfo() << "gamestate Hosted: jdplay not active. terminating";
                 jdplay->releaseDirectPlay();
                 gpgSend.gameState(gameState = "Ended");
                 return;
@@ -349,7 +356,7 @@ void GpgNetRunner::run()
         {
             if (taDemoMonitor.isGameOver()) // && taDemoMonitor.numTimesNewDataReceived() > 3u)
             {
-                qDebug() << "gameState Joined/Launching: game over";
+                qInfo() << "gameState Joined/Launching: game over";
                 // send results
                 const GameResult& gameResult = taDemoMonitor.getGameResult();
                 for (const auto& result : gameResult.resultByArmy)
@@ -363,12 +370,12 @@ void GpgNetRunner::run()
             }
             else
             {
-                qDebug() << "gameState Joined/Launching: game in progress";
+                qInfo() << "gameState Joined/Launching: game in progress";
             }
 
             if (!jdplay->pollStillActive())
             {
-                qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
+                qInfo() << "gameState Joined/Launching: jdplay not active. terminating";
                 // this closes the game on server side and triggers rating update
                 jdplay->releaseDirectPlay();
                 gpgSend.gameEnded();
@@ -380,14 +387,14 @@ void GpgNetRunner::run()
             if (!jdplay->pollStillActive())
             {
                 // this closes the game on server side and triggers rating update
-                qDebug() << "gameState Joined/Launching: jdplay not active. terminating";
+                qInfo() << "gameState Joined/Launching: jdplay not active. terminating";
                 jdplay->releaseDirectPlay();
                 gpgSend.gameEnded();
                 return;
             }
             else
             {
-                qDebug() << "gameState Ended";
+                qInfo() << "gameState Ended";
             }
         }
     }

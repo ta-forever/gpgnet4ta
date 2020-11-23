@@ -1,24 +1,24 @@
 #include "GpgNetSend.h"
-#include <QtCore/qdebug.h>
+#include <QtCore/qDebug.h>
 
 namespace gpgnet
 {
     void GpgNetSend::SendCommand(QString command, int argumentCount)
     {
-        qDebug() << "GpgNetSend command" << command;
+        qInfo() << "GpgNetSend command" << command;
         m_os << command.toUtf8() << quint32(argumentCount);
     }
 
     void GpgNetSend::SendArgument(QString arg)
     {
-        qDebug() << "GpgNetSend arg" << arg;
+        qInfo() << "GpgNetSend arg" << arg;
         m_os << quint8(1) << arg.toUtf8();
     }
 
     void GpgNetSend::SendArgument(int arg)
     {
 
-        qDebug() << "GpgNetSend arg" << arg;
+        qInfo() << "GpgNetSend arg" << arg;
         m_os << quint8(0) << quint32(arg);
     }
 

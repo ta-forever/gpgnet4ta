@@ -70,6 +70,15 @@ namespace gpgnet
         QStringList hostCandidateList() const;
     };
 
+    struct DisconnectFromPeerCommand
+    {
+        int playerId;
+
+        DisconnectFromPeerCommand();
+        DisconnectFromPeerCommand(QVariantList qvl);
+        void Set(QVariantList command);
+    };
+
     class GpgNetParse
     {
         QDataStream& m_is;

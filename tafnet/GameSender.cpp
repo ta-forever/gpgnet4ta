@@ -1,8 +1,6 @@
 #include "GameSender.h"
-
-#ifdef _DEBUG
 #include <tademo/HexDump.h>
-#endif
+#include <sstream>
 
 using namespace tafnet;
 
@@ -12,6 +10,9 @@ GameSender::GameSender(QHostAddress gameAddress, quint16 enumPort) :
     m_udpSocket(new QUdpSocket()),
     m_tcpPort(0),
     m_udpPort(0)
+{ }
+
+GameSender::~GameSender()
 { }
 
 void GameSender::setTcpPort(quint16 port)
@@ -26,7 +27,7 @@ void GameSender::setUdpPort(quint16 port)
 
 void GameSender::enumSessions(char* data, int len)
 {
-    qDebug() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort;
+    qInfo() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort;
     m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     m_enumSocket.flush();
     //m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
@@ -40,7 +41,7 @@ bool GameSender::openTcpSocket(int timeoutMillisecond)
 {
     if (m_tcpPort > 0 && !m_tcpSocket.isOpen())
     {
-        qDebug() << "[GameSender::openTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
+        qInfo() << "[GameSender::openTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
         m_tcpSocket.connectToHost(m_gameAddress, m_tcpPort);
         m_tcpSocket.waitForConnected(timeoutMillisecond);
     }
@@ -53,17 +54,19 @@ void GameSender::sendTcpData(char* data, int len)
     {
         openTcpSocket(3);
     }
-#ifdef _DEBUG
-    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort;
-    TADemo::HexDump(data, len, std::cout);
-#endif
+
+    std::ostringstream ss;
+    ss << '\n';
+    TADemo::HexDump(data, len, ss);
+    qDebug() << "[GameSender::sendTcpData]" << m_gameAddress.toString() << m_tcpPort << ss.str().c_str();
+
     m_tcpSocket.write(data, len);
     m_tcpSocket.flush();
 }
 
 void GameSender::closeTcpSocket()
 {
-    qDebug() << "[GameSender::closeTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
+    qInfo() << "[GameSender::closeTcpSocket]" << m_gameAddress.toString() << ":" << m_tcpPort;
     m_tcpSocket.disconnectFromHost();
     m_tcpSocket.close();
 }
@@ -72,8 +75,8 @@ void GameSender::sendUdpData(char* data, int len)
 {
     if (m_udpPort > 0)
     {
-#ifdef _DEBUG
         qDebug() << "[GameSender::sendUdpData]" << m_gameAddress.toString() << ":" << m_udpPort;
+#ifdef _DEBUG
         TADemo::HexDump(data, len, std::cout);
 #endif
         m_udpSocket->writeDatagram(data, len, m_gameAddress, m_udpPort);

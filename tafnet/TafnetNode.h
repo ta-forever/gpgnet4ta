@@ -61,6 +61,7 @@ namespace tafnet
 
         virtual void joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);
         virtual void connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);
+        virtual void disconnectFromPeer(std::uint32_t peerPlayerId);
         virtual void forwardGameData(std::uint32_t peerPlayerId, std::uint32_t action, const char* data, int len);
     };
 

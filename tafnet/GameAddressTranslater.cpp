@@ -65,9 +65,9 @@ bool DPHeader::looksOk() const
     return
         size() >= sizeof(DPHeader) &&
         (token() == 0xfab || token() == 0xcab || token() == 0xbab) &&
-        address.family == 2 &&   // AF_INET
+        address.family == 2; // AF_INET
         //dialect == 0x0e && // dplay 9
-        std::memcmp(address.pad, "\0\0\0\0\0\0\0\0", 8) == 0;
+        //std::memcmp(address.pad, "\0\0\0\0\0\0\0\0", 8) == 0;
 }
 
 

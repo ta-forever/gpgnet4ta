@@ -13,7 +13,7 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     m_hostPlayerId(isHost ? playerId : 0u)
 {
     m_lobbySocket.bind(bindAddress, bindPort);
-    qDebug() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << m_lobbySocket.localAddress().toString() << ":" << m_lobbySocket.localPort();
+    qInfo() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << m_lobbySocket.localAddress().toString() << ":" << m_lobbySocket.localPort();
     QObject::connect(&m_lobbySocket, &QUdpSocket::readyRead, this, &TafnetNode::onReadyRead);
 }
 
@@ -38,7 +38,7 @@ void TafnetNode::onReadyRead()
         auto it = m_peerPlayerIds.find(senderHostAndPort);
         if (it == m_peerPlayerIds.end())
         {
-            qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
+            qInfo() << "[TafnetNode::onReadyRead]" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
             continue;
         }
         std::uint32_t peerPlayerId = it->second;
@@ -47,7 +47,7 @@ void TafnetNode::onReadyRead()
         const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)ptr;
         ptr += sizeof(TafnetMessageHeader);
 
-        //qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "from" << peerPlayerId << ", action=" << tafheader->action;
+        qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "from" << peerPlayerId << ", action=" << tafheader->action;
         handleMessage(*tafheader, peerPlayerId, ptr, datas.size() - sizeof(TafnetMessageHeader));
     }
 }
@@ -80,11 +80,22 @@ void TafnetNode::joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t pee
 
 void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId)
 {
-    qDebug() << "[TafnetNode::connectToPeer]" << m_playerId << "connecting to" << peer.toString() << ":" << peerPort << peerPlayerId;
+    qInfo() << "[TafnetNode::connectToPeer]" << m_playerId << "connecting to" << peer.toString() << ":" << peerPort << peerPlayerId;
     HostAndPort hostAndPort(peer, peerPort);
     m_peerAddresses[peerPlayerId] = hostAndPort;
     m_peerPlayerIds[hostAndPort] = peerPlayerId;
     forwardGameData(peerPlayerId, TafnetMessageHeader::ACTION_HELLO, "HELLO", 5);
+}
+
+void TafnetNode::disconnectFromPeer(std::uint32_t peerPlayerId)
+{
+    qInfo() << "[TafnetNode::disconnectFromPeer]" << m_playerId << "disconnecting from" << peerPlayerId;
+    auto it = m_peerAddresses.find(peerPlayerId);
+    if (it != m_peerAddresses.end())
+    {
+        m_peerPlayerIds.erase(it->second);
+        m_peerAddresses.erase(peerPlayerId);
+    }
 }
 
 void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int len)
@@ -92,13 +103,13 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     auto it = m_peerAddresses.find(destPlayerId);
     if (it == m_peerAddresses.end())
     {
-        qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "ERROR peer" << destPlayerId << "not known";
+        qInfo() << "[TafnetNode::forwardGameData]" << m_playerId << "ERROR peer" << destPlayerId << "not known";
         return;
     }
     HostAndPort& hostAndPort = it->second;
 
 #ifdef _DEBUG
-    qDebug() << "[TafnetNode::forwardGameData]" << m_playerId << "forwarding to" << destPlayerId << "port=" << hostAndPort.port << "action=" << action;
+    qInfo() << "[TafnetNode::forwardGameData]" << m_playerId << "forwarding to" << destPlayerId << "port=" << hostAndPort.port << "action=" << action;
     TADemo::HexDump(data, len, std::cout);
 #endif
 

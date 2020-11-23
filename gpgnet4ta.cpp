@@ -29,14 +29,13 @@
 
 using namespace gpgnet;
 
-
 bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QString commandLine, QString currentDirectory)
 {
     QString registryPath = QString(R"(%1\%2)").arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
     QSettings registry(registryPath, QSettings::NativeFormat);
     QStringList applications = registry.childGroups();
 
-    qDebug() << "\nCHECK:" << guid << path << file << commandLine << currentDirectory;
+    qInfo() << "\nCHECK:" << guid << path << file << commandLine << currentDirectory;
     Q_FOREACH(QString appName, applications)
     {
         QString nthGuid = registry.value(appName + "/Guid").toString();
@@ -50,10 +49,10 @@ bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QS
             QString::compare(commandLine, nthCommandLine) == 0 &&
             QString::compare(currentDirectory, nthCurrentDirectory, Qt::CaseInsensitive) ==0)
         {
-            qDebug() << "MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
+            qInfo() << "MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
             return true;
         }
-        qDebug() << "NO MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
+        qInfo() << "NO MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
 
     }
     return false;
@@ -164,6 +163,83 @@ public:
 };
 
 
+
+#include <QtCore/qdatetime.h>
+
+class Logger
+{
+public:
+    enum class Verbosity { SILENT = 0, FATAL = 1, WARNING = 2, CRITICAL = 3, INFO = 4, DEBUG = 5 };
+
+private:
+    std::ofstream m_logfile;
+    Verbosity m_verbosity;
+    static std::shared_ptr<Logger> m_instance;
+
+public:
+    Logger(const std::string &filename, Verbosity verbosity) :
+        m_logfile(filename, std::iostream::out),
+        m_verbosity(verbosity)
+    { }
+
+    static void Initialise(const std::string &filename, Verbosity level)
+    {
+        m_instance.reset(new Logger(filename, level));
+    }
+
+    static Logger * Get()
+    {
+        return m_instance.get();
+    }
+
+    static void Log(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+    {
+        Logger::Get()->LogToFile(type, context, msg);
+    }
+
+    void LogToFile(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+        switch (type) {
+        case QtDebugMsg:
+            if (m_verbosity >= Verbosity::DEBUG)
+            {
+                QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+                m_logfile << datetime.toStdString() << " [Debug] " << msg.toStdString() << std::endl;
+            }
+            break;
+        case QtInfoMsg:
+            if (m_verbosity >= Verbosity::INFO)
+            {
+                QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+                m_logfile << datetime.toStdString() << " [Info] " << msg.toStdString() << std::endl;
+            }
+            break;
+        case QtCriticalMsg:
+            if (m_verbosity >= Verbosity::CRITICAL)
+            {
+                QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+                m_logfile << datetime.toStdString() << " [Critical] " << msg.toStdString() << std::endl;
+            }
+            break;
+        case QtWarningMsg:
+            if (m_verbosity >= Verbosity::WARNING)
+            {
+                QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+                m_logfile << datetime.toStdString() << " [Warning] " << msg.toStdString() << std::endl;
+            }
+            break;
+        case QtFatalMsg:
+            if (m_verbosity >= Verbosity::FATAL)
+            {
+                QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+                m_logfile << datetime.toStdString() << " [Fatal] " << msg.toStdString() << std::endl;
+            }
+            abort();
+        }
+    }
+};
+
+std::shared_ptr<Logger> Logger::m_instance;
+
 int main(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
@@ -202,7 +278,12 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
     parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
     parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
+    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs", "logfile", "c:\\temp\\gpgnet4ta.log"));
+    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug)", "logfile", "4"));
     parser.process(app);
+
+    Logger::Initialise(parser.value("logfile").toStdString(), Logger::Verbosity(parser.value("loglevel").toInt()));
+    qInstallMessageHandler(Logger::Log);
 
     QString dplayGuid = QUuid::createUuidV5(QUuid(DEFAULT_DPLAY_REGISTERED_GAME_GUID), parser.value("gamemod").toUpper()).toString();
     QString dplayAppName = "Total Annihilation Forever (" + parser.value("gamemod").toUpper() + ")";
@@ -326,13 +407,13 @@ int main(int argc, char* argv[])
 
         if (!ret)
         {
-            qDebug() << "unable to initialise jdplay";
+            qInfo() << "unable to initialise jdplay";
             return 1;
         }
         ret = jdplay.launch(true);
         if (!ret)
         {
-            qDebug() << "unable to launch jdplay";
+            qInfo() << "unable to launch jdplay";
             return 1;
         }
 
@@ -358,6 +439,7 @@ int main(int argc, char* argv[])
         QObject::connect(&gpgnet, &GpgNetRunner::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgnet, &GpgNetRunner::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgnet, &GpgNetRunner::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
+        QObject::connect(&gpgnet, &GpgNetRunner::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
         QObject::connect(&gpgnet, &GpgNetRunner::remoteGameSessionDetected, &lobby, &TaLobby::onRemoteGameSessionDetected);
         QObject::connect(&gpgnet, &GpgNetRunner::finished, &app, &QCoreApplication::quit);
 

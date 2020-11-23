@@ -70,6 +70,18 @@ void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
     m_game->registerRemotePlayer(playerId);
 }
 
+void TaLobby::onDisconnectFromPeer(int playerId)
+{
+    qDebug() << "[TaLobby::onDisconnectFromPeer]" << playerId;
+    if (!m_proxy || !m_game)
+    {
+        return;
+    }
+
+    m_proxy->disconnectFromPeer(playerId);
+    m_game->unregisterRemotePlayer(playerId);
+}
+
 void TaLobby::onRemoteGameSessionDetected()
 {
     m_game->resetGameConnection();

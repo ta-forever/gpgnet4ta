@@ -19,6 +19,7 @@ namespace tafnet
 
     public:
         GameSender(QHostAddress gameAddress, quint16 enumPort);
+        ~GameSender();
 
         virtual void setTcpPort(quint16 port);
         virtual void setUdpPort(quint16 port);

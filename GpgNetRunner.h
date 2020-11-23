@@ -27,6 +27,7 @@ signals:
     void createLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
     void joinGame(QString host, QString playerName, int playerId);
     void connectToPeer(QString host, QString playerName, int playerId);
+    void disconnectFromPeer(int playerId);
     void remoteGameSessionDetected();
 
 };

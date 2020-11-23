@@ -35,6 +35,9 @@ namespace tafnet
 
         virtual GameSender* getGameSender(std::uint32_t remoteTafnetId);
         virtual GameReceiver* getGameReceiver(std::uint32_t remoteTafnetId, QSharedPointer<QUdpSocket> udpSocket);
+        virtual void killGameSender(std::uint32_t remoteTafnetId);
+        virtual void killGameReceiver(std::uint32_t remoteTafnetId);
+
         virtual void handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len);
         virtual void handleTafnetMessage(const TafnetMessageHeader& tafheader, std::uint32_t peerPlayerId, char* data, int len);
         virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
@@ -45,6 +48,7 @@ namespace tafnet
         TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
       
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId);
+        virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
 
         // GpgNetRunner uses a different dplay instance to check for when the host is up.
         // Once thats done we need to reset the ports so future replies go to the actual game, not gpgnetrunner instance

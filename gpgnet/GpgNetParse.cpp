@@ -150,6 +150,25 @@ namespace gpgnet
         return candidates;
     }
 
+    DisconnectFromPeerCommand::DisconnectFromPeerCommand():
+        playerId(0)
+    { }
+
+    DisconnectFromPeerCommand::DisconnectFromPeerCommand(QVariantList qvl)
+    {
+        Set(qvl);
+    }
+
+    void DisconnectFromPeerCommand::Set(QVariantList command)
+    {
+        QString cmd = command[0].toString();
+        if (cmd.compare("DisconnectFromPeer"))
+        {
+            throw std::runtime_error("Unexpected command");
+        }
+        playerId = command[1].toInt();
+    }
+
     std::uint8_t GpgNetParse::GetByte(QDataStream& is)
     {
         std::uint8_t byte;
