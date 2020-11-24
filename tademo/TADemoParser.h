@@ -67,20 +67,22 @@ namespace TADemo
 
     class RecordReader
     {
+        enum class State { READ_RECLEN1, READ_RECLEN2, READ_RECORD };
+        State m_state;
+
+        std::uint8_t m_recordLength[2];
+
         bytestring m_readBuffer;
         std::streamsize m_bytesRead;
 
     public:
 
-        RecordReader() : m_bytesRead(0u) { }
+        RecordReader() : m_bytesRead(0u), m_state(State::READ_RECLEN1) {}
 
         struct DataNotReadyException { };
 
         // returns a completed record or throws DataNotReadyException
         bytestring operator()(std::istream *is);
-
-    private:
-        void getBytes(std::istream *is);
     };
 
 

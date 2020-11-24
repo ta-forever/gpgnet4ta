@@ -370,7 +370,7 @@ void GpgNetRunner::run()
             }
             else
             {
-                qInfo() << "gameState Joined/Launching: game in progress";
+                qDebug() << "gameState Joined/Launching: game in progress";
             }
 
             if (!jdplay->pollStillActive())

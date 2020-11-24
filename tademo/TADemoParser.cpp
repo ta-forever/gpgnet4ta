@@ -10,63 +10,62 @@
 namespace TADemo
 {
 
-    void RecordReader::getBytes(std::istream *is)
-    {
-        std::uint8_t *ptr = &m_readBuffer[m_bytesRead];
-
-        is->clear();
-        is->read((char*)ptr, m_readBuffer.size() - m_bytesRead);
-        m_bytesRead += is->gcount();
-
-        if (m_bytesRead != m_readBuffer.size())
-        {
-            throw DataNotReadyException();
-        }
-    }
-
     bytestring RecordReader::operator()(std::istream *is)
     {
         //std::cout << std::dec << "rr " << m_bytesRead << '/' << m_readBuffer.size() << '.';
         bytestring record;
+        
+        is->clear();
 
-        if (m_readBuffer.empty())
+        if (m_state == State::READ_RECLEN1)
         {
-            std::streamsize pos = is->tellg();
-            std::uint16_t length = 0u;
-            is->clear();
-            is->read((char*)&length, 2);
-            if (is->gcount() == 2)
+            is->read((char*)&m_recordLength[0], 1);
+            if (is->gcount() == 1)
             {
-                //std::cout << "got len=" << int(length) << '.';
+                m_state = State::READ_RECLEN2;
+            }
+            else
+            {
+                throw DataNotReadyException();
+            }
+        }
+        if (m_state == State::READ_RECLEN2)
+        {
+            is->read((char*)&m_recordLength[1], 1);
+            if (is->gcount() == 1)
+            {
+                std::uint16_t length = unsigned(m_recordLength[0]) | (unsigned(m_recordLength[1]) << 8);
                 if (length > 16384 || length <= 2)
                 {
                     std::ostringstream ss;
-                    ss << "unrealistic record length " << length << " at position " << pos;
+                    ss << "[RecordReader::operator()] unrealistic record length " << length << " at position " << is->tellg();
                     throw std::runtime_error(ss.str());
                 }
                 length -= 2;
                 m_readBuffer.resize(length);
                 m_bytesRead = 0u;
-            }
-            else if (is->gcount() == 0)
-            {
-                throw DataNotReadyException();
+                m_state = State::READ_RECORD;
             }
             else
             {
-                throw std::runtime_error("expected to be able to read 2-byte record length in one go!");
+                throw DataNotReadyException();
             }
         }
-
-        if (!m_readBuffer.empty())
+        if (m_state == State::READ_RECORD)
         {
-            getBytes(is);
-            //std::cout << "got buf=" << m_bytesRead << '/' << m_readBuffer.size() << '.';
+            std::uint8_t *ptr = &m_readBuffer[m_bytesRead];
+            is->read((char*)ptr, m_readBuffer.size() - m_bytesRead);
+            m_bytesRead += is->gcount();
+            if (m_bytesRead < m_readBuffer.size())
+            {
+                throw DataNotReadyException();
+            }
             record = m_readBuffer;
             m_readBuffer.clear();
             m_bytesRead = 0u;
+            m_state = State::READ_RECLEN1;
         }
-        //std::cout << std::endl;
+
         return record;
     }
 
