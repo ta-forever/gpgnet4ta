@@ -85,6 +85,11 @@ Payload DataBuffer::get(std::uint32_t seq)
     return result;
 }
 
+std::map<std::uint32_t, Payload > & DataBuffer::getAll()
+{
+    return m_data;
+}
+
 
 TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort) :
     m_playerId(playerId),
@@ -96,6 +101,28 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     m_lobbySocket.bind(bindAddress, bindPort);
     qInfo() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << m_lobbySocket.localAddress().toString() << ":" << m_lobbySocket.localPort();
     QObject::connect(&m_lobbySocket, &QUdpSocket::readyRead, this, &TafnetNode::onReadyRead);
+
+    QObject::connect(&m_resendTimer, &QTimer::timeout, this, &TafnetNode::onResendTimer);
+    m_resendTimer.start(1000);
+}
+
+
+void TafnetNode::onResendTimer()
+{
+    for (auto &pairPlayer : m_sendBuffer)
+    {
+        std::uint32_t peerPlayerId = pairPlayer.first;
+        DataBuffer &sendBuffer = pairPlayer.second;
+        for (auto &pairPayload : sendBuffer.getAll())
+        {
+            std::uint32_t seq = pairPayload.first;
+            Payload &data = pairPayload.second;
+            if (data.buf)
+            {
+                sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size());
+            }
+        }
+    }
 }
 
 
@@ -143,7 +170,7 @@ void TafnetNode::onReadyRead()
             Payload data = tcpSendBuffer.get(seq);
             if (data.buf)
             {
-                sendMessage(peerPlayerId, Payload::ACTION_TCP_DATA, seq, data.buf->data(), data.buf->size());
+                sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size());
             }
         }
 

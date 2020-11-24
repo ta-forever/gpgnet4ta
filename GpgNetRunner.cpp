@@ -284,13 +284,13 @@ void GpgNetRunner::run()
                     return;
                 }
 
+                // searching throws a spanner in the works - causes host to reject joiners after launch ...
                 if (true)//jdplay->searchOnce())
                 {
                     //jdplay->releaseDirectPlay();
                     //jdplay.reset(new JDPlay(createLobbyCommand.playerName.toStdString().c_str(), 0, false));
                     //bool ret = jdplay->initialize(guid.toStdString().c_str(), hostip, false, 10);
                     //emit remoteGameSessionDetected();
-                    //QThread::msleep(100); // give TafnetGameNode plenty time to reset GameSender ports
                     qInfo() << "jdplay.launch(join):" << hostip;
                     ret = jdplay->launch(true);
                     gpgSend.playerOption(QString::number(gpgPlayerIds.value(buildPlayerName(
@@ -329,13 +329,14 @@ void GpgNetRunner::run()
                 }
                 else
                 {
-                    ////qInfo() << "gamestate Hosted: polling dplay lobby";
+                    // this all throws some spanner in the works: causes host to reject joiners after launch ...
                     //jdplay->pollSessionStatus();
                     //jdplay->printSessionDesc();
 
                     //int numPlayers = jdplay->getUserData1() >> 16 & 0x0f;
                     //bool closed = jdplay->getUserData1() & 0x80000000;
                     //QString mapName = QString::fromStdString(jdplay->getAdvertisedSessionName()).trimmed();
+
                     ////qInfo() << "dplay map name:" << mapName;
                     //if (mapName.size() > 16)
                     //{

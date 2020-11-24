@@ -2,8 +2,8 @@
 
 #include <cinttypes>
 #include <functional>
-#include <QtNetwork/qtcpserver.h>
 #include <QtNetwork/qudpsocket.h>
+#include <QtCore/qtimer.h>
 
 namespace tafnet
 {
@@ -43,6 +43,7 @@ namespace tafnet
         std::uint32_t push_back(std::uint8_t action, const char *data, int len);
         Payload pop();
         Payload get(std::uint32_t seq);
+        std::map<std::uint32_t, Payload > & getAll();
         std::size_t size();
       
         void ackData(std::uint32_t seq);
@@ -86,6 +87,8 @@ namespace tafnet
             }
         };
 
+        QTimer m_resendTimer;
+
         const std::uint32_t m_playerId;
         std::uint32_t m_hostPlayerId;
         QUdpSocket m_lobbySocket;                               // send receive to peer TafnetNodes
@@ -105,11 +108,14 @@ namespace tafnet
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;
         virtual std::uint32_t getHostPlayerId() const;
+        virtual bool isHost() { return getPlayerId() == getHostPlayerId(); }
 
         virtual void joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);
         virtual void connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);
         virtual void disconnectFromPeer(std::uint32_t peerPlayerId);
         virtual void forwardGameData(std::uint32_t peerPlayerId, std::uint32_t action, const char* data, int len);
+
+        virtual void onResendTimer();
     };
 
 }
