@@ -47,12 +47,13 @@ namespace tafnet
     public:
         TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
       
-        virtual void registerRemotePlayer(std::uint32_t remotePlayerId);
+        virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
         virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
 
         // GpgNetRunner uses a different dplay instance to check for when the host is up.
         // Once thats done we need to reset the ports so future replies go to the actual game, not gpgnetrunner instance
         virtual void resetGameConnection();
+
 
     };
 

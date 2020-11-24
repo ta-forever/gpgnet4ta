@@ -30,16 +30,16 @@ int main(int argc, char* argv[])
     TafnetGameNode ta1(
         &node1,
         []() { return new GameSender(QHostAddress("127.0.0.1"), 47624); },
-        [](QSharedPointer<QUdpSocket> udpSocket) { return new GameReceiver(QHostAddress("127.0.0.1"), 47625, 0, 0, udpSocket); });
+        [](QSharedPointer<QUdpSocket> udpSocket) { return new GameReceiver(QHostAddress("127.0.0.1"), 0, 0, udpSocket); });
     TafnetGameNode ta2(
         &node2,
         []() { return new GameSender(QHostAddress("192.168.1.104"), 47624); },
-        [](QSharedPointer<QUdpSocket> udpSocket) { return new GameReceiver(QHostAddress("192.168.1.109"), 47624, 0, 0, udpSocket); });
+        [](QSharedPointer<QUdpSocket> udpSocket) { return new GameReceiver(QHostAddress("192.168.1.109"), 0, 0, udpSocket); });
 
     node2.joinGame(QHostAddress("127.0.0.1"), 6112, 1);
     node1.connectToPeer(QHostAddress("127.0.0.1"), 6113, 2);
-    ta1.registerRemotePlayer(2);
-    ta2.registerRemotePlayer(1);
+    ta1.registerRemotePlayer(2, 0);
+    ta2.registerRemotePlayer(1, 47624);
 
     return app.exec();
 }

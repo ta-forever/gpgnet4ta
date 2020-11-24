@@ -33,7 +33,6 @@ GameReceiver* TafnetGameNode::getGameReceiver(std::uint32_t remoteTafnetId, QSha
         gameReceiver.reset(m_gameReceiverFactory(udpSocket));
         if (m_remotePlayerIds.count(gameReceiver->getTcpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getTcpListenPort()] = remoteTafnetId;
         if (m_remotePlayerIds.count(gameReceiver->getUdpListenPort()) == 0) m_remotePlayerIds[gameReceiver->getUdpListenPort()] = remoteTafnetId;
-        if (m_remotePlayerIds.count(gameReceiver->getEnumListenPort()) == 0) m_remotePlayerIds[gameReceiver->getEnumListenPort()] = remoteTafnetId;
         gameReceiver->setHandler([this](QAbstractSocket* receivingSocket, int channelCode, char* data, int len) {
             this->handleGameData(receivingSocket, channelCode, data, len);
         });
@@ -82,13 +81,14 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     //qInfo() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
     if (m_remotePlayerIds.count(receivingSocket->localPort()) == 0)
     {
+        qWarning() << "[TafnetGameNode::handleGameData] 1 unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
         return;
     }
 
     std::uint32_t destNodeId = m_remotePlayerIds[receivingSocket->localPort()];
     if (destNodeId == 0)
     {
-        qInfo() << "[TafnetGameNode::handleGameData] ERROR: unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
+        qWarning() << "[TafnetGameNode::handleGameData] 2 unable to determine destination tafnetid for game data received on port" << receivingSocket->localPort();
         return;
     }
 
@@ -195,11 +195,17 @@ TafnetGameNode::TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender 
     });
 }
 
-void TafnetGameNode::registerRemotePlayer(std::uint32_t remotePlayerId)
+void TafnetGameNode::registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort)
 {
     qInfo() << "[TafnetGameNode::registerRemotePlayer]" << m_tafnetNode->getPlayerId() << "registering player" << remotePlayerId;
     GameSender* gameSender = getGameSender(remotePlayerId);
     GameReceiver* gameReceiver = getGameReceiver(remotePlayerId, gameSender->getUdpSocket());
+
+    if (isHostEnumPort > 0)
+    {
+        m_gameReceivers[remotePlayerId]->bindEnumerationPort(isHostEnumPort);
+        m_remotePlayerIds[gameReceiver->getEnumListenPort()] = remotePlayerId;
+    }
 }
 
 void TafnetGameNode::unregisterRemotePlayer(std::uint32_t remotePlayerId)

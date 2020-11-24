@@ -28,13 +28,13 @@ void GameSender::setUdpPort(quint16 port)
 void GameSender::enumSessions(char* data, int len)
 {
     qInfo() << "[GameSender::enumSessions]" << m_gameAddress.toString() << ":" << m_enumPort;
-    m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
-    m_enumSocket.flush();
-    //m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
-    //m_enumSocket.waitForConnected(100);
-    //m_enumSocket.write(data, len);
+    //m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     //m_enumSocket.flush();
-    //m_enumSocket.disconnectFromHost();
+    m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
+    m_enumSocket.waitForConnected(3000);
+    m_enumSocket.write(data, len);
+    m_enumSocket.flush();
+    m_enumSocket.disconnectFromHost();
 }
 
 bool GameSender::openTcpSocket(int timeoutMillisecond)

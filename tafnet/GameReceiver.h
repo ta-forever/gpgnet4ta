@@ -34,7 +34,7 @@ namespace tafnet
         static const int CHANNEL_TCP = 2;
         static const int CHANNEL_UDP = 3;
 
-        GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket);
+        GameReceiver(QHostAddress bindAddress, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket);
         ~GameReceiver();
 
         virtual void setHandler(const std::function<void(QAbstractSocket*, int, char*, int)>& f);
@@ -44,5 +44,6 @@ namespace tafnet
         virtual quint16 getUdpListenPort();
         virtual quint16* getListenPorts(quint16 ports[2]);
         virtual void resetGameConnection();
+        virtual void bindEnumerationPort(quint16 port);
     };
 }

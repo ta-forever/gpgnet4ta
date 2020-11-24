@@ -38,7 +38,7 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
     m_game.reset(new tafnet::TafnetGameNode(
         m_proxy.data(),
         [this]() { return new tafnet::GameSender(this->m_gameAddress, 47624); },
-        [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 47624, 0, 0, udpSocket);
+        [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 0, 0, udpSocket);
     }));
 }
 
@@ -53,7 +53,7 @@ void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
     quint16 port = 6112;
     SplitHostAndPort(_host, host, port);
     m_proxy->joinGame(host, port, playerId);
-    m_game->registerRemotePlayer(playerId);
+    m_game->registerRemotePlayer(playerId, 47624);
 }
 
 void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
@@ -67,7 +67,7 @@ void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
     quint16 port = 6112;
     SplitHostAndPort(_host, host, port);
     m_proxy->connectToPeer(host, port, playerId);
-    m_game->registerRemotePlayer(playerId);
+    m_game->registerRemotePlayer(playerId, 0);
 }
 
 void TaLobby::onDisconnectFromPeer(int playerId)

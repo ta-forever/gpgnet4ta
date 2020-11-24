@@ -6,16 +6,13 @@
 
 using namespace tafnet;
 
-GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket) :
+GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 tcpPort, quint16 udpPort, QSharedPointer<QUdpSocket> udpSocket) :
     m_bindAddress(bindAddress),
-    m_enumPort(enumPort),
+    m_enumPort(0u),
     m_tcpPort(tcpPort),
     m_udpPort(udpPort),
     m_udpSocket(udpSocket)
 {
-    m_enumServer.listen(bindAddress, enumPort);
-    m_enumPort = m_enumServer.serverPort();
-    qInfo() << "[GameReceiver::GameReceiver] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumServer.serverPort();
     QObject::connect(&m_enumServer, &QTcpServer::newConnection, this, &GameReceiver::onNewConnection);
 
     m_tcpServer.listen(bindAddress, tcpPort);
@@ -27,6 +24,22 @@ GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 enumPort, quint16 t
     m_udpPort = udpSocket->localPort();
     qInfo() << "[GameReceiver::GameReceiver] udp data socket binding" << m_udpSocket->localAddress().toString() << ":" << m_udpSocket->localPort();
     QObject::connect(m_udpSocket.data(), &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadUdp);
+}
+
+void GameReceiver::bindEnumerationPort(quint16 port)
+{
+    if (port > 0)
+    {
+        m_enumServer.listen(m_bindAddress, port);
+        m_enumPort = m_enumServer.serverPort();
+        qInfo() << "[GameReceiver::bindEnumerationPort] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumServer.serverPort();
+    }
+    else
+    {
+        m_enumServer.close();
+        m_enumPort = 0;
+        qInfo() << "[GameReceiver::bindEnumerationPort] tcp enumeration server is closed";
+    }
 }
 
 GameReceiver::~GameReceiver()
