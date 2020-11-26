@@ -113,6 +113,7 @@ void TafnetNode::onResendTimer()
     {
         std::uint32_t peerPlayerId = pairPlayer.first;
         DataBuffer &sendBuffer = pairPlayer.second;
+        int maxResendAtOnce = 10;
         for (auto &pairPayload : sendBuffer.getAll())
         {
             std::uint32_t seq = pairPayload.first;
@@ -120,6 +121,10 @@ void TafnetNode::onResendTimer()
             if (data.buf)
             {
                 sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size());
+            }
+            if (--maxResendAtOnce <= 0)
+            {
+                break;
             }
         }
     }
