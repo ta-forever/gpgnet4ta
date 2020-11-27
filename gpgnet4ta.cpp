@@ -240,6 +240,30 @@ public:
 
 std::shared_ptr<Logger> Logger::m_instance;
 
+void RunAs(QString cmd, QStringList args)
+{
+    cmd = '"' + cmd + '"';
+    std::transform(args.begin(), args.end(), args.begin(), [](QString arg) -> QString { return '"' + arg + '"'; });
+    QString joinedArgs = args.join(' ');
+
+    std::string _cmd = cmd.toStdString();
+    std::string _args = joinedArgs.toStdString();
+
+    SHELLEXECUTEINFO ShExecInfo = { 0 };
+    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    ShExecInfo.hwnd = NULL;
+    ShExecInfo.lpVerb = "runas";
+    ShExecInfo.lpFile = _cmd.c_str();
+    ShExecInfo.lpParameters = _args.c_str();
+    ShExecInfo.lpDirectory = NULL;
+    ShExecInfo.nShow = SW_HIDE;
+    ShExecInfo.hInstApp = NULL;
+    ShellExecuteEx(&ShExecInfo);
+    WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+    CloseHandle(ShExecInfo.hProcess);
+}
+
 int main(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
@@ -250,7 +274,6 @@ int main(int argc, char* argv[])
     const char *DEFAULT_DPLAY_REGISTERED_GAME_PATH = "c:\\cavedog\\totala";
     const char *DEFAULT_DPLAY_REGISTERED_GAME_ARGS = "";
     const char* DEFAULT_DPLAY_REGISTERED_GAME_MOD = "TACC";
-    const char* DEFAULT_DPLAY_PROTOCOL = "TCP";
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
@@ -280,7 +303,34 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
     parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs", "logfile", "c:\\temp\\gpgnet4ta.log"));
     parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug)", "logfile", "4"));
+    parser.addOption(QCommandLineOption("uac", "run as admin"));
     parser.process(app);
+
+    if (parser.isSet("uac"))
+    {
+        QStringList args;
+        for (const char *arg : {
+            "gpgnet", "mean", "deviation", "country", "numgames", "players",
+            "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
+            "logfile", "loglevel" })
+        {
+            if (parser.isSet(arg))
+            {
+                args << (QString("--") + arg) << parser.value(arg);
+            }
+        }
+        for (const char *arg : {"lockoptions", "upnp", "createlobby"})
+        {
+            if (parser.isSet(arg))
+            {
+                args << QString("--") + arg;
+            }
+        }
+        args << "--registerdplay";  // once we have UAC, just register regardless of current registry setting - avoid re-asking for UAC
+
+        RunAs(app.applicationFilePath(), args);
+        return 0;
+    }
 
     Logger::Initialise(parser.value("logfile").toStdString(), Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(Logger::Log);
@@ -320,18 +370,14 @@ int main(int argc, char* argv[])
     else if (!CheckDplayLobbyableApplication(
         dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
     {
-        QString cmd = "\"" + app.applicationFilePath() + "\"";
         QStringList args;
         args << "--registerdplay";
         args << "--gamemod" << parser.value("gamemod");
         args << "--gamepath" << parser.value("gamepath");
         args << "--gameexe" << parser.value("gameexe");
         args << "--gameargs" << parser.value("gameargs");
-        std::transform(args.begin(), args.end(), args.begin(), [](QString arg) -> QString { return "\"" + arg + "\""; });
-        QString joinedArgs = args.join(' ');
 
-        ShellExecute(GetConsoleWindow(), "runas", cmd.toStdString().c_str(), joinedArgs.toStdString().c_str(), 0, SW_HIDE);
-        QThread::msleep(300);
+        RunAs(app.applicationFilePath(), args);
         while (!CheckDplayLobbyableApplication(dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
         {
             QString err = QString("Unable to update DirectPlay registration for ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\". ";
@@ -348,8 +394,7 @@ int main(int argc, char* argv[])
             else if (result == IDIGNORE)
                 break;
 
-             ShellExecute(GetConsoleWindow(), "runas", cmd.toStdString().c_str(), joinedArgs.toStdString().c_str(), 0, SW_HIDE);
-             QThread::msleep(300);
+            RunAs(app.applicationFilePath(), args);
         } 
     }
 
@@ -416,6 +461,15 @@ int main(int argc, char* argv[])
             qInfo() << "unable to launch jdplay";
             return 1;
         }
+
+        QTimer stopTimer;
+        QObject::connect(&stopTimer, &QTimer::timeout, &app, [&jdplay, &app]() {
+            if (!jdplay.pollStillActive())
+            {
+                app.quit();
+            }
+        });
+        stopTimer.start(1000);
 
         app.exec();
     }
