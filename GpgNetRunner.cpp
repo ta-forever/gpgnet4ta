@@ -17,7 +17,7 @@ QStringList GetPossibleTADemoSaveDirs()
 {
     QStringList result;
 
-    for (const char* organisation : { "Yankspankers", "TA Patch", "TA Esc" })
+    for (const char* organisation : { "Yankspankers", "TA Patch", "TA Esc", "TotalM" })
     {
         QSettings registry(QSettings::NativeFormat, QSettings::UserScope, organisation, "TA Demo");
         QString defdir = registry.value("Options/defdir").toString();
@@ -45,7 +45,7 @@ QStringList GetTaDemoFiles(QStringList taDemoDirs)
     QStringList demos;
     for (QString dir : taDemoDirs)
     {
-        QStringList tadFiles = QDir(dir).entryList(QStringList() << "*.tad" << "*.ted", QDir::Files);
+        QStringList tadFiles = QDir(dir).entryList(QStringList() << "*.tad" << "*.ted" << "*.tmd", QDir::Files);
         std::transform(tadFiles.begin(), tadFiles.end(), tadFiles.begin(), [dir](QString fn) -> QString { return dir + "\\" + fn; });
         demos += tadFiles;
     }
