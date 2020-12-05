@@ -6,7 +6,7 @@
 #include <sstream>
 
 Player::Player() :
-side(TADemo::Side::ARM)
+side(TADemo::Side::UNKNOWN)
 { }
 
 PlayerData::PlayerData() :
@@ -457,7 +457,7 @@ void GameMonitor2::updatePlayerArmies()
         [](const PlayerData* p1, const PlayerData* p2)
         -> bool { return p1->name < p2->name; });
 
-    int teamCount = 0;  // assign team numbers consecutively to each mutually allied set
+    int teamCount = 1;  // assign team numbers consecutively to each mutually allied set
     int armyCount = 0;  // assign army number by consecutive sortedPlayer
     for (PlayerData* sortedPlayer : sortedPlayers)
     {

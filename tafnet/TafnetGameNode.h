@@ -28,8 +28,8 @@ namespace tafnet
     {
         TafnetNode* m_tafnetNode;
         TADemo::TAPacketParser* m_packetParser;
-        std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer playerId
-        std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer playerId
+        std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer dplay playerId
+        std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer dplay playerId
         std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // keyed by gameReceiver's receive socket port (both tcp and udp)
 
         // these only discovered once some data received from game

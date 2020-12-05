@@ -1,21 +1,15 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
-#include <QtCore/qdatastream.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qsettings.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qdir.h>
-#include <QtCore/qthread.h>
 #include <QtCore/quuid.h>
-#include <QtNetwork/qhostinfo.h>
-#include <QtNetwork/qtcpsocket.h>
-#include <QtNetwork/qnetworkinterface.h>
 
 #define MINIUPNP_STATICLIB
 #include <miniupnpc/miniupnpc.h>
 #include <miniupnpc/upnpcommands.h>
 
-#include <algorithm>
 #include <fstream>
 
 #include "gpgnet/GpgNetClient.h"
@@ -181,8 +175,9 @@ public:
         QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
 
         // Forged Alliance reserves Team=1 for the team-not-selected team
-        int teamNumber = TADemo::Side(side) != TADemo::Side::WATCH ? (1 + int(_teamNumber)) : -1;
+        int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
         m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
+        m_gpgNetClient.playerOption(gpgnetId, "StartSpot", armyNumber);
         m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
         m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
     }
@@ -316,7 +311,6 @@ int main(int argc, char* argv[])
     QCoreApplication::setApplicationName("GpgPlay");
     QCoreApplication::setApplicationVersion("0.6");
 
-    // GpgPlay.exe /gamepath d:\games\ta /gameexe totala.exe /gameargs "-d -c d:\games\taforever.ini" /gpgnet 127.0.0.1:37135 /mean 1500 /deviation 75 /savereplay gpgnet://127.0.0.1:50703/12797031/Axle.SCFAreplay /country AU /numgames 878
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
     parser.addHelpOption();
@@ -516,8 +510,16 @@ int main(int argc, char* argv[])
         // not from the command line, from the dplay registry since thats what we're actually going to launch
         QString gamePath = GetDplayLobbableAppPath(dplayGuid, parser.value("gamepath"));
 
+        // GpgNetClient receives from gpgnet instructions to host/join/connect to peers; GpgNetClient sends back to gpgnet game and player status
         gpgnet::GpgNetClient gpgNetClient(parser.value("gpgnet"));
+
+        // JDPlay is a wrapper around directplay game launch and enumeration.
+        // We don't use enumeration because it causes our ice adapter proxy stuff to go haywire.
+        // Instead we have blind faith that gpgnet/ice adapter know what they're doing
+        // And we snoop network traffic to work out everything else (see TaLobby).
         JDPlay jdplay("BILLYIDOL", 3, false);
+
+        // GpgNetGameLauncher interprets instructions from GpgNetClient to launch TA as a host or as a joiner
         GpgNetGameLauncher launcher(
             DEFAULT_GAME_INI_TEMPLATE,
             gamePath + "\\" + DEFAULT_GAME_INI,
@@ -527,6 +529,11 @@ int main(int argc, char* argv[])
             jdplay,
             gpgNetClient);
 
+        // TaLobby is a conglomerate of objects that handles a man-in-the-middle relay of TA network traffic
+        // Together they work to tunnel everything through a single UDP port
+        // That UDP port is expected to be one brokered by the FAF ICE adapter independently of gpgnet4ta
+        // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
+        // (viz all the Qt signal connections from GpgNetClient to TaLobby)
         TaLobby lobby("127.0.0.1", "127.0.0.1", "127.0.0.1");
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
@@ -537,6 +544,9 @@ int main(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &launcher, &GpgNetGameLauncher::onJoinGame);
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
 
+        // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
+        // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)
+        // This information is passed on to the GpgNetClient for consumption by the TAF server
         ForwardGameEventsToGpgNet gameEvents(gpgNetClient);
         lobby.subscribeGameEvents(gameEvents);
         app.exec();

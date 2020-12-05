@@ -18,7 +18,8 @@ namespace TADemo
     enum class Side {
         ARM = 0,
         CORE = 1,
-        WATCH = 2
+        WATCH = 2,
+        UNKNOWN = 3
     };
 
     enum class SubPacketCode

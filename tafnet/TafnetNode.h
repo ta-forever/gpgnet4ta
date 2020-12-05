@@ -54,13 +54,11 @@ namespace tafnet
 
     struct TafnetMessageHeader
     {
-
         std::uint8_t action;
     };
 
     struct TafnetBufferedHeader
     {
-
         std::uint8_t action;
         std::uint32_t seq;
     };
@@ -92,16 +90,16 @@ namespace tafnet
 
         const std::uint32_t m_playerId;
         std::uint32_t m_hostPlayerId;
-        QUdpSocket m_lobbySocket;                               // send receive to peer TafnetNodes
-        std::map<std::uint32_t, HostAndPort> m_peerAddresses;   // keyed by peer player id
+        QUdpSocket m_lobbySocket;                               // send/receive to/from peer TafnetNodes
+        std::map<std::uint32_t, HostAndPort> m_peerAddresses;   // keyed by peer dplay player id
         std::map<HostAndPort, std::uint32_t> m_peerPlayerIds;
         std::function<void(std::uint8_t, std::uint32_t, char*, int)> m_handleMessage; // optional hook for handleMessage
 
-        std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer player id
-        std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer player id
+        std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer dplay player id
+        std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer dplay player id
 
     public:
-        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
+        TafnetNode(std::uint32_t dplayPlayerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
 
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;
@@ -117,12 +115,9 @@ namespace tafnet
         virtual void resetTcpBuffers();
 
     private:
-
         virtual void onReadyRead();
         virtual void handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
         virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len);
-
-
     };
 
 }
