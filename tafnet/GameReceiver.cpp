@@ -94,6 +94,10 @@ void GameReceiver::onSocketStateChanged(QAbstractSocket::SocketState socketState
         QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
         qInfo() << "[GameReceiver::onSocketStateChanged/UnconnectedState]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString();
         m_sockets.removeOne(sender);
+        if (sender->localPort() == m_tcpPort)
+        {
+            handleMessage(sender, CHANNEL_TCP, NULL, 0);
+        }
         //delete sender;
     }
 }

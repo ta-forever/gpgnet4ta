@@ -23,6 +23,13 @@ m_nextPopSeq(1u),
 m_nextPushSeq(1u)
 { }
 
+void DataBuffer::reset()
+{
+    m_data.clear();
+    m_nextPopSeq = 1u;
+    m_nextPushSeq = 1u;
+}
+
 void DataBuffer::insert(std::uint32_t seq, std::uint8_t action, const char *data, int len)
 {
     if (seq >= m_nextPopSeq)
@@ -95,9 +102,6 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     m_playerId(playerId),
     m_hostPlayerId(isHost ? playerId : 0u)
 {
-    qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetMessageHeader)" << sizeof(TafnetMessageHeader);
-    qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetBufferedHeader)" << sizeof(TafnetBufferedHeader);
-
     m_lobbySocket.bind(bindAddress, bindPort);
     qInfo() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << m_lobbySocket.localAddress().toString() << ":" << m_lobbySocket.localPort();
     QObject::connect(&m_lobbySocket, &QUdpSocket::readyRead, this, &TafnetNode::onReadyRead);
@@ -151,7 +155,7 @@ void TafnetNode::onReadyRead()
         auto it = m_peerPlayerIds.find(senderHostAndPort);
         if (it == m_peerPlayerIds.end())
         {
-            qInfo() << "[TafnetNode::onReadyRead]" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
+            qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
             continue;
         }
         std::uint32_t peerPlayerId = it->second;
@@ -171,7 +175,7 @@ void TafnetNode::onReadyRead()
         else if (tafBufferedHeader->action == Payload::ACTION_TCP_RESEND)
         {
             std::uint32_t seq = tafBufferedHeader->seq;
-            qInfo() << "[TafnetNode::onReadyRead] peer" << peerPlayerId << "requested resend packet" << seq;
+            qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- peer" << peerPlayerId << "requested resend packet" << seq;
             Payload data = tcpSendBuffer.get(seq);
             if (data.buf)
             {
@@ -188,7 +192,7 @@ void TafnetNode::onReadyRead()
             if (!tcpReceiveBuffer.readyRead())
             {
                 std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
-                qInfo() << "[TafnetNode::onReadyRead] req resend from packet" << seq << "from peer" << peerPlayerId;
+                qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- req resend packet" << seq << "from peer" << peerPlayerId;
                 sendMessage(peerPlayerId, Payload::ACTION_TCP_RESEND, seq, "", 0);
             }
             while (tcpReceiveBuffer.readyRead())
@@ -204,7 +208,7 @@ void TafnetNode::onReadyRead()
         else
         {
             // received data not requiring ACK
-            qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "from" << peerPlayerId << ", action=" << tafheader->action;
+            //qDebug() << "[TafnetNode::onReadyRead]" << m_playerId << "from" << peerPlayerId << ", action=" << tafheader->action;
             handleMessage(tafheader->action, peerPlayerId, datas.data() + sizeof(TafnetMessageHeader), datas.size() - sizeof(TafnetMessageHeader));
         }
     }
@@ -238,7 +242,7 @@ void TafnetNode::joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t pee
 
 void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId)
 {
-    qInfo() << "[TafnetNode::connectToPeer]" << m_playerId << "connecting to" << peer.toString() << ":" << peerPort << peerPlayerId;
+    qInfo() << "[TafnetNode::connectToPeer] playerId" << m_playerId << "connecting to" << peer.toString() << ":" << peerPort << peerPlayerId;
     HostAndPort hostAndPort(peer, peerPort);
     m_peerAddresses[peerPlayerId] = hostAndPort;
     m_peerPlayerIds[hostAndPort] = peerPlayerId;
@@ -247,7 +251,7 @@ void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_
 
 void TafnetNode::disconnectFromPeer(std::uint32_t peerPlayerId)
 {
-    qInfo() << "[TafnetNode::disconnectFromPeer]" << m_playerId << "disconnecting from" << peerPlayerId;
+    qInfo() << "[TafnetNode::disconnectFromPeer] playerId" << m_playerId << "disconnecting from" << peerPlayerId;
     auto it = m_peerAddresses.find(peerPlayerId);
     if (it != m_peerAddresses.end())
     {
@@ -263,15 +267,10 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     auto it = m_peerAddresses.find(destPlayerId);
     if (it == m_peerAddresses.end())
     {
-        qInfo() << "[TafnetNode::sendMessage]" << m_playerId << "ERROR peer" << destPlayerId << "not known";
+        qInfo() << "[TafnetNode::sendMessage] playerId" << m_playerId << "ERROR peer" << destPlayerId << "not known";
         return;
     }
     HostAndPort& hostAndPort = it->second;
-
-#ifdef _DEBUG
-    qDebug() << "[TafnetNode::sendMessage]" << m_playerId << "forwarding to" << destPlayerId << "port=" << hostAndPort.port << "action=" << action;
-    TADemo::HexDump(data, len, std::cout);
-#endif
 
     QByteArray buf;
     if (action >= Payload::ACTION_TCP_DATA)
@@ -290,7 +289,8 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
         std::memcpy(header+1, data, len);
     }
 
-
+    //qInfo() << "[TafnetNode::sendMessage] playerId" << m_playerId << "to peer" << destPlayerId;
+    //TADemo::HexDump(data, len, std::cout);
     m_lobbySocket.writeDatagram(buf.data(), buf.size(), QHostAddress(hostAndPort.ipv4addr), hostAndPort.port);
     m_lobbySocket.flush();
 }
@@ -306,5 +306,17 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     else
     {
         sendMessage(destPlayerId, action, 0, data, len);
+    }
+}
+
+void TafnetNode::resetTcpBuffers()
+{
+    for (auto &buf : m_receiveBuffer)
+    {
+        buf.second.reset();
+    }
+    for (auto &buf : m_sendBuffer)
+    {
+        buf.second.reset();
     }
 }

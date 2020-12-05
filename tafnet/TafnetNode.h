@@ -39,6 +39,7 @@ namespace tafnet
 
     public:
         DataBuffer();
+        void reset();
         void insert(std::uint32_t seq, std::uint8_t action, const char *data, int len);
         std::uint32_t push_back(std::uint8_t action, const char *data, int len);
         Payload pop();
@@ -99,12 +100,9 @@ namespace tafnet
         std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer player id
         std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer player id
 
-        virtual void onReadyRead();
-        virtual void handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
-        virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len);
-
     public:
         TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
+
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;
         virtual std::uint32_t getHostPlayerId() const;
@@ -116,6 +114,15 @@ namespace tafnet
         virtual void forwardGameData(std::uint32_t peerPlayerId, std::uint32_t action, const char* data, int len);
 
         virtual void onResendTimer();
+        virtual void resetTcpBuffers();
+
+    private:
+
+        virtual void onReadyRead();
+        virtual void handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
+        virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len);
+
+
     };
 
 }

@@ -1,6 +1,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
 #include <QtCore/qdatastream.h>
+#include <QtCore/qdatetime.h>
 #include <QtCore/qsettings.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qdir.h>
@@ -17,14 +18,12 @@
 #include <algorithm>
 #include <fstream>
 
+#include "gpgnet/GpgNetClient.h"
 #include "jdplay/JDPlay.h"
-#include "gpgnet/GpgNetParse.h"
-#include "gpgnet/GpgNetSend.h"
 #include "tademo/TADemoParser.h"
-#include "tademo/GameMonitor.h"
 #include "tafnet/TafnetGameNode.h"
 
-#include "GpgNetRunner.h"
+#include "GpgNetGameLauncher.h"
 #include "TaLobby.h"
 
 using namespace gpgnet;
@@ -163,8 +162,46 @@ public:
 };
 
 
+class ForwardGameEventsToGpgNet : public GameEventHandlerQt
+{
+    gpgnet::GpgNetClient &m_gpgNetClient;
 
-#include <QtCore/qdatetime.h>
+public:
+    ForwardGameEventsToGpgNet(gpgnet::GpgNetClient &gpgNetClient) :
+        m_gpgNetClient(gpgNetClient)
+    { }
+
+    virtual void onGameSettings(QString mapName, quint16 maxUnits)
+    {
+        m_gpgNetClient.gameOption("MapName", mapName);
+    }
+
+    virtual void onPlayerStatus(QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    {
+        QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
+
+        // Forged Alliance reserves Team=1 for the team-not-selected team
+        int teamNumber = TADemo::Side(side) != TADemo::Side::WATCH ? (1 + int(_teamNumber)) : -1;
+        m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
+        m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
+        m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+    }
+
+    virtual void onGameStarted()
+    {
+        m_gpgNetClient.gameState("Launching");
+    }
+
+    virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
+    {
+        for (auto it = resultByArmy.begin(); it != resultByArmy.end(); ++it)
+        {
+            m_gpgNetClient.gameResult(it.key(), it.value());
+        }
+        m_gpgNetClient.gameState("Ended");
+    }
+};
+
 
 class Logger
 {
@@ -277,7 +314,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("1.0");
+    QCoreApplication::setApplicationVersion("0.6");
 
     // GpgPlay.exe /gamepath d:\games\ta /gameexe totala.exe /gameargs "-d -c d:\games\taforever.ini" /gpgnet 127.0.0.1:37135 /mean 1500 /deviation 75 /savereplay gpgnet://127.0.0.1:50703/12797031/Axle.SCFAreplay /country AU /numgames 878
     QCommandLineParser parser;
@@ -479,25 +516,29 @@ int main(int argc, char* argv[])
         // not from the command line, from the dplay registry since thats what we're actually going to launch
         QString gamePath = GetDplayLobbableAppPath(dplayGuid, parser.value("gamepath"));
 
-        GpgNetRunner gpgnet(
+        gpgnet::GpgNetClient gpgNetClient(parser.value("gpgnet"));
+        JDPlay jdplay("BILLYIDOL", 3, false);
+        GpgNetGameLauncher launcher(
             DEFAULT_GAME_INI_TEMPLATE,
             gamePath + "\\" + DEFAULT_GAME_INI,
-            parser.value("gpgnet"),
-            parser.value("mean").toDouble(), parser.value("deviation").toDouble(),
-            parser.value("country"), parser.value("numgames").toInt(),
             dplayGuid,
             parser.value("players").toInt(),
-            parser.isSet("lockoptions"));
+            parser.isSet("lockoptions"),
+            jdplay,
+            gpgNetClient);
 
         TaLobby lobby("127.0.0.1", "127.0.0.1", "127.0.0.1");
-        QObject::connect(&gpgnet, &GpgNetRunner::createLobby, &lobby, &TaLobby::onCreateLobby);
-        QObject::connect(&gpgnet, &GpgNetRunner::joinGame, &lobby, &TaLobby::onJoinGame);
-        QObject::connect(&gpgnet, &GpgNetRunner::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
-        QObject::connect(&gpgnet, &GpgNetRunner::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
-        QObject::connect(&gpgnet, &GpgNetRunner::remoteGameSessionDetected, &lobby, &TaLobby::onRemoteGameSessionDetected);
-        QObject::connect(&gpgnet, &GpgNetRunner::finished, &app, &QCoreApplication::quit);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &launcher, &GpgNetGameLauncher::onCreateLobby);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, &launcher, &GpgNetGameLauncher::onHostGame);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &launcher, &GpgNetGameLauncher::onJoinGame);
+        QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
 
-        gpgnet.start();
+        ForwardGameEventsToGpgNet gameEvents(gpgNetClient);
+        lobby.subscribeGameEvents(gameEvents);
         app.exec();
     }
     return 0;

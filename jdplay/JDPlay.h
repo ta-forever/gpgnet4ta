@@ -1,3 +1,4 @@
+#pragma once
 /*	Copyright 2007 	Edwin Stang (edwinstang@gmail.com)
 
     This file is part of JDPlay.

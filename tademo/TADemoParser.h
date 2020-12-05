@@ -13,10 +13,6 @@
 
 namespace TADemo
 {
-    enum class Side { ARM = 0, CORE = 1, WATCH = 2 };
-
-    void HexDump(const void* _buff, std::size_t size, std::ostream& s);
-
     struct Header
     {
         char magic[8];              // "TA Demo\0";

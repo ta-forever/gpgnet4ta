@@ -28,6 +28,5 @@ signals:
     void joinGame(QString host, QString playerName, int playerId);
     void connectToPeer(QString host, QString playerName, int playerId);
     void disconnectFromPeer(int playerId);
-    void remoteGameSessionDetected();
 
 };

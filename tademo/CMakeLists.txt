@@ -1,10 +1,12 @@
 add_library(tademo
-    TADemoParser.h
-    TADemoParser.cpp
     TPacket.h
     TPacket.cpp
-    GameMonitor.h
-    GameMonitor.cpp
+    DPlayPacket.h
+    DPlayPacket.cpp
+    TAPacketParser.h
+    TAPacketParser.cpp
+    TADemoParser.h
+    TADemoParser.cpp
     HexDump.h
     HexDump.cpp)
 

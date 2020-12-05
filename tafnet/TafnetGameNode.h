@@ -11,6 +11,11 @@
 
 class QAbstractSocket;
 
+namespace TADemo
+{
+    class TAPacketParser;
+}
+
 namespace tafnet
 {
 
@@ -22,6 +27,7 @@ namespace tafnet
     class TafnetGameNode
     {
         TafnetNode* m_tafnetNode;
+        TADemo::TAPacketParser* m_packetParser;
         std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer playerId
         std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer playerId
         std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // keyed by gameReceiver's receive socket port (both tcp and udp)
@@ -30,6 +36,18 @@ namespace tafnet
         std::uint16_t m_gameTcpPort;
         std::uint16_t m_gameUdpPort;
 
+    public:
+        TafnetGameNode(
+            TafnetNode* tafnetNode,
+            TADemo::TAPacketParser *packetParser,
+            std::function<GameSender * ()> gameSenderFactory,
+            std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
+
+        virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
+        virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
+        virtual void resetGameConnection();
+
+    private:
         std::function<GameSender * ()> m_gameSenderFactory;
         std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> m_gameReceiverFactory;
 
@@ -43,18 +61,5 @@ namespace tafnet
         virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void updateGameSenderPorts(const char *data, int len);
-
-    public:
-        TafnetGameNode(TafnetNode* tafnetNode, std::function<GameSender * ()> gameSenderFactory, std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
-      
-        virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
-        virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
-
-        // GpgNetRunner uses a different dplay instance to check for when the host is up.
-        // Once thats done we need to reset the ports so future replies go to the actual game, not gpgnetrunner instance
-        virtual void resetGameConnection();
-
-
     };
-
 }

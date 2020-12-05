@@ -30,19 +30,21 @@ target_link_libraries(tadumper
 # -------------- TAPROXYTEST -------------
 
 add_executable(taproxytest
-	taproxytest.cpp)
+    GameMonitor2.h
+    GameMonitor2.cpp
+    taproxytest.cpp)
 
 target_link_directories(taproxytest
     PUBLIC
     ${MINIUPNP_INCLUDE_DIR})
 
 target_link_libraries(taproxytest
-	tademo
-	tafnet
+    tademo
+    tafnet
     Qt5::Core
     Qt5::Network
-	ws2_32
-	iphlpapi
+    ws2_32
+    iphlpapi
     ${MINIUPNP_LIBS_STATIC})
 
 # -------------- GPGNET4TA -------------
@@ -50,11 +52,15 @@ target_link_libraries(taproxytest
 set(CMAKE_AUTOMOC ON)
 
 add_executable(gpgnet4ta
-	TaLobby.h
-	TaLobby.cpp
-	GpgNetRunner.h
-	GpgNetRunner.cpp
-    gpgnet4ta.cpp)
+    TaLobby.h
+    TaLobby.cpp
+    GameMonitor2.h
+    GameMonitor2.cpp
+    GameEventHandlerQt.h
+    GameEventHandlerQt.cpp
+    gpgnet4ta.cpp
+    GpgNetGameLauncher.h
+    GpgNetGameLauncher.cpp)
 
 target_include_directories(gpgnet4ta 
     PUBLIC
@@ -63,20 +69,20 @@ target_include_directories(gpgnet4ta
 
 target_link_directories(gpgnet4ta
     PUBLIC
-	${DIRECT_PLAY_LIB_DIR} 
-	${MINIUPNP_LIB_DIR})
+    ${DIRECT_PLAY_LIB_DIR} 
+    ${MINIUPNP_LIB_DIR})
 
 target_link_libraries(gpgnet4ta
     jdplay
     tademo
-	tafnet
+    tafnet
     gpgnet
     Qt5::Core
     Qt5::Network
-	ws2_32
-	iphlpapi
+    ws2_32
+    iphlpapi
     ${DIRECT_PLAY_LIBS}
-	${MINIUPNP_LIBS_STATIC})
+    ${MINIUPNP_LIBS_STATIC})
 
 #add_custom_command(
 #    TARGET gpgnet4ta POST_BUILD

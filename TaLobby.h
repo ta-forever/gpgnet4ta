@@ -1,6 +1,13 @@
 #pragma once
 
 #include <QtNetwork/qhostaddress.h>
+#include "GameEventHandlerQt.h"
+#include "GameMonitor2.h"
+
+namespace TADemo
+{
+    class TaPacketParser;
+}
 
 namespace tafnet
 {
@@ -17,17 +24,20 @@ class TaLobby : public QObject
     const QHostAddress m_gameReceiveBindAddress;
     const QHostAddress m_gameAddress;
 
-    QSharedPointer<tafnet::TafnetNode> m_proxy;
-    QSharedPointer<tafnet::TafnetGameNode> m_game;
+    QSharedPointer<tafnet::TafnetNode> m_proxy;             // communicates with other nodes via UDP port brokered by FAF ICE adapter
+    QSharedPointer<tafnet::TafnetGameNode> m_game;          // bridge between m_proxy and TA instance
+    QSharedPointer<TADemo::TAPacketParser> m_packetParser;  // snoops the network packets handled by m_game
+    QSharedPointer<GameMonitor2> m_gameMonitor;             // infers major game events from packets provided by m_packetParser
+    QSharedPointer<GameEventsSignalQt> m_gameEvents;        // translates inferred game events into Qt signals for external consumption
 
 public:
-    TaLobby(
-        QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
+    TaLobby(QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
+
+    void subscribeGameEvents(GameEventHandlerQt &subscriber);
 
 public slots:
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
     void onJoinGame(QString host, QString playerName, int playerId);
     void onConnectToPeer(QString host, QString playerName, int playerId);
     void onDisconnectFromPeer(int playerId);
-    void onRemoteGameSessionDetected();
 };

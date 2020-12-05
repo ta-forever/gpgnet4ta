@@ -3,6 +3,10 @@
 
 namespace gpgnet
 {
+    GpgNetSend::GpgNetSend(QDataStream& os) :
+        m_os(os)
+    { }
+
     void GpgNetSend::SendCommand(QString command, int argumentCount)
     {
         qInfo() << "GpgNetSend command" << command;
@@ -21,10 +25,6 @@ namespace gpgnet
         qInfo() << "GpgNetSend arg" << arg;
         m_os << quint8(0) << quint32(arg);
     }
-
-    GpgNetSend::GpgNetSend(QDataStream& os) :
-        m_os(os)
-    { }
 
     void GpgNetSend::gameState(QString state)
     {
