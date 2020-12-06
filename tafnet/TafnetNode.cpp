@@ -75,10 +75,20 @@ bool DataBuffer::readyRead()
     return !m_data.empty() && m_nextPopSeq == m_data.begin()->first;
 }
 
+bool DataBuffer::empty()
+{
+    return m_data.empty();
+}
 
 std::uint32_t DataBuffer::nextExpectedPopSeq()
 {
     return m_nextPopSeq;
+}
+
+
+std::uint32_t DataBuffer::earliestAvailable()
+{
+    return m_data.begin()->first;
 }
 
 Payload DataBuffer::get(std::uint32_t seq)
@@ -97,6 +107,20 @@ std::map<std::uint32_t, Payload > & DataBuffer::getAll()
     return m_data;
 }
 
+TafnetNode::HostAndPort::HostAndPort() :
+ipv4addr(0),
+port(0)
+{ }
+
+TafnetNode::HostAndPort::HostAndPort(QHostAddress addr, std::uint16_t port) :
+ipv4addr(addr.toIPv4Address()),
+port(port)
+{ }
+
+bool TafnetNode::HostAndPort::operator< (const HostAndPort& other) const
+{
+    return (port < other.port) || (port == other.port) && (ipv4addr < other.ipv4addr);
+}
 
 TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort) :
     m_playerId(playerId),
@@ -107,9 +131,11 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     QObject::connect(&m_lobbySocket, &QUdpSocket::readyRead, this, &TafnetNode::onReadyRead);
 
     QObject::connect(&m_resendTimer, &QTimer::timeout, this, &TafnetNode::onResendTimer);
-    m_resendTimer.start(1000);
-}
+    m_resendTimer.start(500);
 
+    QObject::connect(&m_resendReqReenableTimer, &QTimer::timeout, this, &TafnetNode::onResendReqReenableTimer);
+    m_resendReqReenableTimer.start(500);
+}
 
 void TafnetNode::onResendTimer()
 {
@@ -117,7 +143,7 @@ void TafnetNode::onResendTimer()
     {
         std::uint32_t peerPlayerId = pairPlayer.first;
         DataBuffer &sendBuffer = pairPlayer.second;
-        int maxResendAtOnce = 10;
+        int maxResendAtOnce = 5;
         for (auto &pairPayload : sendBuffer.getAll())
         {
             std::uint32_t seq = pairPayload.first;
@@ -134,6 +160,13 @@ void TafnetNode::onResendTimer()
     }
 }
 
+void TafnetNode::onResendReqReenableTimer()
+{
+    for (auto &pair : m_resendRequestEnabled)
+    {
+        pair.second.value = true;
+    }
+}
 
 void TafnetNode::onReadyRead()
 {
@@ -165,7 +198,7 @@ void TafnetNode::onReadyRead()
 
         DataBuffer &tcpReceiveBuffer = m_receiveBuffer[peerPlayerId];
         DataBuffer &tcpSendBuffer = m_sendBuffer[peerPlayerId];
-
+        bool &resendRequestEnabled = m_resendRequestEnabled[peerPlayerId].value;
 
         if (tafBufferedHeader->action == Payload::ACTION_TCP_ACK)
         {
@@ -189,19 +222,28 @@ void TafnetNode::onReadyRead()
             tcpReceiveBuffer.insert(
                 tafBufferedHeader->seq, tafBufferedHeader->action,
                 datas.data() + sizeof(TafnetBufferedHeader), datas.size() - sizeof(TafnetBufferedHeader));
-            if (!tcpReceiveBuffer.readyRead())
-            {
-                std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
-                qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- req resend packet" << seq << "from peer" << peerPlayerId;
-                sendMessage(peerPlayerId, Payload::ACTION_TCP_RESEND, seq, "", 0);
-            }
+
             while (tcpReceiveBuffer.readyRead())
             {
+                resendRequestEnabled = true;    // is also reenabled on a timer
                 // clear receive buffer and acknowledge receipt
                 std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
                 Payload data = tcpReceiveBuffer.pop();
                 handleMessage(data.action, peerPlayerId, data.buf->data(), data.buf->size());
                 sendMessage(peerPlayerId, Payload::ACTION_TCP_ACK, seq, "", 0);
+            }
+
+            if (!tcpReceiveBuffer.empty() && resendRequestEnabled)
+            {
+                resendRequestEnabled = false;    // is also reenabled on a timer
+                int remainingMaxResend = 10;
+                for (std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
+                    seq < tcpReceiveBuffer.earliestAvailable() && remainingMaxResend > 0;
+                    ++seq, --remainingMaxResend)
+                {
+                    qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- req resend packet" << seq << "from peer" << peerPlayerId;
+                    sendMessage(peerPlayerId, Payload::ACTION_TCP_RESEND, seq, "", 0);
+                }
             }
         }
 

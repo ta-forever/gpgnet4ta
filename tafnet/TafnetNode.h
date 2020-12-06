@@ -49,7 +49,9 @@ namespace tafnet
       
         void ackData(std::uint32_t seq);
         bool readyRead();
+        bool empty();
         std::uint32_t nextExpectedPopSeq();
+        std::uint32_t earliestAvailable();
     };
 
     struct TafnetMessageHeader
@@ -70,20 +72,14 @@ namespace tafnet
             std::uint32_t ipv4addr;
             std::uint16_t port;
 
-            HostAndPort() :
-                ipv4addr(0),
-                port(0)
-            { }
+            HostAndPort();
+            HostAndPort(QHostAddress addr, std::uint16_t port);
+            bool operator< (const HostAndPort& other) const;
+        };
 
-            HostAndPort(QHostAddress addr, std::uint16_t port) :
-                ipv4addr(addr.toIPv4Address()),
-                port(port)
-            { }
-
-            bool operator< (const HostAndPort& other) const
-            {
-                return (port < other.port) || (port == other.port) && (ipv4addr < other.ipv4addr);
-            }
+        struct BoolDefaultToTrue
+        {
+            bool value = true;
         };
 
         QTimer m_resendTimer;
@@ -97,6 +93,11 @@ namespace tafnet
 
         std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer dplay player id
         std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer dplay player id
+
+        // we disable resend requests after issueing them to avoid spamming.
+        // they're reenabled on a timer
+        std::map<std::uint32_t, BoolDefaultToTrue> m_resendRequestEnabled;
+        QTimer m_resendReqReenableTimer;
 
     public:
         TafnetNode(std::uint32_t dplayPlayerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
@@ -112,6 +113,7 @@ namespace tafnet
         virtual void forwardGameData(std::uint32_t peerPlayerId, std::uint32_t action, const char* data, int len);
 
         virtual void onResendTimer();
+        virtual void onResendReqReenableTimer();
         virtual void resetTcpBuffers();
 
     private:
