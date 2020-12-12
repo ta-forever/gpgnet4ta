@@ -58,9 +58,10 @@ void GameSender::sendTcpData(char* data, int len)
     {
         openTcpSocket(500);
     }
-
-    //qInfo() << "[GameSender::sendTcpData]" << m_tcpSocket.peerAddress().toString() << ":" << m_tcpSocket.peerPort();
-    //TADemo::HexDump(data, len, std::cout);
+    if (!m_tcpSocket.isOpen())
+    {
+        qWarning() << "[GameSender::sendTcpData] unable to open socket!";
+    }
     m_tcpSocket.write(data, len);
     m_tcpSocket.flush();
 }

@@ -36,6 +36,8 @@ GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gam
 m_gameStartsAfterTickCount(gameStartsAfterTickCount),
 m_drawGameTicks(drawGameTicks),
 m_hostDplayId(0u),
+m_localDplayId(0u),
+m_gameLaunched(false),
 m_gameStarted(false),
 m_cheatsEnabled(false),
 m_suspiciousStatus(false),
@@ -45,6 +47,31 @@ m_gameEventHandler(gameEventHandler)
 void GameMonitor2::setHostPlayerName(const std::string &playerName)
 {
     m_hostPlayerName = playerName;
+}
+
+void GameMonitor2::setLocalPlayerName(const std::string& playerName)
+{
+    m_localPlayerName = playerName;
+}
+
+std::string GameMonitor2::getHostPlayerName()
+{
+    return m_hostPlayerName;
+}
+
+std::string GameMonitor2::getLocalPlayerName()
+{
+    return m_localPlayerName;
+}
+
+std::uint32_t GameMonitor2::getHostDplayId()
+{
+    return m_hostDplayId;
+}
+
+std::uint32_t GameMonitor2::getLocalPlayerDplayId()
+{
+    return m_localDplayId;
 }
 
 bool GameMonitor2::isGameStarted() const
@@ -112,11 +139,20 @@ void GameMonitor2::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std:
 
         if (m_hostPlayerName.empty())
         {
-            throw std::runtime_error("you need to determine and setHostName() before GameMonitor receives any packets!");
+            throw std::runtime_error("you need to determine and setHostPlayerName() before GameMonitor receives any packets!");
         }
         else if (name == m_hostPlayerName)
         {
             m_hostDplayId = dplayId;
+        }
+
+        if (m_localPlayerName.empty())
+        {
+            throw std::runtime_error("you need to determine and setLocalPlayerName() before GameMonitor receives any packets!");
+        }
+        else if (name == m_localPlayerName)
+        {
+            m_localDplayId = dplayId;
         }
 
         player.print(std::cout) << " / DPLAY SUPER ENUM" << std::endl;
@@ -207,6 +243,9 @@ void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
     {
         std::cerr << "[GameMonitor2::onChat] ERROR unexpected dplayid=" << sourceDplayId << std::endl;
     }
+
+    m_gameEventHandler->onChat(chat, sourceDplayId == m_localDplayId);
+
     if (!m_gameStarted)
     {
         // server logic requires alliances to be locked at launch, so we don't allow in-game ally
@@ -276,10 +315,17 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
     {
         std::cerr << "[GameMonitor2::onGameTick] ERROR unexpected sourceDplayId=" << sourceDplayId << std::endl;
     }
+
+    if (!m_gameLaunched && tick > 1)
+    {
+        m_gameLaunched = true;
+        m_gameEventHandler->onGameStarted(tick, false);
+    }
+
     if (!m_gameStarted && tick > m_gameStartsAfterTickCount)
     {
         m_gameStarted = true;
-        m_gameEventHandler->onGameStarted();
+        m_gameEventHandler->onGameStarted(tick, true);
     }
 
     if (std::int32_t(tick - m_players[sourceDplayId].tick) > 0)

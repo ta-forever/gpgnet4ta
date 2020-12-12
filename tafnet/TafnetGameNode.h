@@ -28,9 +28,9 @@ namespace tafnet
     {
         TafnetNode* m_tafnetNode;
         TADemo::TAPacketParser* m_packetParser;
-        std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer dplay playerId
-        std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer dplay playerId
-        std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // keyed by gameReceiver's receive socket port (both tcp and udp)
+        std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer tafnet playerId
+        std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer tafnet playerId
+        std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // tafnet id keyed by gameReceiver's receive socket port (both tcp and udp)
 
         // these only discovered once some data received from game
         std::uint16_t m_gameTcpPort;
@@ -46,6 +46,8 @@ namespace tafnet
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
         virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
         virtual void resetGameConnection();
+
+        virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, const std::string& nick, const std::string& chat);
 
     private:
         std::function<GameSender * ()> m_gameSenderFactory;

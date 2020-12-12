@@ -15,13 +15,13 @@ void GameEventsSignalQt::onPlayerStatus(const PlayerData &player, const std::set
     }
 
     emit playerStatus(
-        QString::fromStdString(player.name), quint8(player.side),
+        player.dplayid, QString::fromStdString(player.name), quint8(player.side),
         player.is_dead, player.armyNumber, player.teamNumber, mutualAllies);
 }
 
-void GameEventsSignalQt::onGameStarted()
+void GameEventsSignalQt::onGameStarted(std::uint32_t tick, bool teamsFrozen)
 {
-    emit gameStarted();
+    emit gameStarted(tick, teamsFrozen);
 }
 
 void GameEventsSignalQt::onGameEnded(const GameResult &result)
@@ -39,4 +39,9 @@ void GameEventsSignalQt::onGameEnded(const GameResult &result)
     }
 
     emit gameEnded(resultByArmy, armyNumbersByPlayerName);
+}
+
+void GameEventsSignalQt::onChat(const std::string& msg, bool isLocalPlayerSource)
+{
+    emit chat(QString::fromStdString(msg), isLocalPlayerSource);
 }

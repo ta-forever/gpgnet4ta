@@ -87,12 +87,12 @@ namespace tafnet
         const std::uint32_t m_playerId;
         std::uint32_t m_hostPlayerId;
         QUdpSocket m_lobbySocket;                               // send/receive to/from peer TafnetNodes
-        std::map<std::uint32_t, HostAndPort> m_peerAddresses;   // keyed by peer dplay player id
+        std::map<std::uint32_t, HostAndPort> m_peerAddresses;   // keyed by peer tafnet player id
         std::map<HostAndPort, std::uint32_t> m_peerPlayerIds;
         std::function<void(std::uint8_t, std::uint32_t, char*, int)> m_handleMessage; // optional hook for handleMessage
 
-        std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer dplay player id
-        std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer dplay player id
+        std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer tafnet player id
+        std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer tafnet player id
 
         // we disable resend requests after issueing them to avoid spamming.
         // they're reenabled on a timer
@@ -100,7 +100,7 @@ namespace tafnet
         QTimer m_resendReqReenableTimer;
 
     public:
-        TafnetNode(std::uint32_t dplayPlayerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
+        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
 
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;

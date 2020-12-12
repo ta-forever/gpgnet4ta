@@ -29,15 +29,20 @@ public:
         std::cout << std::endl;
     }
 
-    virtual void onGameStarted()
+    virtual void onGameStarted(std::uint32_t tick, bool teamsFrozen)
     {
-        std::cout << "[GameEventPrinter::onGameStarted]" << std::endl;
+        std::cout << "[GameEventPrinter::onGameStarted] tick=" << tick << ", teamFrozen=" << teamsFrozen << std::endl;
     }
 
     virtual void onGameEnded(const GameResult &gameResult)
     {
         std::cout << "[GameEventPrinter::onGameEnded]\n";
         gameResult.print(std::cout);
+    }
+
+    virtual void onChat(const std::string& msg, bool isLocalPlayerSource)
+    {
+        std::cout << "[GameEventPrinter::onChat]" << msg << (isLocalPlayerSource ? "local player" : "remote player");
     }
 };
 
@@ -100,6 +105,7 @@ int main(int argc, char* argv[])
 
     // these connections would normally be made in response to messages from GPGNet
     gameMonitor.setHostPlayerName("Axle1975");  // Game monitor needs to be told who is host since it can't(?) be inferred from packet data
+    gameMonitor.setLocalPlayerName("Axle1975");  // Game monitor needs to be told who local player is since it can't(?) be inferred from packet data
     node1.connectToPeer(QHostAddress("127.0.0.1"), 6112, 2);
     node1.connectToPeer(QHostAddress("127.0.0.1"), 6113, 3);
     node2.joinGame(QHostAddress("127.0.0.1"), 6111, 1);

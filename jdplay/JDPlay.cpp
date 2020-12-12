@@ -628,6 +628,10 @@ std::string JDPlay::getAdvertisedSessionName()
     return enumCallbackSessionName;
 }
 
+void JDPlay::dpSend(DPID sourceDplayId, DPID destDplayId, DWORD flags, LPVOID data, DWORD size)
+{
+    lpDP->Send(sourceDplayId, destDplayId, flags, data, size);
+}
 
 JDPlay* JDPlay::getInstance(){
 	return instance;

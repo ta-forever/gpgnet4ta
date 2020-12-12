@@ -57,16 +57,28 @@ class GameEventHandler
 public:
     virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits) = 0;
     virtual void onPlayerStatus(const PlayerData &, const std::set<std::string> & mutualAllies) = 0;
-    virtual void onGameStarted() = 0;
+
+    // will be called twice. first time with tick < gameStartsAfterTickCount and teamsFrozen=false; 
+    // and second time with tick > gameStartsAfterTickCount and teamsFrozen=true.
+    // First call indicates game was launched but GpgNet should not yet be informed as teams are still open
+    // and unscrupulous players may still try to dgun ghost commander in top-left
+    // Second call indicates teams are frozen and GpgNet should be informed of game start
+    virtual void onGameStarted(std::uint32_t tick, bool teamsFrozen) = 0;
+
     virtual void onGameEnded(const GameResult &) = 0;
+
+    virtual void onChat(const std::string& msg, bool isLocalPlayerSource) = 0;
 };
 
 class GameMonitor2 : public TADemo::TaPacketHandler
 {
     std::string m_hostPlayerName;
+    std::string m_localPlayerName;
     const std::uint32_t m_gameStartsAfterTickCount;
     const std::uint32_t m_drawGameTicks;
     std::uint32_t m_hostDplayId;
+    std::uint32_t m_localDplayId;
+    bool m_gameLaunched;                                // flag to indicate game was launched but still as yet insufficient activity to flag m_gameStarted
     bool m_gameStarted;                                 // flag to indicate sufficient activity to consider an actual game occurred
     bool m_cheatsEnabled;
     bool m_suspiciousStatus;                            // some irregularity was encountered, you may want to invalidate this game for tourney / ranking purposes
@@ -83,6 +95,11 @@ public:
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
     virtual void setHostPlayerName(const std::string &playerName);
+    virtual void setLocalPlayerName(const std::string& playerName);
+    virtual std::string getHostPlayerName();
+    virtual std::string getLocalPlayerName();
+    virtual std::uint32_t getHostDplayId();
+    virtual std::uint32_t getLocalPlayerDplayId();
 
     virtual std::string getMapName() const;
     virtual bool isGameStarted() const;

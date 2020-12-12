@@ -30,14 +30,21 @@ class TaLobby : public QObject
     QSharedPointer<GameMonitor2> m_gameMonitor;             // infers major game events from packets provided by m_packetParser
     QSharedPointer<GameEventsSignalQt> m_gameEvents;        // translates inferred game events into Qt signals for external consumption
 
+    QMap<QString, quint32> m_tafnetIdsByPlayerName;
+
 public:
     TaLobby(QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
 
-    void subscribeGameEvents(GameEventHandlerQt &subscriber);
+    void connectGameEvents(GameEventHandlerQt &subscriber);
+    quint32 getLocalPlayerDplayId();
+    quint32 getPlayerTafNetId(QString playerName);
 
 public slots:
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
     void onJoinGame(QString host, QString playerName, int playerId);
     void onConnectToPeer(QString host, QString playerName, int playerId);
     void onDisconnectFromPeer(int playerId);
+
+public slots:
+    void onIrcChat(QString nick, QString chat);
 };

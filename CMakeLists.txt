@@ -13,6 +13,12 @@ set(MINIUPNP_INCLUDE_DIR "${MINIUPNP_DIR}/include")
 set(MINIUPNP_LIB_DIR "${MINIUPNP_DIR}/lib")
 set(MINIUPNP_LIBS_STATIC "debug;libminiupnpcd;optimized;libminiupnpc")
 
+set(LIBCOMMUNI_DIR "" CACHE PATH "Path to libcommuni binaries https://github.com/communi/libcommuni")
+set(LIBCOMMUNI_INCLUDE_DIR "${LIBCOMMUNI_DIR}/include/IrcCore;${LIBCOMMUNI_DIR}/include/IrcModel;${LIBCOMMUNI_DIR}/include/IrcUtil")
+set(LIBCOMMUNI_LIB_DIR "${LIBCOMMUNI_DIR}/lib")
+set(LIBCOMMUNI_LIBS_STATIC "debug;communid;optimized;communi")
+
+
 add_subdirectory(jdplay)
 add_subdirectory(tademo)
 add_subdirectory(gpgnet)
@@ -60,17 +66,23 @@ add_executable(gpgnet4ta
     GameEventHandlerQt.cpp
     gpgnet4ta.cpp
     GpgNetGameLauncher.h
-    GpgNetGameLauncher.cpp)
+    GpgNetGameLauncher.cpp
+	IrcForward.h
+	IrcForward.cpp
+    )
 
 target_include_directories(gpgnet4ta 
     PUBLIC
     ${MINIUPNP_INCLUDE_DIR}
-)
+    ${LIBCOMMUNI_INCLUDE_DIR}
+    )
 
 target_link_directories(gpgnet4ta
     PUBLIC
     ${DIRECT_PLAY_LIB_DIR} 
-    ${MINIUPNP_LIB_DIR})
+    ${MINIUPNP_LIB_DIR}
+    ${LIBCOMMUNI_LIB_DIR}
+    )
 
 target_link_libraries(gpgnet4ta
     jdplay
@@ -82,7 +94,9 @@ target_link_libraries(gpgnet4ta
     ws2_32
     iphlpapi
     ${DIRECT_PLAY_LIBS}
-    ${MINIUPNP_LIBS_STATIC})
+    ${MINIUPNP_LIBS_STATIC}
+    ${LIBCOMMUNI_LIBS_STATIC}
+    )
 
 #add_custom_command(
 #    TARGET gpgnet4ta POST_BUILD

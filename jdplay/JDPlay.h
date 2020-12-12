@@ -81,6 +81,7 @@ public:
     DWORD_PTR getUserData2() { return dpSessionDesc.dwUser2; }
     DWORD_PTR getUserData3() { return dpSessionDesc.dwUser3; }
     DWORD_PTR getUserData4() { return dpSessionDesc.dwUser4; }
+    void dpSend(DPID sourceDplayId, DPID destDplayId, DWORD flags, LPVOID data, DWORD size);
 
     void updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD); //has to be public for the callback function
     static JDPlay* getInstance(); //makes the object available to the callback function

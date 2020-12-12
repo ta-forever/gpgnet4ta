@@ -24,17 +24,37 @@ namespace TADemo
         std::uint16_t check = 0u;
         for (std::size_t i = 3u; i <= result.size() - 4; ++i)
         {
-            check += result[i];
             result[i] ^= std::uint8_t(i);
+            check += result[i];
         }
 
+        return result;
+    }
+
+    bytestring TPacket::encrypt(const bytestring& data)
+    {
+        bytestring result = data;
+
+        if (data.size() < 4)
+        {
+            result += std::uint8_t(0x06);
+            return result;
+        }
+
+        std::uint16_t check = 0u;
+        for (std::size_t i = 3u; i <= result.size() - 4; ++i)
+        {
+            result[i] ^= std::uint8_t(i);
+            check += result[i];
+        }
+        result[1] = check & 0x00ff;
+        result[2] = check >> 8;
         return result;
     }
 
 
     bytestring TPacket::compress(const bytestring &data)
     {
-        throw std::runtime_error("TPacket::compress not tested");
         int index, cbf, count, a, matchl, cmatchl;
         std::uint16_t kommando, match;
         std::uint16_t *p;
@@ -50,6 +70,7 @@ namespace TADemo
                 result += std::uint8_t(0);
                 cbf = result.size();
             }
+            ++count;
             if (index < 6 || index>2000)
             {
                 result += data[index - 1];
@@ -58,10 +79,10 @@ namespace TADemo
             else
             {
                 matchl = 2;
-                for (a = 4; a < index - 1; ++index)
+                for (a = 4; a < index - 1; ++a)
                 {
                     cmatchl = 0;
-                    while (data[a + cmatchl - 1] == data[index + cmatchl - 1] && index + cmatchl < data.size() && a + cmatchl < index)
+                    while (a + cmatchl < index && index + cmatchl < data.size() && data[a + cmatchl - 1] == data[index + cmatchl - 1])
                     {
                         ++cmatchl;
                     }
@@ -76,7 +97,7 @@ namespace TADemo
                     }
                 }
                 cmatchl = 0;
-                while (data[index + cmatchl - 1] == data[index - 2] && index + cmatchl < data.size())
+                while (index + cmatchl < data.size() && data[index + cmatchl - 1] == data[index - 2])
                 {
                     ++cmatchl;
                 }
@@ -110,7 +131,7 @@ namespace TADemo
         {
             result[cbf - 1] |= (0xff << (count + 1));
         }
-        result += std::uint8_t(0);
+        result += bytestring((const std::uint8_t*)"\0\0", 2);
 
         if (result.size() + 3 < data.size())
         {
@@ -392,4 +413,20 @@ namespace TADemo
         return ut;
     }
 
+    bytestring TPacket::trivialSmartpak(const bytestring& subpacket, std::uint32_t tcpseq)
+    {
+        bytestring result((std::uint8_t*)"\x03\x00\x00", 3);
+        result += bytestring((std::uint8_t*) & tcpseq, 4);
+        result += subpacket;
+        return result;
+    }
+
+    bytestring TPacket::createChatSubpacket(const std::string& message)
+    {
+        char chatMessage[65];
+        chatMessage[0] = std::uint8_t(SubPacketCode::CHAT);
+        std::strncpy(&chatMessage[1], message.c_str(), 64);
+        chatMessage[64] = 0;
+        return bytestring((std::uint8_t*)chatMessage, sizeof(chatMessage));
+    }
 }

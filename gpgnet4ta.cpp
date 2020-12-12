@@ -11,6 +11,7 @@
 #include <miniupnpc/upnpcommands.h>
 
 #include <fstream>
+#include <sstream>
 
 #include "gpgnet/GpgNetClient.h"
 #include "jdplay/JDPlay.h"
@@ -18,6 +19,7 @@
 #include "tafnet/TafnetGameNode.h"
 
 #include "GpgNetGameLauncher.h"
+#include "IrcForward.h"
 #include "TaLobby.h"
 
 using namespace gpgnet;
@@ -170,7 +172,7 @@ public:
         m_gpgNetClient.gameOption("MapName", mapName);
     }
 
-    virtual void onPlayerStatus(QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
         QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
 
@@ -182,9 +184,12 @@ public:
         m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
     }
 
-    virtual void onGameStarted()
+    virtual void onGameStarted(quint32 tick, bool teamsFrozen)
     {
-        m_gpgNetClient.gameState("Launching");
+        if (teamsFrozen)
+        {
+            m_gpgNetClient.gameState("Launching");
+        }
     }
 
     virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
@@ -194,6 +199,72 @@ public:
             m_gpgNetClient.gameResult(it.key(), it.value());
         }
         m_gpgNetClient.gameState("Ended");
+    }
+
+    virtual void onChat(QString msg, bool isLocalPlayerSource)
+    { }
+};
+
+
+class ForwardGameChatToIrc : public GameEventHandlerQt
+{
+    IrcForward& m_irc;
+    QString m_channel;
+
+public:
+    ForwardGameChatToIrc(IrcForward& irc, QString channel) :
+        m_irc(irc),
+        m_channel(channel)
+    { }
+
+    virtual void onGameSettings(QString mapName, quint16 maxUnits)
+    {
+        m_irc.sendCommand(IrcCommand::createMessage(m_channel, "Map changed to: " + mapName));
+    }
+
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    { }
+
+    virtual void onGameStarted(quint32 tick, bool teamsFrozen)
+    {
+        std::ostringstream ss;
+        if (!teamsFrozen)
+        {
+            ss << "GAME STARTED WOOOO!  Still time to set your teams";
+        }
+        else
+        {
+            ss << "TEAMS FROZEN, GAME ON!  good luck commanders!";
+        }
+        m_irc.sendCommand(IrcCommand::createMessage(m_channel, ss.str().c_str()));
+    }
+
+    virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
+    {
+        m_irc.sendCommand(IrcCommand::createMessage(m_channel, "Game over man, game over!"));
+        for (auto it = armyNumbersByPlayerName.begin(); it != armyNumbersByPlayerName.end(); ++it)
+        {
+            std::ostringstream ss;
+            qint32 resultInt = resultByArmy[it.value()];
+            std::string resultString;
+            if (resultInt > 0)
+                resultString = "VICTORY";
+            else if (resultInt == 0)
+                resultString = "DRAW";
+            else
+                resultString = "DEFEAT";
+
+            ss << it.key().toStdString() << ": " << resultString;;
+            m_irc.sendCommand(IrcCommand::createMessage(m_channel, ss.str().c_str()));
+        }
+    }
+
+    virtual void onChat(QString msg, bool isLocalPlayerSource)
+    {
+        if (isLocalPlayerSource)
+        {
+            m_irc.sendCommand(IrcCommand::createMessage(m_channel, msg.toStdString().c_str()));
+        }
     }
 };
 
@@ -272,6 +343,37 @@ public:
 
 std::shared_ptr<Logger> Logger::m_instance;
 
+
+void SplitUserHostPortChannel(QString url, QString &user, QString &host, quint16 &port, QString &resource)
+{
+    // user@host:port/resource
+    QStringList temp = url.split("@");
+    if (temp.size()>1)
+    {
+        user = temp[0];
+        url = temp[1];
+    }
+
+    temp = url.split("/");
+    if (temp.size() > 1)
+    {
+        url = temp[0];
+        resource = temp[1];
+    }
+
+    temp = url.split(":");
+    if (temp.size() > 1)
+    {
+        host = temp[0];
+        port = temp[1].toInt();
+    }
+    else
+    {
+        host = url;
+    }
+}
+
+
 void RunAs(QString cmd, QStringList args)
 {
     cmd = '"' + cmd + '"';
@@ -328,6 +430,7 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
     parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
+    parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join", "irc"));
     parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface", "lobbybindaddress", "127.0.0.1"));
     parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
     parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
@@ -343,7 +446,7 @@ int main(int argc, char* argv[])
         for (const char *arg : {
             "gpgnet", "mean", "deviation", "country", "numgames", "players",
             "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
-            "logfile", "loglevel" })
+            "logfile", "loglevel", "irc" })
         {
             if (parser.isSet(arg))
             {
@@ -505,6 +608,25 @@ int main(int argc, char* argv[])
         app.exec();
     }
 
+    std::shared_ptr<IrcForward> ircForward;
+    QString ircChannel("#BILLYIDOL[ingame]");
+    if (parser.isSet("irc"))
+    {
+        QString user("BILLYIDOL[ingame]");
+        QString host("irc.taforever.com");
+        quint16 port(6667);
+
+        SplitUserHostPortChannel(parser.value("irc"), user, host, port, ircChannel);
+        ircForward.reset(new IrcForward);
+        ircForward->setHost(host);
+        ircForward->setUserName(user);
+        ircForward->setNickName(user);
+        ircForward->setRealName(user);
+        ircForward->setPort(port);
+        ircForward->join(ircChannel);
+        ircForward->open();
+    }
+
     if (parser.isSet("gpgnet"))
     {
         // not from the command line, from the dplay registry since thats what we're actually going to launch
@@ -547,8 +669,21 @@ int main(int argc, char* argv[])
         // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)
         // This information is passed on to the GpgNetClient for consumption by the TAF server
-        ForwardGameEventsToGpgNet gameEvents(gpgNetClient);
-        lobby.subscribeGameEvents(gameEvents);
+        ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient);
+        lobby.connectGameEvents(gameEventsToGpgNet);
+
+        std::shared_ptr<ForwardGameChatToIrc> gameChatToIrc;
+        if (ircForward)
+        {
+            qInfo() << "[main] connecting lobby to IRC";
+            gameChatToIrc.reset(new ForwardGameChatToIrc(*ircForward, ircChannel));
+            lobby.connectGameEvents(*gameChatToIrc);
+
+            QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby](IrcPrivateMessage* msg)
+            {
+                lobby.onIrcChat(msg->nick(), msg->content());
+            });
+        }
         app.exec();
     }
     return 0;

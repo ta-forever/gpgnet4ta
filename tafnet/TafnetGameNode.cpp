@@ -1,4 +1,5 @@
 #include "TafnetGameNode.h"
+#include "TafnetGameNode.h"
 #include "GameAddressTranslater.h"
 #include "GetUpnpPortMap.h"
 #include "tademo/HexDump.h"
@@ -173,9 +174,8 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
         break;
 
     case Payload::ACTION_ENUM:
-        GameAddressTranslater (gameReceiver->getBindAddress().toIPv4Address(), replyPorts)(data, len);
+        GameAddressTranslater(gameReceiver->getBindAddress().toIPv4Address(), replyPorts)(data, len);
         gameSender->enumSessions(data, len);
-        break;
 
     case Payload::ACTION_TCP_OPEN:
         gameSender->openTcpSocket(500);
@@ -300,4 +300,42 @@ void TafnetGameNode::resetGameConnection()
     {
         pair.second->resetGameConnection();
     }
+}
+
+void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, const std::string& nick, const std::string& chat)
+{
+    //if (m_gameSenders.count(tafnetid) > 0)
+    //{
+    //    GameSender* sender = m_gameSenders[tafnetid].get();
+
+    //    std::string message = "<" + nick + "> " + chat;
+
+    //    TADemo::bytestring bs = TADemo::TPacket::createChatSubpacket(message);
+    //    fs << "chat:\n";
+    //    TADemo::HexDump(bs.data(), bs.size(), fs);
+
+    //    bs = TADemo::TPacket::trivialSmartpak(bs, -1);
+    //    fs << "paked chat\n";
+    //    TADemo::HexDump(bs.data(), bs.size(), fs);
+
+    //    bs = TADemo::TPacket::compress(bs);
+    //    fs << "compressed chat\n";
+    //    TADemo::HexDump(bs.data(), bs.size(), fs);
+
+    //    bs = TADemo::TPacket::encrypt(bs);
+    //    fs << "encrypted chat:\n";
+    //    TADemo::HexDump(bs.data(), bs.size(), fs);
+
+    //    //TADemo::bytestring bs = {
+    //    //    0x04, 0xe4, 0x0f, 0x07, 0xed, 0xfa, 0x26, 0x07, 0x0d, 0x35, 0x4b, 0x73, 0x60, 0x0d, 0x6b, 0x3e,
+    //    //    0x29, 0x26, 0x27, 0x2d, 0x34, 0x77, 0x1e, 0x76, 0x6c, 0x6d, 0x8a, 0x1b, 0x6e, 0x72, 0x71, 0x72,
+    //    //    0xe8, 0x01, 0x41, 0x4b, 0x04, 0x24, 0x06, 0x41, 0x58, 0x28, 0x8a, 0x2a, 0x16, 0x4c, 0xab, 0x2f,
+    //    //    0x30, 0xde, 0x30, 0xc7, 0x37, 0x00, 0x00, 0x6f
+    //    //};
+
+    //    qInfo() << "[TafnetGameNode::messageToLocalPlayer] sendTcpData encrypted chat";
+    //    fs << "[TafnetGameNode::messageToLocalPlayer] " << sourceDplayId << ','<< tafnetid << ','<< nick.c_str() << ','<< chat.c_str() << '\n';
+    //    TADemo::HexDump(bs.data(), bs.size(), fs);
+    //    sender->sendTcpData((char*)bs.data(), bs.size());
+    //}
 }
