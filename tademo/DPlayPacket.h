@@ -11,6 +11,7 @@ namespace TADemo
 
     enum class DPlayCommandCode
     {
+        NONE = 0x0000,
         ENUMSESSIONSREPLY = 0x0001,
         ENUMSESSIONS = 0x0002,
         ENUMPLAYERSREPLY = 0x0003,
@@ -64,6 +65,8 @@ namespace TADemo
 
     struct DPAddress
     {
+        DPAddress(std::uint32_t addr, std::uint16_t prt);
+
         std::string debugString() const;
 
         std::uint16_t port() const;
@@ -81,6 +84,10 @@ namespace TADemo
 
     struct DPHeader
     {
+        DPHeader(
+            std::uint32_t replyAddress, std::uint16_t replyPort, const void* actionstring,
+            DPlayCommandCode command, std::uint16_t dialect, std::size_t payloadSize);
+
         unsigned size() const;
         unsigned token() const;
         bool looksOk() const;
@@ -90,6 +97,16 @@ namespace TADemo
         char actionstring[4];
         std::uint16_t command;
         std::uint16_t dialect;
+    };
+
+    struct DPEnumReq
+    {
+        DPEnumReq(const std::uint8_t guid[16]);
+
+        std::uint8_t guid[16];
+        std::uint32_t passwordOffset;
+        std::uint32_t flags;
+        std::uint16_t password;
     };
 
     struct DPPackedPlayer

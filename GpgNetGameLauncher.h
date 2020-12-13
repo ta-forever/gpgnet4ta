@@ -36,6 +36,7 @@ public:
 
 signals:
     void gameTerminated();
+    void gameFailedToLaunch();
 
 private:
     static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions);

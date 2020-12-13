@@ -177,6 +177,15 @@ void GameMonitor2::onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint
             m_hostDplayId = dplayId;
         }
 
+        if (m_localPlayerName.empty())
+        {
+            throw std::runtime_error("you need to determine and setLocalPlayerName() before GameMonitor receives any packets!");
+        }
+        else if (name == m_localPlayerName)
+        {
+            m_localDplayId = dplayId;
+        }
+
         player.print(std::cout) << " / DPLAY CREATE" << std::endl;
         updatePlayerArmies();
     }
@@ -316,7 +325,7 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
         std::cerr << "[GameMonitor2::onGameTick] ERROR unexpected sourceDplayId=" << sourceDplayId << std::endl;
     }
 
-    if (!m_gameLaunched && tick > 1)
+    if (!m_gameLaunched && tick > m_gameStartsAfterTickCount/20)
     {
         m_gameLaunched = true;
         m_gameEventHandler->onGameStarted(tick, false);

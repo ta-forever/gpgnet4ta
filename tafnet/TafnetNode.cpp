@@ -339,6 +339,11 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
 
 void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int len)
 {
+    if (m_peerAddresses.count(destPlayerId) == 0)
+    {
+        return;
+    }
+
     if (action >= Payload::ACTION_TCP_DATA)
     {
         DataBuffer &sendBuffer = m_sendBuffer[destPlayerId];

@@ -43,8 +43,8 @@ void GpgNetGameLauncher::onHostGame(QString mapName)
     bool ret = m_jdplay.initialize(m_guid.toStdString().c_str(), "127.0.0.1", true, 10);
     if (!ret)
     {
-        qInfo() << "[GpgNetGameLauncher::handleHostGame] unable to initialise dplay";
-        emit gameTerminated();
+        qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to initialise dplay";
+        emit gameFailedToLaunch();
         return;
     }
     qInfo() << "[GpgNetGameLauncher::handleHostGame] jdplay.launch(host)";
@@ -52,7 +52,7 @@ void GpgNetGameLauncher::onHostGame(QString mapName)
     if (!ret)
     {
         qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to launch game";
-        emit gameTerminated();
+        emit gameFailedToLaunch();
         return;
     }
 
@@ -74,7 +74,7 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int player
     if (!ret)
     {
         qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to initialise dplay";
-        emit gameTerminated();
+        emit gameFailedToLaunch();
         return;
     }
 
@@ -84,7 +84,7 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int player
     {
         qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to launch game";
         m_jdplay.releaseDirectPlay();
-        emit gameTerminated();
+        emit gameFailedToLaunch();
         return;
     }
     m_pollStillActiveTimer.start(3000);

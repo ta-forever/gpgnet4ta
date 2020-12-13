@@ -206,20 +206,22 @@ public:
 };
 
 
-class ForwardGameChatToIrc : public GameEventHandlerQt
+class HandleGameStatus : public GameEventHandlerQt
 {
     IrcForward& m_irc;
     QString m_channel;
+    TaLobby& m_taLobby;
 
 public:
-    ForwardGameChatToIrc(IrcForward& irc, QString channel) :
+    HandleGameStatus(IrcForward& irc, QString channel, TaLobby& taLobby) :
         m_irc(irc),
-        m_channel(channel)
+        m_channel(channel),
+        m_taLobby(taLobby)
     { }
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits)
     {
-        m_irc.sendCommand(IrcCommand::createMessage(m_channel, "Map changed to: " + mapName));
+        doSend("Map changed to: " + mapName.toStdString(), true, false);
     }
 
     virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
@@ -230,18 +232,18 @@ public:
         std::ostringstream ss;
         if (!teamsFrozen)
         {
-            ss << "GAME STARTED WOOOO!  Still time to set your teams";
+            ss << "GAME STARTED WOOOO! Still time to set your teams";
         }
         else
         {
-            ss << "TEAMS FROZEN, GAME ON!  good luck commanders!";
+            ss << "TEAMS FROZEN, GAME ON! Good luck commanders!";
         }
-        m_irc.sendCommand(IrcCommand::createMessage(m_channel, ss.str().c_str()));
+        doSend(ss.str(), true, true);
     }
 
     virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
     {
-        m_irc.sendCommand(IrcCommand::createMessage(m_channel, "Game over man, game over!"));
+        doSend("Game over man, game over!", true, true);
         for (auto it = armyNumbersByPlayerName.begin(); it != armyNumbersByPlayerName.end(); ++it)
         {
             std::ostringstream ss;
@@ -255,7 +257,7 @@ public:
                 resultString = "DEFEAT";
 
             ss << it.key().toStdString() << ": " << resultString;;
-            m_irc.sendCommand(IrcCommand::createMessage(m_channel, ss.str().c_str()));
+            doSend(ss.str(), true, true);
         }
     }
 
@@ -263,7 +265,26 @@ public:
     {
         if (isLocalPlayerSource)
         {
-            m_irc.sendCommand(IrcCommand::createMessage(m_channel, msg.toStdString().c_str()));
+            int n = msg.lastIndexOf("> ");
+            if (msg[0] == '<' && n>=0 && n+2 < msg.size())
+            {
+                // remove the <name> tag so player doesn't get pinged in IRC
+                msg = msg.mid(n + 2);
+            }
+            doSend(msg.toStdString(), true, false);
+        }
+    }
+
+private:
+    void doSend(const std::string & chat, bool toIrc, bool toGame)
+    {
+        if (toIrc)
+        {
+            m_irc.sendCommand(IrcCommand::createMessage(m_channel, chat.c_str()));
+        }
+        if (toGame)
+        {
+            m_taLobby.echoToGame("", QString::fromStdString(chat));
         }
     }
 };
@@ -561,7 +582,7 @@ int main(int argc, char* argv[])
 
     if (parser.isSet("createlobby"))
     {
-        TaLobby lobby(parser.value("lobbybindaddress"), "127.0.0.1", "127.0.0.1");
+        TaLobby lobby(QUuid(dplayGuid), parser.value("lobbybindaddress"), "127.0.0.1", "127.0.0.1");
         QString playerName = parser.value("lobbybindaddress").split(':')[0];
         std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
         lobby.onCreateLobby(0, 6112, parser.value("lobbybindaddress"), playerId, 0);
@@ -656,7 +677,7 @@ int main(int argc, char* argv[])
         // That UDP port is expected to be one brokered by the FAF ICE adapter independently of gpgnet4ta
         // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
         // (viz all the Qt signal connections from GpgNetClient to TaLobby)
-        TaLobby lobby("127.0.0.1", "127.0.0.1", "127.0.0.1");
+        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1");
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
@@ -665,6 +686,21 @@ int main(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, &launcher, &GpgNetGameLauncher::onHostGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &launcher, &GpgNetGameLauncher::onJoinGame);
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
+        QObject::connect(&launcher, &GpgNetGameLauncher::gameFailedToLaunch, &app, [&app, &parser]() {
+            QString err = QString("Unable to launch ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\"\n";
+            err +=
+                "- Please check path is correct\n"
+                "  Correct the path in TAF Settings menu if not\n"
+                "- Please check you can launch game outside of TAF\n"
+                "- Try enable 'Run TA as Admin' in TAF Settings menu";
+            MessageBox(
+                NULL,
+                err.toStdString().c_str(),
+                "Unable to launch game",
+                MB_OK | MB_ICONERROR
+            );
+            app.quit();
+        });
 
         // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)
@@ -672,16 +708,17 @@ int main(int argc, char* argv[])
         ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient);
         lobby.connectGameEvents(gameEventsToGpgNet);
 
-        std::shared_ptr<ForwardGameChatToIrc> gameChatToIrc;
+        std::shared_ptr<HandleGameStatus> handleGameStatus;
         if (ircForward)
         {
             qInfo() << "[main] connecting lobby to IRC";
-            gameChatToIrc.reset(new ForwardGameChatToIrc(*ircForward, ircChannel));
-            lobby.connectGameEvents(*gameChatToIrc);
+            handleGameStatus.reset(new HandleGameStatus(*ircForward, ircChannel, lobby));
+            lobby.connectGameEvents(*handleGameStatus);
 
+            qInfo() << "[main] connecting IRC to lobby";
             QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby](IrcPrivateMessage* msg)
             {
-                lobby.onIrcChat(msg->nick(), msg->content());
+                lobby.echoToGame(msg->nick(), msg->content());
             });
         }
         app.exec();

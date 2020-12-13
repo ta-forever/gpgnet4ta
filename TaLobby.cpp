@@ -22,11 +22,12 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 }
 
 TaLobby::TaLobby(
-    QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress):
+    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
-    m_gameAddress(gameAddress)
+    m_gameAddress(gameAddress),
+    m_gameGuid(gameGuid)
 {
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
@@ -117,24 +118,33 @@ void TaLobby::onDisconnectFromPeer(int playerId)
     m_game->unregisterRemotePlayer(playerId);
 }
 
-void TaLobby::onIrcChat(QString nick, QString chat)
+void TaLobby::echoToGame(QString name, QString chat)
 {
+    const bool fromIngameBot = name.endsWith("[ingame]");
+    if (fromIngameBot)
+    {
+        // game has already seen this message
+        return;
+    }
+
     std::uint32_t dplayId = 0;
     std::uint32_t tafnetId = 0;
-    if (m_tafnetIdsByPlayerName.count(nick) > 0)
+    if (m_tafnetIdsByPlayerName.count(name) > 0)
     {
-        tafnetId = m_tafnetIdsByPlayerName[nick];
+        tafnetId = m_tafnetIdsByPlayerName[name];
     }
     if (m_gameMonitor)
     {
         for (const std::string& playerName : m_gameMonitor->getPlayerNames(true, true))
         {
-            if (nick == playerName.c_str())
+            if (playerName != m_gameMonitor->getLocalPlayerName())
             {
+                // choose a dplayId for any remote player to ensure IRC chat gets relayed into TA even if its the local player typing
                 dplayId = m_gameMonitor->getPlayerData(playerName).dplayid;
+                break;
             }
         }
     }
 
-    m_game->messageToLocalPlayer(dplayId, tafnetId, nick.toStdString(), chat.toStdString());
+    m_game->messageToLocalPlayer(dplayId, tafnetId, name.toStdString(), chat.toStdString());
 }

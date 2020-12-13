@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtNetwork/qhostaddress.h>
+#include <QtCore/quuid.h>
 #include "GameEventHandlerQt.h"
 #include "GameMonitor2.h"
 
@@ -23,6 +24,7 @@ class TaLobby : public QObject
     quint16 m_lobbyPortOverride;
     const QHostAddress m_gameReceiveBindAddress;
     const QHostAddress m_gameAddress;
+    const QUuid m_gameGuid;
 
     QSharedPointer<tafnet::TafnetNode> m_proxy;             // communicates with other nodes via UDP port brokered by FAF ICE adapter
     QSharedPointer<tafnet::TafnetGameNode> m_game;          // bridge between m_proxy and TA instance
@@ -33,7 +35,7 @@ class TaLobby : public QObject
     QMap<QString, quint32> m_tafnetIdsByPlayerName;
 
 public:
-    TaLobby(QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
+    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
     quint32 getLocalPlayerDplayId();
@@ -46,5 +48,5 @@ public slots:
     void onDisconnectFromPeer(int playerId);
 
 public slots:
-    void onIrcChat(QString nick, QString chat);
+    void echoToGame(QString name, QString chat);
 };

@@ -29,6 +29,14 @@ static std::uint32_t NetworkByteOrder(std::uint32_t x)
     return (x << 24) | ((x & 0xff00) << 8) | ((x & 0xff0000) >> 8) | ((x & 0xff000000) >> 24);
 }
 
+DPAddress::DPAddress(std::uint32_t addr, std::uint16_t prt):
+    family(0x0002)
+{
+    address(addr);
+    port(prt);
+    std::memset(pad, 0, sizeof(pad));
+}
+
 std::string DPAddress::debugString() const
 {
     std::ostringstream ss;
@@ -57,6 +65,17 @@ void DPAddress::address(std::uint32_t addr)
     _ipv4 = NetworkByteOrder(addr);
 }
 
+DPHeader::DPHeader(
+    std::uint32_t replyAddress, std::uint16_t replyPort, const void* _actionstring,
+    DPlayCommandCode command, std::uint16_t dialect, std::size_t payloadSize):
+    size_and_token(0xfab00000 | ((payloadSize+sizeof(DPHeader)) & 0x000fffff)),
+    address(replyAddress, replyPort),
+    command(std::uint16_t(command)),
+    dialect(dialect)
+{
+    std::memcpy(actionstring, _actionstring, sizeof(actionstring));
+}
+
 unsigned DPHeader::size() const
 {
     return size_and_token & 0x000fffff;
@@ -76,4 +95,12 @@ bool DPHeader::looksOk() const
         ;
     //dialect == 0x0e && // dplay 9
     //std::memcmp(address.pad, "\0\0\0\0\0\0\0\0", 8) == 0;
+}
+
+DPEnumReq::DPEnumReq(const std::uint8_t _guid[16])
+{
+    std::memcpy(guid, _guid, sizeof(guid));
+    passwordOffset = 32;
+    flags = 0x00000010;
+    password = 0;
 }
