@@ -24,11 +24,11 @@ namespace TADemo
 
     enum class SubPacketCode
     {
-        ZERO = 0x00,                   // decompression artifact??
+        ZERO = 0x00,                    // decompression artifact??
         PING = 0x02,
         UNK_03 = 0x03,
         CHAT = 0x05,
-        UNK_06 = 0x06,                 // 1 byte encryption padding
+        PAD_ENCRYPT = 0x06,             // 1 byte encryption padding
         UNK_07 = 0x07,
         UNK_08 = 0x08,
         UNK_09 = 0x09,                  //Seems to be the package that gives orders for something newly built to be shown immediately. However, shows for the wrong person ..
@@ -75,12 +75,14 @@ namespace TADemo
     class TPacket
     {
     public:
+        static void test();
+
         static unsigned getExpectedSubPacketSize(const bytestring &bytes);
         static bytestring decrypt(const bytestring& data);
         static bytestring encrypt(const bytestring &data);
         static bytestring compress(const bytestring &data);
         static bytestring decompress(const bytestring &data);
-        static bytestring split2(bytestring &s, bool smartpak);
+        static bytestring split2(bytestring &s, bool smartpak, bool &error);
 
         static std::vector<bytestring> unsmartpak(const bytestring &c, unsigned version);
         static bytestring trivialSmartpak(const bytestring& subpacket, std::uint32_t tcpseq);
@@ -90,7 +92,6 @@ namespace TADemo
         // @param start number of bits into the string from where the number starts.  eg 0 starts at LSB of char1.  8 starts at LSB of char2.
         // @param num number of bits to extract
         static unsigned bin2int(const bytestring &s, unsigned start, unsigned num);
-
     };
 
 
@@ -103,7 +104,9 @@ namespace TADemo
         virtual void onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint32_t dplayId, const std::string &name, DPAddress *tcp, DPAddress *udp) = 0;
         virtual void onDplayDeletePlayer(std::uint32_t dplayId) = 0;
 
-        virtual void onStatus(std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits, Side playerSide, bool cheats) = 0;
+        virtual void onStatus(
+            std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits, 
+            unsigned playerSlotNumber, Side playerSide, bool isAI, bool cheats) = 0;
         virtual void onChat(std::uint32_t sourceDplayId, const std::string &chat) = 0;
         virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId) = 0;
         virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId) = 0;

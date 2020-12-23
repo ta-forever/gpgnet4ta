@@ -15,8 +15,7 @@ add_library(tafnet
 	GameAddressTranslater.h
 	GameAddressTranslater.cpp
     GetUpnpPortMap.h
-    GetUpnpPortMap.cpp
-)
+    GetUpnpPortMap.cpp)
 
 target_link_directories(tafnet
     PUBLIC

@@ -9,9 +9,8 @@
 
 using namespace TADemo;
 
-TAPacketParser::TAPacketParser(TaPacketHandler *packetHandler, bool dropDuplicateTaMessages) :
-m_packetHandler(packetHandler),
-m_dropDuplicateTaMessages(dropDuplicateTaMessages)
+TAPacketParser::TAPacketParser(TaPacketHandler *packetHandler) :
+m_packetHandler(packetHandler)
 { }
 
 void TAPacketParser::parseGameData(const char *data, int len)
@@ -23,16 +22,6 @@ void TAPacketParser::parseGameData(const char *data, int len)
         if (!header->looksOk() && len > 8)
         {
             std::uint32_t id1 = *(std::uint32_t*)data;
-            if (m_dropDuplicateTaMessages)
-            {
-                std::string &last = m_lastTaPacket[id1];
-                if (!last.empty() && last.compare(4, std::string::npos, data+4, len-4) == 0)
-                {
-                    return;
-                }
-                last.assign(data, len);
-            }
-
             std::uint32_t id2 = *(std::uint32_t*)(data + 4);
             parseTaPacket(id1, id2, data+8, len-8);
             return;
@@ -203,6 +192,11 @@ void TAPacketParser::parseDplayDeletePlayer(const DPHeader *header, const char *
 
 void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *_payload, int _payloadSize)
 {
+    if (otherDplayId == 0u && m_taDuplicateDetection.isLikelyDuplicate(sourceDplayId, otherDplayId, _payload, _payloadSize))
+    {
+        return;
+    }
+
     bytestring payloadDecrypted = TPacket::decrypt(bytestring((std::uint8_t*)_payload, _payloadSize));
 
     bytestring payloadDecompressed;
@@ -218,9 +212,11 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
     for (const bytestring &s : TPacket::unsmartpak(payloadDecompressed, 3))
     {
         unsigned expectedSize = TPacket::getExpectedSubPacketSize(s);
-        if (expectedSize == 0u || s.size() < expectedSize)
+        if (expectedSize == 0u || s.size() != expectedSize)
         {
-            std::cout << std::hex << int(s[0]) << '(' << std::dec << expectedSize << ',' << s.size() << ")!\n";
+            std::cout << "[TAPacketParser::parseTaPacket] subpacket error. packet code " << std::hex << unsigned(s[0]) << ", expected size " << expectedSize << ", actual size " << s.size() << '\n';
+            std::cout << "extracted from _payload:\n";
+            TADemo::HexDump(_payload, _payloadSize, std::cout);
             continue;
         }
 
@@ -229,10 +225,17 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
         case SubPacketCode::STATUS:
             {
                 std::string mapName = (const char*)(&s[1]);
-                std::uint16_t maxUnits = *(std::uint16_t*)(&s[166]);
-                Side playerSide = Side(s[156] & 0x40 ? 2 : s[150]);
-                bool cheats = (s[157] & 0x20) != 0;
-                m_packetHandler->onStatus(sourceDplayId, mapName, maxUnits, playerSide, cheats);
+                std::uint16_t maxUnits = *(std::uint16_t*)(&s[0xa6]);
+                bool isAI = s[0x95] == 2;
+                bool isWatcher = (s[0x9c] & 0x40) != 0;
+                unsigned armOrCore = s[0x96];
+                bool cheats = (s[0x9d] & 0x20) != 0;
+                unsigned playerSlotNumber = s[0x97];
+                Side playerSide = isWatcher ? Side::WATCH : Side(armOrCore);
+                if (playerSlotNumber < 10)
+                {
+                    m_packetHandler->onStatus(sourceDplayId, mapName, maxUnits, playerSlotNumber, playerSide, isAI, cheats);
+                }
             }
             break;
 
@@ -262,6 +265,7 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
                 std::uint32_t tick = *(std::uint32_t*)(&s[3]);
                 m_packetHandler->onGameTick(sourceDplayId, tick);
             }
+            break;
         };
     }
 }

@@ -51,7 +51,7 @@ namespace tafnet
         virtual void resetGameConnection();
         virtual void sendEnumRequest(QUuid gameGuid, std::uint32_t asPeerId);
 
-        virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, const std::string& nick, const std::string& chat);
+        virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat);
 
     private:
 

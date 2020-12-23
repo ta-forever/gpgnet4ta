@@ -22,23 +22,25 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 }
 
 TaLobby::TaLobby(
-    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress):
+    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
     m_gameAddress(gameAddress),
-    m_gameGuid(gameGuid)
+    m_gameGuid(gameGuid),
+    m_proactiveResendEnabled(proactiveResend)
 {
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
     m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW));
-    m_packetParser.reset(new TADemo::TAPacketParser(m_gameMonitor.data(), true));
+    m_packetParser.reset(new TADemo::TAPacketParser(m_gameMonitor.data()));
 }
 
 void TaLobby::connectGameEvents(GameEventHandlerQt &subscriber)
 {
     QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::gameSettings, &subscriber, &GameEventHandlerQt::onGameSettings);
     QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::playerStatus, &subscriber, &GameEventHandlerQt::onPlayerStatus);
+    QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::clearSlot, &subscriber, &GameEventHandlerQt::onClearSlot);
     QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::gameStarted, &subscriber, &GameEventHandlerQt::onGameStarted);
     QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::gameEnded, &subscriber, &GameEventHandlerQt::onGameEnded);
     QObject::connect(m_gameEvents.data(), &GameEventsSignalQt::chat, &subscriber, &GameEventHandlerQt::onChat);
@@ -66,7 +68,8 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
     m_tafnetIdsByPlayerName[playerName] = playerId;
     m_gameMonitor->setHostPlayerName(playerName.toStdString()); // assume we're host until call to onJoinGame() indicates otherwise
     m_gameMonitor->setLocalPlayerName(playerName.toStdString()); // this won't change
-    m_proxy.reset(new tafnet::TafnetNode(playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort));
+    m_proxy.reset(new tafnet::TafnetNode(
+        playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
     m_game.reset(new tafnet::TafnetGameNode(
         m_proxy.data(),
         m_packetParser.data(),
@@ -118,7 +121,7 @@ void TaLobby::onDisconnectFromPeer(int playerId)
     m_game->unregisterRemotePlayer(playerId);
 }
 
-void TaLobby::echoToGame(QString name, QString chat)
+void TaLobby::echoToGame(bool isPrivate, QString name, QString chat)
 {
     const bool fromIngameBot = name.endsWith("[ingame]");
     if (fromIngameBot)
@@ -146,5 +149,5 @@ void TaLobby::echoToGame(QString name, QString chat)
         }
     }
 
-    m_game->messageToLocalPlayer(dplayId, tafnetId, name.toStdString(), chat.toStdString());
+    m_game->messageToLocalPlayer(dplayId, tafnetId, isPrivate, name.toStdString(), chat.toStdString());
 }

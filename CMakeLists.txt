@@ -3,6 +3,14 @@ cmake_minimum_required(VERSION 3.16)
 
 find_package(Qt5 COMPONENTS Core Network REQUIRED)
 
+#if(MSVC)
+#    add_compile_options(
+#        $<$<CONFIG:>:/MT> #---------|
+#        $<$<CONFIG:Debug>:/MTd> #---|-- Statically link the runtime libraries
+#        $<$<CONFIG:Release>:/MT> #--|
+#    )
+#endif()
+
 set(DIRECTX_SDK_DIR "" CACHE PATH "Path to Microsoft DirectX SDK (April 2007)")
 set(DIRECT_PLAY_INCLUDE_DIR "${DIRECTX_SDK_DIR}/Include")
 set(DIRECT_PLAY_LIB_DIR "${DIRECTX_SDK_DIR}/Lib/x86")
@@ -67,8 +75,8 @@ add_executable(gpgnet4ta
     gpgnet4ta.cpp
     GpgNetGameLauncher.h
     GpgNetGameLauncher.cpp
-	IrcForward.h
-	IrcForward.cpp
+    IrcForward.h
+    IrcForward.cpp
     )
 
 target_include_directories(gpgnet4ta 

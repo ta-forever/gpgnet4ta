@@ -20,6 +20,8 @@ class IrcForward : public IrcConnection
 
 public:
     IrcForward(QObject* parent = nullptr);
+    ~IrcForward();
+
     IrcCommandParser* getParser();
 
 public slots:
@@ -29,8 +31,6 @@ private slots:
     void processMessage(IrcPrivateMessage* message);
 
 private:
-    void help(QStringList commands);
-
     IrcCommandParser parser;
     IrcBufferModel bufferModel;
 };

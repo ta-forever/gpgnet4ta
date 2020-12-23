@@ -27,7 +27,7 @@ namespace gpgnet
         void gameOption(QString key, int value);
         void playerOption(QString playerId, QString key, QString value);
         void playerOption(QString playerId, QString key, int value);
-        void aiOption(QString key, QString value);
+        void aiOption(QString name, QString key, int value);
         void clearSlot(int slot);
         void gameEnded();
         void gameResult(int army, int score);

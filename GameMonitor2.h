@@ -8,23 +8,6 @@
 #include "TAPacketParser.h"
 #include "tademo/TPacket.h"
 
-struct GameResult
-{
-    std::map<int /* armynumber */, int /* score */> resultByArmy;
-    std::map < std::string, int > armyNumbersByPlayerName;
-    std::uint32_t endGameTick; // if >0 indicates game tick at which game will imminently end
-
-    GameResult() : endGameTick(0u) { }
-
-    void print(std::ostream& os) const
-    {
-        for (const auto& player : armyNumbersByPlayerName)
-        {
-            os << std::dec << player.first << ": army=" << player.second << ", score=" << resultByArmy.at(player.second) << std::endl;
-        }
-        os << "endGameTick=" << endGameTick << std::endl;
-    }
-};
 
 struct Player
 {
@@ -42,14 +25,50 @@ struct PlayerData : public Player
     std::ostream& print(std::ostream& s) const;
 
     std::set<std::uint32_t> allies;
-    bool is_dead;                                   // advertised that their commander died, or was rejected by a player
-    std::uint32_t tick;                             // serial of last 2C packet
+    bool is_AI;
+    int slotNumber;         // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
+    bool is_dead;           // advertised that their commander died, or was rejected by a player
+    std::uint32_t tick;     // serial of last 2C packet
     std::uint32_t dplayid;
-    int armyNumber;                                 // assigned based on sorted names so is consistent across all players' instances
-    int teamNumber;                                 // reflects alliances at time of launch, and is consistent across all players' demo recordings
-                                                    // 0:invalid, >0:team number.  The no-team-selected / ffa option is not supported
-                                                    // everyone is on a team regardless if that team only has one player
-                                                    // (Forged Alliance reserves team=1 for no-team-selected)
+    int armyNumber;         // assigned based on sorted names so is consistent across all players' instances
+    int teamNumber;         // reflects alliances at time of launch, and is consistent across all players' demo recordings
+                            // 0:invalid, >0:team number.  The no-team-selected / ffa option is not supported
+                            // everyone is on a team regardless if that team only has one player
+                            // (Forged Alliance reserves team=1 for no-team-selected)
+};
+
+struct GameResult
+{
+    enum class Status
+    {
+        NOT_READY = 1,
+        VOID_RESULT = 2,        // game is over but result is void (eg mutually agreed draw)
+        READY_RESULT = 3        // game is over and result is ready
+    };
+
+    struct ArmyResult
+    {
+        int army;
+        int slot;
+        std::string name;
+        int team;
+        int score;
+    };
+
+    Status status;
+    std::vector<ArmyResult> results;
+    std::uint32_t endGameTick; // if >0 indicates game tick at which game will imminently end
+
+    GameResult() : status(Status::NOT_READY), endGameTick(0u) { }
+
+    void print(std::ostream& os) const
+    {
+        for (const auto& result : results)
+        {
+            os << std::dec << "army" << result.army << "(" << result.name << "/slot" << result.slot << "/team" << result.team << "): sore=" << result.score << std::endl;
+        }
+        os << "endGameTick=" << endGameTick << std::endl;
+    }
 };
 
 class GameEventHandler
@@ -57,6 +76,7 @@ class GameEventHandler
 public:
     virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits) = 0;
     virtual void onPlayerStatus(const PlayerData &, const std::set<std::string> & mutualAllies) = 0;
+    virtual void onClearSlot(const PlayerData &) = 0;
 
     // will be called twice. first time with tick < gameStartsAfterTickCount and teamsFrozen=false; 
     // and second time with tick > gameStartsAfterTickCount and teamsFrozen=true.
@@ -85,11 +105,14 @@ class GameMonitor2 : public TADemo::TaPacketHandler
     std::string m_mapName;
     std::uint16_t m_maxUnits;
     std::map<std::uint32_t, PlayerData> m_players;      // keyed by PlayerData::dplayid
+    std::map<std::uint32_t, PlayerData> m_frozenPlayers;// m_players (in particular the teams and alliances) as is was at time of game start
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
 
     GameEventHandler *m_gameEventHandler;
 
 public:
+    static void test();
+
     GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks);
 
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
@@ -115,7 +138,9 @@ public:
     virtual void onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint32_t dplayId, const std::string &name, TADemo::DPAddress *tcp, TADemo::DPAddress *udp);
     virtual void onDplayDeletePlayer(std::uint32_t dplayId);
 
-    virtual void onStatus(std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits, TADemo::Side playerSide, bool cheats);
+    virtual void onStatus(
+        std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
+        unsigned playerSlotNumber, TADemo::Side playerSide, bool isAI, bool cheats);
     virtual void onChat(std::uint32_t sourceDplayId, const std::string &chat);
     virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId);
     virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId);
@@ -123,10 +148,13 @@ public:
 
 protected:
 
-    // return <0 if no end-game condition yet met
-    // return ==0 if game over no survivors
-    // return winningTeam>0 if game over with a surviving team
-    virtual int checkEndGameCondition();
+    // return true iff a game ending condition is detected
+    // sets winningTeamNumber to the winning team number, or zero if forced draw, or -1 if mutual draw
+    virtual bool checkEndGameCondition(int &winningTeamNumber);
+
+    // return <0 if players are not all on same team
+    // return winningTeam>0 if players are all on same team
+    virtual bool isPlayersAllAllied(const std::set<std::uint32_t> & playerIds, const std::map<std::uint32_t, PlayerData>& playerData, int &teamNumber);
 
     // set the EndGame tick after which the game will be considered over.
     // can only be set once.  endGameTick=0u will be quietly incremented to endGameTick=1u.
@@ -147,8 +175,8 @@ protected:
     virtual bool isAllied(const std::set<std::uint32_t> &playernums) const;
 
     // get all players for which alliance is mutal (whether alive or dead)
-    virtual std::set<std::uint32_t> getMutualAllies(std::uint32_t playernum) const;
-    virtual std::set<std::string> getMutualAllyNames(std::uint32_t playernum) const;
+    virtual std::set<std::uint32_t> getMutualAllies(std::uint32_t playernum, const std::map<std::uint32_t, PlayerData> &playerData) const;
+    virtual std::set<std::string> getMutualAllyNames(std::uint32_t playernum, const std::map<std::uint32_t, PlayerData> & playerData) const;
 
     // based on chat messages "<player1>  allied with player2".
     // not spoofable in-game, but can be spoofed in lobby :(

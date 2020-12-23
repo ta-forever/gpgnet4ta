@@ -93,6 +93,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     }
 
     std::uint32_t destNodeId = m_remotePlayerIds[receivingSocket->localPort()];
+
     if (destNodeId == 0)
     {
         qWarning() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "encountered null peerid associated with game data received on port" << receivingSocket->localPort();
@@ -138,7 +139,6 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     }
 }
 
-
 void TafnetGameNode::translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[])
 {
     GameAddressTranslater tx(replyAddress, replyPorts, [this, replyAddress, replyPorts](TADemo::DPAddress& address, int index) {
@@ -159,7 +159,6 @@ void TafnetGameNode::translateMessageFromRemoteGame(char* data, int len, std::ui
     });
     tx(data, len);
 }
-
 
 void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len)
 {
@@ -194,9 +193,14 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
         break;
 
     case Payload::ACTION_UDP_DATA:
+    {
         gameSender->sendUdpData(data, len);
-        if (m_packetParser) m_packetParser->parseGameData(data, len);
+        if (m_packetParser)
+        {
+            m_packetParser->parseGameData(data, len);
+        }
         break;
+    }
 
     default:
         qInfo() << "[TafnetGameNode::handleTafnetMessage] playerId" << m_tafnetNode->getPlayerId() << "ERROR unknown action!";
@@ -323,7 +327,7 @@ void TafnetGameNode::resetGameConnection()
     }
 }
 
-void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, const std::string& nick, const std::string& chat)
+void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat)
 {
     if (true) //m_gameSenders.count(tafnetid) > 0)
     {
@@ -336,7 +340,14 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
         std::string message(chat);
         if (nick.size() > 0)
         {
-            message = "TAF:<" + nick + "> " + chat;
+            if (isPrivate)
+            {
+                message = "PM:<" + nick + "> " + chat;
+            }
+            else
+            {
+                message = "TAF:<" + nick + "> " + chat;
+            }
         }
 
         TADemo::bytestring bs = TADemo::TPacket::createChatSubpacket(message);

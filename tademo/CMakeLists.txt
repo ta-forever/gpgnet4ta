@@ -8,7 +8,11 @@ add_library(tademo
     TADemoParser.h
     TADemoParser.cpp
     HexDump.h
-    HexDump.cpp)
+    HexDump.cpp
+    nswfl_crc32.h
+    nswfl_crc32.cpp
+    DuplicateDetection.h
+    DuplicateDetection.cpp)
 
 target_include_directories(tademo 
     PUBLIC

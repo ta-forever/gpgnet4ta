@@ -4,6 +4,7 @@
 #include <map>
 
 #include "TPacket.h"
+#include "DuplicateDetection.h"
 
 namespace TADemo
 {
@@ -12,12 +13,16 @@ namespace TADemo
 
     class TAPacketParser
     {
-        bool m_dropDuplicateTaMessages;
-        std::map<std::uint32_t,std::string> m_lastTaPacket; // keyed by source dplayid
         TaPacketHandler *m_packetHandler;
 
+        // TA sends the same packets once to each player
+        // The parser sees each copy
+        // We want to detect the copy so we don't waste time decoding it
+        // and echoing resulting GameEventData multiple times
+        DuplicateDetection m_taDuplicateDetection;
+
     public:
-        TAPacketParser(TaPacketHandler *packetHandler, bool dropDuplicateTaMessages);
+        TAPacketParser(TaPacketHandler *packetHandler);
 
         virtual void parseGameData(const char *data, int len);
 

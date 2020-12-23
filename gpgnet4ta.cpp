@@ -162,6 +162,22 @@ class ForwardGameEventsToGpgNet : public GameEventHandlerQt
 {
     gpgnet::GpgNetClient &m_gpgNetClient;
 
+    // TA constructs AI's name by prepending with "AI:" and appending with a sequence number
+    // but unfortunately character count is limited so the sequence number might be dropped
+    // in that case multiple AI's don't have unique names
+    // Here we overwrite the last character with the slot number to increase chance of uniqueness
+    QString makeAiName(QString nominalName, quint8 slot)
+    {
+        if (!nominalName.isEmpty())
+        {
+            return nominalName.mid(0, nominalName.size() - 1) + QString::number(slot);
+        }
+        else
+        {
+            return QString() + "AI" + QString::number(slot);
+        }
+    }
+
 public:
     ForwardGameEventsToGpgNet(gpgnet::GpgNetClient &gpgNetClient) :
         m_gpgNetClient(gpgNetClient)
@@ -172,16 +188,33 @@ public:
         m_gpgNetClient.gameOption("MapName", mapName);
     }
 
-    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
         QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
 
         // Forged Alliance reserves Team=1 for the team-not-selected team
-        int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
-        m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
-        m_gpgNetClient.playerOption(gpgnetId, "StartSpot", armyNumber);
-        m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
-        m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+        if (isAI || gpgnetId == 0)
+        {
+            int teamNumber = int(_teamNumber);
+            QString aiName = makeAiName(name, slot);
+            m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
+            m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
+            m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
+            m_gpgNetClient.aiOption(aiName, "Faction", side);
+        }
+        else
+        {
+            int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
+            m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
+            m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
+            m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
+            m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+        }
+    }
+
+    virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot)
+    {
+        m_gpgNetClient.clearSlot(slot);
     }
 
     virtual void onGameStarted(quint32 tick, bool teamsFrozen)
@@ -192,11 +225,13 @@ public:
         }
     }
 
-    virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
+    virtual void onGameEnded(QList<QVariantMap> results)
     {
-        for (auto it = resultByArmy.begin(); it != resultByArmy.end(); ++it)
+        for (const QVariantMap& result : results)
         {
-            m_gpgNetClient.gameResult(it.key(), it.value());
+            int army = result.value("army").toInt();
+            int score = result.value("score").toInt();
+            m_gpgNetClient.gameResult(army, score);
         }
         m_gpgNetClient.gameState("Ended");
     }
@@ -208,84 +243,160 @@ public:
 
 class HandleGameStatus : public GameEventHandlerQt
 {
-    IrcForward& m_irc;
+    IrcForward *m_irc;
     QString m_channel;
     TaLobby& m_taLobby;
+    int m_quitRequested;
+    QString m_selectedMap;
+
+    // fixed size 10 slots
+    QVector<QString> m_playerNames;
+    QVector<bool> m_isAI;
 
 public:
-    HandleGameStatus(IrcForward& irc, QString channel, TaLobby& taLobby) :
+    HandleGameStatus(IrcForward* irc, QString channel, TaLobby& taLobby) :
         m_irc(irc),
         m_channel(channel),
-        m_taLobby(taLobby)
+        m_taLobby(taLobby),
+        m_quitRequested(0),
+        m_playerNames(10u),
+        m_isAI(10u, false)
     { }
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits)
     {
-        doSend("Map changed to: " + mapName.toStdString(), true, false);
+        if (mapName != m_selectedMap)
+        {
+            doSend("Map changed to: " + mapName.toStdString(), true, false);
+            m_selectedMap = mapName;
+        }
     }
 
-    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 side, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
-    { }
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    {
+        if (slot < m_playerNames.size())
+        {
+            m_playerNames[slot] = name;
+            m_isAI[slot] = isAI;
+        }
+    }
+
+    virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot)
+    {
+        if (slot < m_playerNames.size())
+        {
+            m_playerNames[slot].clear();
+            m_isAI[slot] = false;
+        }
+    }
 
     virtual void onGameStarted(quint32 tick, bool teamsFrozen)
     {
-        std::ostringstream ss;
-        if (!teamsFrozen)
+        const int occupancyCount = getOccupancyCount();
+        const int aiCount = getAiCount();
+        const int humanCount = occupancyCount - aiCount;
+
+        if (!teamsFrozen && aiCount == 0)
         {
-            ss << "GAME STARTED WOOOO! Still time to set your teams";
+            if (humanCount >= 3)
+            {
+                doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
+                doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                doSend("/quit to disconnect so team can .take (unless UR host!)", false, true);
+            }
+            else if (humanCount == 2)
+            {
+                doSend("Game becomes rated after 1:00", false, true);
+                doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+            }
+
+            if (m_irc && m_irc->isActive())
+            {
+                doSend("/closeirc to close your ingame/TAF chat relay", false, true);
+            }
         }
-        else
-        {
-            ss << "TEAMS FROZEN, GAME ON! Good luck commanders!";
-        }
-        doSend(ss.str(), true, true);
     }
 
-    virtual void onGameEnded(QMap<qint32, qint32> resultByArmy, QMap<QString, qint32> armyNumbersByPlayerName)
+    virtual void onGameEnded(QList<QVariantMap> results)
     {
         doSend("Game over man, game over!", true, true);
-        for (auto it = armyNumbersByPlayerName.begin(); it != armyNumbersByPlayerName.end(); ++it)
+        for (const QVariantMap &result: results)
         {
             std::ostringstream ss;
-            qint32 resultInt = resultByArmy[it.value()];
-            std::string resultString;
-            if (resultInt > 0)
-                resultString = "VICTORY";
-            else if (resultInt == 0)
-                resultString = "DRAW";
+            std::string name = result.value("name").toString().toStdString();
+            int slot = result.value("slot").toInt();
+            int team = result.value("team").toInt();
+            int score = result.value("score").toInt();
+            std::string outcome;
+            if (score > 0)
+                outcome = "VICTORY";
+            else if (score == 0)
+                outcome = "DRAW";
             else
-                resultString = "DEFEAT";
+                outcome = "DEFEAT";
 
-            ss << it.key().toStdString() << ": " << resultString;;
+            ss << name << ": " << outcome;
             doSend(ss.str(), true, true);
         }
     }
 
     virtual void onChat(QString msg, bool isLocalPlayerSource)
     {
-        if (isLocalPlayerSource)
+        if (isLocalPlayerSource && msg.size()>0)
         {
             int n = msg.lastIndexOf("> ");
-            if (msg[0] == '<' && n>=0 && n+2 < msg.size())
+            if (msg[0] == '<' && n >= 0 && n + 2 < msg.size())
             {
                 // remove the <name> tag so player doesn't get pinged in IRC
                 msg = msg.mid(n + 2);
             }
+
             doSend(msg.toStdString(), true, false);
+
+            m_quitRequested = msg == "/quit" ? ++m_quitRequested : 0;
+            if (m_quitRequested == 1)
+            {
+                doSend("Type /quit again to disconnect your game", false, true);
+            }
+            else if (m_quitRequested == 2)
+            {
+                doSend("ok your game is disconnected you can alt-f4", false, true);
+                qApp->quit();
+            }
+            else if (msg == "/closeirc")
+            {
+                if (m_irc && m_irc->isActive()) {
+                    m_irc->quit(m_irc->realName());
+                    m_irc->close();
+                    doSend("ok IRC relay is closed", false, true);
+                }
+            }
         }
     }
 
 private:
     void doSend(const std::string & chat, bool toIrc, bool toGame)
     {
-        if (toIrc)
+        if (m_irc && m_irc->isActive() && toIrc)
         {
-            m_irc.sendCommand(IrcCommand::createMessage(m_channel, chat.c_str()));
+            m_irc->sendCommand(IrcCommand::createMessage(m_channel, chat.c_str()));
         }
         if (toGame)
         {
-            m_taLobby.echoToGame("", QString::fromStdString(chat));
+            m_taLobby.echoToGame("", false, QString::fromStdString(chat));
         }
+    }
+
+    int getOccupancyCount()
+    {
+        return std::accumulate(m_playerNames.begin(), m_playerNames.end(), 0u,
+            [](int a, QString name) { return name.isEmpty() ? a : a + 1; });
+    }
+
+    int getAiCount()
+    {
+        return std::accumulate(m_isAI.begin(), m_isAI.end(), 0u,
+            [](int a, bool isAI) { return isAI ? a + 1 : a; });
     }
 };
 
@@ -438,27 +549,28 @@ int main(int argc, char* argv[])
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
-    parser.addOption(QCommandLineOption("mean", "Player rating mean.", "mean"));
-    parser.addOption(QCommandLineOption("deviation", "Player rating deviation.", "deviation"));
     parser.addOption(QCommandLineOption("country", "Player country code.", "code"));
+    parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
+    parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
+    parser.addOption(QCommandLineOption("deviation", "Player rating deviation.", "deviation"));
+    parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
+    parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
+    parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
+    parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
+    parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
+    parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join", "irc"));
+    parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
+    parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface", "lobbybindaddress", "127.0.0.1"));
+    parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options"));
+    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs", "logfile", "c:\\temp\\gpgnet4ta.log"));
+    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug)", "logfile", "5"));
+    parser.addOption(QCommandLineOption("mean", "Player rating mean.", "mean"));
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
     parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10", "players", "10"));
-    parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options"));
+    parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly"));
     parser.addOption(QCommandLineOption("registerdplay", "Register the dplay lobbyable app with --gamepath, --gameexe, --gameargs. (requires run as admin)."));
-    parser.addOption(QCommandLineOption("upnp", "Attempt to set up a port forward using UPNP"));
-    parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
-    parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
-    parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
-    parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
-    parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join", "irc"));
-    parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface", "lobbybindaddress", "127.0.0.1"));
-    parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
-    parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
-    parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
-    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs", "logfile", "c:\\temp\\gpgnet4ta.log"));
-    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug)", "logfile", "4"));
     parser.addOption(QCommandLineOption("uac", "run as admin"));
+    parser.addOption(QCommandLineOption("upnp", "Attempt to set up a port forward using UPNP"));
     parser.process(app);
 
     if (parser.isSet("uac"))
@@ -467,7 +579,7 @@ int main(int argc, char* argv[])
         for (const char *arg : {
             "gpgnet", "mean", "deviation", "country", "numgames", "players",
             "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
-            "logfile", "loglevel", "irc" })
+            "logfile", "loglevel", "irc", "proactiveresend" })
         {
             if (parser.isSet(arg))
             {
@@ -582,7 +694,7 @@ int main(int argc, char* argv[])
 
     if (parser.isSet("createlobby"))
     {
-        TaLobby lobby(QUuid(dplayGuid), parser.value("lobbybindaddress"), "127.0.0.1", "127.0.0.1");
+        TaLobby lobby(QUuid(dplayGuid), parser.value("lobbybindaddress"), "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"));
         QString playerName = parser.value("lobbybindaddress").split(':')[0];
         std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
         lobby.onCreateLobby(0, 6112, parser.value("lobbybindaddress"), playerId, 0);
@@ -677,7 +789,7 @@ int main(int argc, char* argv[])
         // That UDP port is expected to be one brokered by the FAF ICE adapter independently of gpgnet4ta
         // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
         // (viz all the Qt signal connections from GpgNetClient to TaLobby)
-        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1");
+        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"));
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
@@ -705,20 +817,20 @@ int main(int argc, char* argv[])
         // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)
         // This information is passed on to the GpgNetClient for consumption by the TAF server
+        qInfo() << "[main] connecting game status events to gpgnet";
         ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient);
         lobby.connectGameEvents(gameEventsToGpgNet);
 
-        std::shared_ptr<HandleGameStatus> handleGameStatus;
+        qInfo() << "[main] connecting game status events to HandleGameStatus";
+        HandleGameStatus handleGameStatus(ircForward.get(), ircChannel, lobby);
+        lobby.connectGameEvents(handleGameStatus);
+
         if (ircForward)
         {
-            qInfo() << "[main] connecting lobby to IRC";
-            handleGameStatus.reset(new HandleGameStatus(*ircForward, ircChannel, lobby));
-            lobby.connectGameEvents(*handleGameStatus);
-
             qInfo() << "[main] connecting IRC to lobby";
             QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby](IrcPrivateMessage* msg)
             {
-                lobby.echoToGame(msg->nick(), msg->content());
+                lobby.echoToGame(msg->isPrivate(), msg->nick(), msg->content());
             });
         }
         app.exec();

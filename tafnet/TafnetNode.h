@@ -5,6 +5,8 @@
 #include <QtNetwork/qudpsocket.h>
 #include <QtCore/qtimer.h>
 
+#include "tademo/DuplicateDetection.h"
+
 namespace tafnet
 {
 
@@ -32,7 +34,6 @@ namespace tafnet
 
     class DataBuffer
     {
-
         std::map<std::uint32_t, Payload > m_data;
         std::uint32_t m_nextPopSeq;
         std::uint32_t m_nextPushSeq;
@@ -47,7 +48,7 @@ namespace tafnet
         std::map<std::uint32_t, Payload > & getAll();
         std::size_t size();
       
-        void ackData(std::uint32_t seq);
+        bool ackData(std::uint32_t seq);
         bool readyRead();
         bool empty();
         std::uint32_t nextExpectedPopSeq();
@@ -94,13 +95,29 @@ namespace tafnet
         std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer tafnet player id
         std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer tafnet player id
 
+        // we maintain stats of how many times a packet is sent before we receive an ACK for it
+        // then if we find packet loss is high we start to spam the packets
+        // (or maybe more PC we "proactively" resend)
+        struct ResendRate
+        {
+            std::uint32_t sendCount = 0u;
+            std::uint32_t ackCount = 0u;
+            int get(bool incSendCount);
+        };
+        std::map<std::uint32_t, ResendRate> m_resendRates;      // keyed by peer tafnet player id
+        const bool m_proactiveResendEnabled;
+
+        // look for duplicate packets on UDP channel due to peers with activated proactive resend
+        // (tcp channel takes care of itself)
+        TADemo::DuplicateDetection m_udpDuplicateDetection;
+
         // we disable resend requests after issueing them to avoid spamming.
         // they're reenabled on a timer
         std::map<std::uint32_t, BoolDefaultToTrue> m_resendRequestEnabled;
         QTimer m_resendReqReenableTimer;
 
     public:
-        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort);
+        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend);
 
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;
@@ -119,7 +136,7 @@ namespace tafnet
     private:
         virtual void onReadyRead();
         virtual void handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
-        virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len);
+        virtual void sendMessage(std::uint32_t peerPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len, int nRepeats);
     };
 
 }

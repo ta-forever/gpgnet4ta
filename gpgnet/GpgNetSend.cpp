@@ -94,9 +94,10 @@ namespace gpgnet
         SendArgument(value);
     }
 
-    void GpgNetSend::aiOption(QString key, QString value)
+    void GpgNetSend::aiOption(QString name, QString key, int value)
     {
-        SendCommand("AIOption", 2);
+        SendCommand("AIOption", 3);
+        SendArgument(name);
         SendArgument(key);
         SendArgument(value);
     }

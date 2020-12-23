@@ -86,6 +86,11 @@ void GpgNetClient::onReadyRead()
 
 quint32 GpgNetClient::lookupPlayerId(QString playerName)
 {
+    if (playerName.startsWith("AI:"))
+    {
+        return 0u;
+    }
+
     auto it = m_gpgnetPlayerIds.find(playerName);
     if (it == m_gpgnetPlayerIds.end())
     {
