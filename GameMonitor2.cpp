@@ -5,6 +5,18 @@
 #include <iostream>
 #include <sstream>
 
+
+#ifdef QT_CORE_LIB
+#include "QtCore/qDebug.h"
+#define LOG_WARNING(x) qWarning() << x
+#define LOG_INFO(x) qInfo() << x
+#define LOG_DEBUG(x) qDebug() << x
+#else
+#define LOG_WARNING(x) std::cout << x << std::endl
+#define LOG_INFO(x) std::cout << x << std::endl
+#define LOG_DEBUG(x) std::cout << x << std::endl
+#endif
+
 Player::Player() :
 side(TADemo::Side::UNKNOWN)
 { }
@@ -188,6 +200,8 @@ void GameMonitor2::onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint
         }
 
         updatePlayerArmies();
+        // cannot notify at this point because we dont' know yet whether or not player as an AI (unless we assume AI names start with "AI:" ...)
+        // notifyPlayerStatuses();
     }
 }
 
@@ -195,26 +209,21 @@ void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
 {
     if (dplayId == 0u || m_players.count(dplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onDplayDeletePlayer] ERROR unexpected dplayid=" << dplayId << std::endl;
         return;
     }
+    LOG_INFO("[GameMonitor2::onDplayDeletePlayer] dplayId=" << dplayId);
 
     if (!m_gameStarted)
     {
-        {
-            PlayerData& player = m_players.at(dplayId);
-            if (!m_gameLaunched)
-            {
-                m_gameEventHandler->onClearSlot(player);
-            }
-        }
-
+        PlayerData& player = m_players.at(dplayId);
+        m_gameEventHandler->onClearSlot(player);
         m_players.erase(dplayId);
         for (auto &player : m_players)
         {
             player.second.allies.erase(dplayId);
         }
         updatePlayerArmies();
+        notifyPlayerStatuses();
     }
     else
     {
@@ -233,7 +242,7 @@ void GameMonitor2::onStatus(
 {
     if (m_players.count(sourceDplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onStatus] ERROR unexpected dplayid=" << sourceDplayId << std::endl;
+        LOG_WARNING("[GameMonitor2::onStatus] ERROR unexpected dplayid=" << sourceDplayId);
         return;
     }
     if (!m_gameStarted)
@@ -243,8 +252,18 @@ void GameMonitor2::onStatus(
         player.slotNumber = playerSlotNumber;
         if (player.side != playerSide)
         {
-            player.side = playerSide;
-            if (m_gameEventHandler) m_gameEventHandler->onPlayerStatus(player, getMutualAllyNames(player.dplayid, m_players));
+            if (player.side == TADemo::Side::UNKNOWN)
+            {
+                // first time we've seen this player. team/army numbers have probably changed for all players
+                player.side = playerSide;
+                notifyPlayerStatuses();
+            }
+            else
+            {
+                // user just changed Side no need to re-notify all players
+                player.side = playerSide;
+                if (m_gameEventHandler) m_gameEventHandler->onPlayerStatus(player, getMutualAllyNames(player.dplayid, m_players));
+            }
         }
         if (sourceDplayId == m_hostDplayId && !mapName.empty() && maxUnits > 0)
         {
@@ -252,7 +271,7 @@ void GameMonitor2::onStatus(
             {
                 m_mapName = mapName;
                 m_maxUnits = maxUnits;
-                if (m_gameEventHandler) m_gameEventHandler->onGameSettings(m_mapName, m_maxUnits);
+                if (m_gameEventHandler) m_gameEventHandler->onGameSettings(m_mapName, m_maxUnits, m_hostPlayerName, m_localPlayerName);
             }
         }
     }
@@ -262,7 +281,7 @@ void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
 {
     if (m_players.count(sourceDplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onChat] ERROR unexpected dplayid=" << sourceDplayId << std::endl;
+        LOG_WARNING("[GameMonitor2::onChat] ERROR unexpected dplayid=" << sourceDplayId);
         return;
     }
 
@@ -273,10 +292,7 @@ void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
         updatePlayerArmies();
         if (!m_gameStarted)
         {
-            for (const auto& pair : m_players)
-            {
-                if (m_gameEventHandler) m_gameEventHandler->onPlayerStatus(pair.second, getMutualAllyNames(pair.first, m_players));
-            }
+            notifyPlayerStatuses();
         }
 
         // teams are frozen on game start, but players can still cause a mutual draw by allying after start
@@ -293,11 +309,17 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
 {
     if (m_players.count(sourceDplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onUnitDied] ERROR unexpected dplayid=" << sourceDplayId << std::endl;
+        LOG_WARNING("[GameMonitor2::onUnitDied] ERROR unexpected dplayid=" << sourceDplayId);
         return;
     }
+
     if (unitId % m_maxUnits == 1)
     {
+        LOG_INFO("[GameMonitor2::onUnitDied] sourcedplayId=" << sourceDplayId << " tick=" << getMostRecentGameTick() << " unitId=" << unitId << "(commander), maxUnits=" << m_maxUnits);
+        std::ostringstream ss;
+        m_players[sourceDplayId].print(ss);
+        LOG_INFO(ss.str().c_str());
+
         m_players[sourceDplayId].is_dead = true;
 
         int winningTeamNumber;;
@@ -321,7 +343,7 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
 {
     if (m_players.count(sourceDplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onRejectOther] ERROR unexpected sourceDplayId=" << sourceDplayId << std::endl;
+        LOG_WARNING("[GameMonitor2::onRejectOther] ERROR unexpected sourceDplayId=" << sourceDplayId);
         return;
     }
     if (m_players.count(rejectedDplayId) == 0)
@@ -330,13 +352,40 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         return;
     }
 
-    m_players[rejectedDplayId].is_dead = true;
-
-    int winningTeamNumber;
-    if (checkEndGameCondition(winningTeamNumber))
+    LOG_INFO("[GameMonitor2::onRejectOther] sourceDplayId=" << sourceDplayId << " rejectedDplayId=" << rejectedDplayId);
     {
-        // better latch the result right now since we may not receive any more game ticks from anyone
-        latchEndGameResult(winningTeamNumber);
+        std::ostringstream ss;
+        m_players[sourceDplayId].print(ss);
+        LOG_INFO(ss.str().c_str());
+    }
+    {
+        std::ostringstream ss;
+        m_players[rejectedDplayId].print(ss);
+        LOG_INFO(ss.str().c_str());
+    }
+
+    if (!m_gameStarted)
+    {
+        PlayerData& player = m_players.at(rejectedDplayId);
+        m_gameEventHandler->onClearSlot(player);
+        m_players.erase(rejectedDplayId);
+        for (auto &player : m_players)
+        {
+            player.second.allies.erase(rejectedDplayId);
+        }
+        updatePlayerArmies();
+        notifyPlayerStatuses();
+    }
+    else
+    {
+        m_players[rejectedDplayId].is_dead = true;
+
+        int winningTeamNumber;
+        if (checkEndGameCondition(winningTeamNumber))
+        {
+            // better latch the result right now since we may not receive any more game ticks from anyone
+            latchEndGameResult(winningTeamNumber);
+        }
     }
 }
 
@@ -344,7 +393,7 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
 {
     if (m_players.count(sourceDplayId) == 0)
     {
-        std::cerr << "[GameMonitor2::onGameTick] ERROR unexpected sourceDplayId=" << sourceDplayId << std::endl;
+        LOG_WARNING("[GameMonitor2::onGameTick] ERROR unexpected sourceDplayId=" << sourceDplayId);
         return;
     }
 
@@ -356,12 +405,13 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
 
     if (!m_gameStarted && tick > m_gameStartsAfterTickCount)
     {
-        m_gameStarted = true;
-        if (m_gameEventHandler) m_gameEventHandler->onGameStarted(tick, true);
-
         // server logic requires alliances to be locked at launch so we require teams to be set before game starts (tick > m_gameStartsAfterTickCount)
         // so here we grab the player status (in particular the alliances) at time of game start
         m_frozenPlayers = m_players;
+
+        m_gameStarted = true;
+        notifyPlayerStatuses();
+        if (m_gameEventHandler) m_gameEventHandler->onGameStarted(tick, true);
 
         int winningTeamNumber;
         if (checkEndGameCondition(winningTeamNumber))
@@ -538,10 +588,10 @@ void GameMonitor2::updatePlayerArmies()
         player.second.teamNumber = 0;       // reset any previous determination
     }
 
-    // sort by slotNumber to ensure consistent across all players' instances
+    // sort by dplayid to ensure consistent across all players' instances
     std::sort(sortedPlayers.begin(), sortedPlayers.end(),
         [](const PlayerData* p1, const PlayerData* p2)
-        -> bool { return p1->slotNumber < p2->slotNumber; });
+        -> bool { return p1->dplayid < p2->dplayid; });
 
     int teamCount = 1;  // assign team numbers consecutively to each mutually allied set
     int armyCount = 0;  // assign army number by consecutive sortedPlayer
@@ -570,6 +620,17 @@ void GameMonitor2::updatePlayerArmies()
     }
 }
 
+void GameMonitor2::notifyPlayerStatuses()
+{
+    for (const auto &p : m_players)
+    {
+        if (m_gameEventHandler && p.second.side != TADemo::Side::UNKNOWN)
+        {
+            m_gameEventHandler->onPlayerStatus(p.second, getMutualAllyNames(p.first, m_players));
+        }
+    }
+}
+
 bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
 {
     if (!m_gameStarted)
@@ -583,6 +644,7 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with forced draw (everyone is dead)
         winningTeamNumber = 0;
+        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because no active players");
         return true;
     }
 
@@ -591,6 +653,7 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with one team prevailing
         winningTeamNumber = lastTeamStanding;
+        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (frozen) team:" << lastTeamStanding);
         return true;
     }
 
@@ -598,6 +661,7 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with mutually agreed draw
         winningTeamNumber = -1;
+        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (dynamic) team:" << lastTeamStanding);
         return true;
     }
 
@@ -629,7 +693,7 @@ std::uint32_t GameMonitor2::latchEndGameTick(std::uint32_t endGameTick)
             ++endGameTick;
         }
         m_gameResult.endGameTick = endGameTick;
-
+        LOG_INFO("[GameMonitor2::latchEndGameTick] tick=" << endGameTick);
     }
     return m_gameResult.endGameTick;
 }
@@ -641,6 +705,7 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
         return m_gameResult;
     }
 
+    LOG_INFO("[GameMonitor2::latchEndGameResult] winningTeamNumber=" << winningTeamNumber);
     m_gameResult.results.clear();
 
     if (winningTeamNumber < 0)

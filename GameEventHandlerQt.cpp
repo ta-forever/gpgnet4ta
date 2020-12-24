@@ -2,9 +2,9 @@
 #include <QtCore/qmap.h>
 #include <QtCore/qvariant.h>
 
-void GameEventsSignalQt::onGameSettings(const std::string &mapName, std::uint16_t maxUnits)
+void GameEventsSignalQt::onGameSettings(const std::string &mapName, std::uint16_t maxUnits, const std::string &hostName, const std::string &localName)
 {
-    emit gameSettings(QString::fromStdString(mapName), maxUnits);
+    emit gameSettings(QString::fromStdString(mapName), maxUnits, QString::fromStdString(hostName), QString::fromStdString(localName));
 }
 
 void GameEventsSignalQt::onPlayerStatus(const PlayerData &player, const std::set<std::string> & _mutualAllies)

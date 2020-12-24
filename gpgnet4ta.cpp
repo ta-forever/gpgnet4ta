@@ -161,6 +161,7 @@ public:
 class ForwardGameEventsToGpgNet : public GameEventHandlerQt
 {
     gpgnet::GpgNetClient &m_gpgNetClient;
+    bool m_isHost;
 
     // TA constructs AI's name by prepending with "AI:" and appending with a sequence number
     // but unfortunately character count is limited so the sequence number might be dropped
@@ -183,9 +184,14 @@ public:
         m_gpgNetClient(gpgNetClient)
     { }
 
-    virtual void onGameSettings(QString mapName, quint16 maxUnits)
+    virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
     {
-        m_gpgNetClient.gameOption("MapName", mapName);
+        qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] GameOption" << mapName << "host" << hostName << "local" << localName;
+        m_isHost = hostName == localName;
+        if (m_isHost)
+        {
+            m_gpgNetClient.gameOption("MapName", mapName);
+        }
     }
 
     virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
@@ -197,31 +203,47 @@ public:
         {
             int teamNumber = int(_teamNumber);
             QString aiName = makeAiName(name, slot);
-            m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
-            m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
-            m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
-            m_gpgNetClient.aiOption(aiName, "Faction", side);
+            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] AiOption" << aiName << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+            if (m_isHost)
+            {
+                m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
+                m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
+                m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
+                m_gpgNetClient.aiOption(aiName, "Faction", side);
+            }
         }
         else
         {
             int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
-            m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
-            m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
-            m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
-            m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] PlayerOption" << name << "id" << gpgnetId << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+            if (m_isHost)
+            {
+                m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
+                m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
+                m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
+                m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+            }
         }
     }
 
     virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot)
     {
-        m_gpgNetClient.clearSlot(slot);
+        qInfo() << "[ForwardGameEventsToGpgNet::onClearSlot]" << name << "slot" << slot;
+        if (m_isHost)
+        {
+            m_gpgNetClient.clearSlot(slot);
+        }
     }
 
     virtual void onGameStarted(quint32 tick, bool teamsFrozen)
     {
         if (teamsFrozen)
         {
-            m_gpgNetClient.gameState("Launching");
+            qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState Launching";
+            if (m_isHost)
+            {
+                m_gpgNetClient.gameState("Launching");
+            }
         }
     }
 
@@ -231,8 +253,10 @@ public:
         {
             int army = result.value("army").toInt();
             int score = result.value("score").toInt();
+            qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded]" << result;
             m_gpgNetClient.gameResult(army, score);
         }
+        qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded] GameState Ended";
         m_gpgNetClient.gameState("Ended");
     }
 
@@ -263,7 +287,7 @@ public:
         m_isAI(10u, false)
     { }
 
-    virtual void onGameSettings(QString mapName, quint16 maxUnits)
+    virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
     {
         if (mapName != m_selectedMap)
         {

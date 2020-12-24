@@ -12,7 +12,7 @@ using namespace tafnet;
 class GameEventPrinter: public GameEventHandler
 {
 public:
-    virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits)
+    virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits, const std::string &, const std::string &)
     {
         std::cout << "[GameEventPrinter::onGameSettings] mapName=" << mapName << ", maxUnits=" << maxUnits << std::endl;
     }

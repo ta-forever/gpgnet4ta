@@ -9,20 +9,16 @@ namespace gpgnet
 
     void GpgNetSend::SendCommand(QString command, int argumentCount)
     {
-        qInfo() << "GpgNetSend command" << command;
         m_os << command.toUtf8() << quint32(argumentCount);
     }
 
     void GpgNetSend::SendArgument(QString arg)
     {
-        qInfo() << "GpgNetSend arg" << arg;
         m_os << quint8(1) << arg.toUtf8();
     }
 
     void GpgNetSend::SendArgument(int arg)
     {
-
-        qInfo() << "GpgNetSend arg" << arg;
         m_os << quint8(0) << quint32(arg);
     }
 

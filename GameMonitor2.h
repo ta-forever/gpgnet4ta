@@ -8,7 +8,6 @@
 #include "TAPacketParser.h"
 #include "tademo/TPacket.h"
 
-
 struct Player
 {
     Player();
@@ -74,7 +73,7 @@ struct GameResult
 class GameEventHandler
 {
 public:
-    virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits) = 0;
+    virtual void onGameSettings(const std::string &mapName, std::uint16_t maxUnits, const std::string &hostName, const std::string &localName) = 0;
     virtual void onPlayerStatus(const PlayerData &, const std::set<std::string> & mutualAllies) = 0;
     virtual void onClearSlot(const PlayerData &) = 0;
 
@@ -191,5 +190,6 @@ protected:
     // or we could lock the alliances and designations at launch.
     // Since FAF server logic requires latter, so thats what we'll do
     virtual void updatePlayerArmies();
+    virtual void notifyPlayerStatuses();
 
 };

@@ -35,7 +35,9 @@ add_subdirectory(tafnet)
 # -------------- TADUMPER -------------
 
 add_executable(tadumper
-    tadumper.cpp)
+    tadumper.cpp
+    GameMonitor2.h
+    GameMonitor2.cpp)
 
 target_link_libraries(tadumper
     tademo)
