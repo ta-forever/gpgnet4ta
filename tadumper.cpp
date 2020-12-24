@@ -67,7 +67,7 @@ public:
             {
                 std::uint32_t dplayId = m_dplayIds[p.first];
                 m_gameMonitor->onDplayCreateOrForwardPlayer(0x0008, dplayId, p.second.name, NULL, NULL);
-                m_gameMonitor->onStatus(dplayId, m_mapName, m_maxUnits, p.first, p.second.side, false, false);
+                m_gameMonitor->onStatus(dplayId, m_mapName, m_maxUnits, p.first-1, p.second.side, false, false);
             }
 
             if (!m_chat.empty())
@@ -104,6 +104,7 @@ public:
             case 0x05:  // chat
             {
                 std::string chat = (const char*)(&s[1]);
+                std::cout << "tick=" << m_tick << ' ';
                 m_gameMonitor->onChat(senderDplayId, chat);
                 break;
             }
@@ -123,13 +124,17 @@ public:
             {
                 std::cout << "status" << std::endl;
                 TADemo::HexDump(s.data(), s.size(), std::cout);
+                break;
             }
-            case 0x2c:
+            case 0x2c: // tick
             {
                 m_tick = *(std::uint32_t*)(&s[3]);
                 m_gameMonitor->onGameTick(senderDplayId, m_tick);
                 break;
             }
+            default:
+                //std::cout << unsigned(s[0]) << ' ';
+                break;
             };
         }
     }

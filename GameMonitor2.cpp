@@ -432,7 +432,8 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
         int winningTeamNumber;
         if (!checkEndGameCondition(winningTeamNumber))
         {
-            throw std::runtime_error("it should not be possible for a game to become unfinished once it is finished!");
+            LOG_WARNING("[GameMonitor2::onGameTick] it should not be possible for a game to become unfinished once it is finished!");
+            return;
         }
         latchEndGameResult(winningTeamNumber);
     }
@@ -622,11 +623,33 @@ void GameMonitor2::updatePlayerArmies()
 
 void GameMonitor2::notifyPlayerStatuses()
 {
+    if (!m_gameEventHandler)
+    {
+        return;
+    }
+
+    std::vector<bool> isSlotUsed(10, false);
     for (const auto &p : m_players)
     {
-        if (m_gameEventHandler && p.second.side != TADemo::Side::UNKNOWN)
+        if (p.second.side != TADemo::Side::UNKNOWN)
         {
             m_gameEventHandler->onPlayerStatus(p.second, getMutualAllyNames(p.first, m_players));
+            // NB UNKNOWN side means the slot number is invalid too
+            if (unsigned(p.second.slotNumber) < isSlotUsed.size())
+            {
+                isSlotUsed[p.second.slotNumber] = true;
+            }
+        }
+    }
+
+    for (std::size_t n = 0; n < isSlotUsed.size(); ++n)
+    {
+        if (!isSlotUsed[n])
+        {
+            PlayerData pd;
+            pd.slotNumber = n;
+            pd.dplayid = 0;
+            m_gameEventHandler->onClearSlot(pd);
         }
     }
 }
@@ -644,7 +667,10 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with forced draw (everyone is dead)
         winningTeamNumber = 0;
-        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because no active players");
+        if (m_gameResult.endGameTick == 0)
+        {
+            LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because no active players");
+        }
         return true;
     }
 
@@ -653,7 +679,10 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with one team prevailing
         winningTeamNumber = lastTeamStanding;
-        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (frozen) team:" << lastTeamStanding);
+        if (m_gameResult.endGameTick == 0)
+        {
+            LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (frozen) team:" << lastTeamStanding);
+        }
         return true;
     }
 
@@ -661,7 +690,10 @@ bool GameMonitor2::checkEndGameCondition(int &winningTeamNumber)
     {
         // game over with mutually agreed draw
         winningTeamNumber = -1;
-        LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (dynamic) team:" << lastTeamStanding);
+        if (m_gameResult.endGameTick == 0)
+        {
+            LOG_INFO("[GameMonitor2::checkEndGameCondition] end game at tick " << getMostRecentGameTick() << " because all (" << activePlayers.size() << ") active players belong to same (dynamic) team:" << lastTeamStanding);
+        }
         return true;
     }
 
@@ -705,8 +737,9 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
         return m_gameResult;
     }
 
-    LOG_INFO("[GameMonitor2::latchEndGameResult] winningTeamNumber=" << winningTeamNumber);
     m_gameResult.results.clear();
+    m_gameResult.endGameTick = getMostRecentGameTick();
+    LOG_INFO("[GameMonitor2::latchEndGameResult] tick=" << m_gameResult.endGameTick << " winningTeamNumber=" << winningTeamNumber);
 
     if (winningTeamNumber < 0)
     {
