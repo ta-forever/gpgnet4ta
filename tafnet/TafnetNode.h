@@ -22,7 +22,7 @@ namespace tafnet
         static const unsigned ACTION_TCP_DATA = 6;
         static const unsigned ACTION_TCP_ACK = 7;
         static const unsigned ACTION_TCP_RESEND = 8;
-        static const unsigned ACTION_TCP_SEQ_REBASE = 9;
+        static const unsigned ACTION_MORE = 9;
         static const unsigned ACTION_ENUM = 10;
 
         std::uint8_t action;
@@ -94,6 +94,7 @@ namespace tafnet
 
         std::map<std::uint32_t, DataBuffer> m_receiveBuffer;    // keyed by peer tafnet player id
         std::map<std::uint32_t, DataBuffer> m_sendBuffer;       // keyed by peer tafnet player id
+        std::map<std::uint32_t, QByteArray> m_reassemblyBuffer;
 
         // we maintain stats of how many times a packet is sent before we receive an ACK for it
         // then if we find packet loss is high we start to spam the packets

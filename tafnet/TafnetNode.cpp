@@ -295,13 +295,19 @@ void TafnetNode::onReadyRead()
             int nRepeats = m_resendRates[peerPlayerId].get(false);
             sendMessage(peerPlayerId, Payload::ACTION_TCP_ACK, tafBufferedHeader->seq, "", 0, nRepeats);
 
+            QByteArray &reassemblyBuffer = m_reassemblyBuffer[peerPlayerId];
             while (tcpReceiveBuffer.readyRead())
             {
                 resendRequestEnabled = true;    // is also reenabled on a timer
                 // clear receive buffer and acknowledge receipt
                 std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
                 Payload data = tcpReceiveBuffer.pop();
-                handleMessage(data.action, peerPlayerId, data.buf->data(), data.buf->size());
+                reassemblyBuffer += *data.buf;
+                if (data.action != Payload::ACTION_MORE)
+                {
+                    handleMessage(data.action, peerPlayerId, reassemblyBuffer.data(), reassemblyBuffer.size());
+                    reassemblyBuffer.clear();
+                }
             }
 
             if (!tcpReceiveBuffer.empty() && resendRequestEnabled)
@@ -414,7 +420,6 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
         if (distribution(generator) > SIM_PACKET_LOSS)
 #endif
         {
-
             m_lobbySocket.writeDatagram(buf.data(), buf.size(), QHostAddress(hostAndPort.ipv4addr), hostAndPort.port);
             m_lobbySocket.flush();
         }
@@ -431,10 +436,25 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     if (action >= Payload::ACTION_TCP_DATA)
     {
         DataBuffer &sendBuffer = m_sendBuffer[destPlayerId];
-        std::uint32_t seq = sendBuffer.push_back(action, data, len);
 
-        int nRepeats = m_resendRates[destPlayerId].get(true);
-        sendMessage(destPlayerId, action, seq, data, len, nRepeats);
+        static const int MAX_PACKET_SIZE = 500;
+        for (int fragOffset = 0; fragOffset < len; fragOffset += MAX_PACKET_SIZE)
+        {
+            const char *p = data + fragOffset;
+            int sz = std::min(MAX_PACKET_SIZE, len - fragOffset);
+
+            int nRepeats = m_resendRates[destPlayerId].get(true);
+            if (fragOffset + sz >= len)
+            {
+                std::uint32_t seq = sendBuffer.push_back(action, p, sz);
+                sendMessage(destPlayerId, action, seq, p, sz, nRepeats);
+            }
+            else
+            {
+                std::uint32_t seq = sendBuffer.push_back(Payload::ACTION_MORE, p, sz);
+                sendMessage(destPlayerId, Payload::ACTION_MORE, seq, p, sz, nRepeats);
+            }
+        }
     }
     else
     {
