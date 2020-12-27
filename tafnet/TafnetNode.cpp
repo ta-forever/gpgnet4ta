@@ -13,6 +13,8 @@ std::default_random_engine generator;
 std::uniform_int_distribution<int> distribution(0, 99);
 #endif
 
+static const int MAX_PACKET_SIZE = 256;
+
 using namespace tafnet;
 
 Payload::Payload():
@@ -437,7 +439,6 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     {
         DataBuffer &sendBuffer = m_sendBuffer[destPlayerId];
 
-        static const int MAX_PACKET_SIZE = 500;
         for (int fragOffset = 0; fragOffset < len; fragOffset += MAX_PACKET_SIZE)
         {
             const char *p = data + fragOffset;
