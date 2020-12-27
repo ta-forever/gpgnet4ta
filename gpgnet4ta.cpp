@@ -567,7 +567,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.7");
+    QCoreApplication::setApplicationVersion("0.9.1");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
