@@ -7,11 +7,15 @@
 #endif
 
 //#define SIM_PACKET_LOSS 50
+#define SIM_PACKET_TRUNCATE 300
+
+
 #ifdef SIM_PACKET_LOSS
 #include <random>
 std::default_random_engine generator;
 std::uniform_int_distribution<int> distribution(0, 99);
 #endif
+
 
 static const int MAX_PACKET_SIZE = 256;
 
@@ -200,140 +204,177 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
 
 void TafnetNode::onResendTimer()
 {
-    for (auto &pairPlayer : m_sendBuffer)
+    try
     {
-        std::uint32_t peerPlayerId = pairPlayer.first;
-        DataBuffer &sendBuffer = pairPlayer.second;
-
-        int maxResendAtOnce = 5;
-        for (auto &pairPayload : sendBuffer.getAll())
+        for (auto &pairPlayer : m_sendBuffer)
         {
-            std::uint32_t seq = pairPayload.first;
-            Payload &data = pairPayload.second;
-            if (data.buf)
+            std::uint32_t peerPlayerId = pairPlayer.first;
+            DataBuffer &sendBuffer = pairPlayer.second;
+
+            int maxResendAtOnce = 5;
+            for (auto &pairPayload : sendBuffer.getAll())
             {
-                int nRepeats = m_resendRates[peerPlayerId].get(true);
-                sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
-            }
-            if (--maxResendAtOnce <= 0)
-            {
-                break;
+                std::uint32_t seq = pairPayload.first;
+                Payload &data = pairPayload.second;
+                if (data.buf)
+                {
+                    int nRepeats = m_resendRates[peerPlayerId].get(true);
+                    sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
+                }
+                if (--maxResendAtOnce <= 0)
+                {
+                    break;
+                }
             }
         }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TafnetNode::onResendTimer] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TafnetNode::onResendTimer] unknown exception";
     }
 }
 
 void TafnetNode::onResendReqReenableTimer()
 {
-    for (auto &pair : m_resendRequestEnabled)
+    try
     {
-        pair.second.value = true;
+        for (auto &pair : m_resendRequestEnabled)
+        {
+            pair.second.value = true;
+        }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TafnetNode::onResendReqReenableTimer] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TafnetNode::onResendReqReenableTimer] unknown exception";
     }
 }
 
 void TafnetNode::onReadyRead()
 {
-    QUdpSocket* sender = static_cast<QUdpSocket*>(QObject::sender());
-
-    while (sender->hasPendingDatagrams())
+    try
     {
-        QByteArray datas;
-        datas.resize(sender->pendingDatagramSize());
-        QHostAddress senderAddress;
-        quint16 senderPort;
-        sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
-        HostAndPort senderHostAndPort(senderAddress, senderPort);
-        if (datas.size() < sizeof(TafnetMessageHeader))
+        QUdpSocket* sender = static_cast<QUdpSocket*>(QObject::sender());
+
+        while (sender->hasPendingDatagrams())
         {
-            continue;
-        }
-
-        auto it = m_peerPlayerIds.find(senderHostAndPort);
-        if (it == m_peerPlayerIds.end())
-        {
-            qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
-            continue;
-        }
-        std::uint32_t peerPlayerId = it->second;
-
-        const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)datas.data();
-        const TafnetBufferedHeader* tafBufferedHeader = (TafnetBufferedHeader*)datas.data();
-
-        DataBuffer &tcpReceiveBuffer = m_receiveBuffer[peerPlayerId];
-        DataBuffer &tcpSendBuffer = m_sendBuffer[peerPlayerId];
-        bool &resendRequestEnabled = m_resendRequestEnabled[peerPlayerId].value;
-
-        if (tafBufferedHeader->action == Payload::ACTION_TCP_ACK)
-        {
-            if (tcpSendBuffer.ackData(tafBufferedHeader->seq))
+            QByteArray datas;
+            datas.resize(sender->pendingDatagramSize());
+            QHostAddress senderAddress;
+            quint16 senderPort;
+            sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+            HostAndPort senderHostAndPort(senderAddress, senderPort);
+            if (datas.size() < sizeof(TafnetMessageHeader))
             {
-                m_resendRates[peerPlayerId].ackCount++;
+                continue;
             }
-        }
 
-        else if (tafBufferedHeader->action == Payload::ACTION_TCP_RESEND)
-        {
-            std::uint32_t seq = tafBufferedHeader->seq;
-            Payload data = tcpSendBuffer.get(seq);
-            if (data.buf)
+#ifdef SIM_PACKET_TRUNCATE
+            datas.resize(std::min(datas.size(), SIM_PACKET_TRUNCATE));
+#endif
+
+            auto it = m_peerPlayerIds.find(senderHostAndPort);
+            if (it == m_peerPlayerIds.end())
             {
-                int nRepeats = m_resendRates[peerPlayerId].get(true);
-                qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- peer" << peerPlayerId << "requested resend packet" << seq << "resendrate=" <<  nRepeats;
-                sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
+                qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
+                continue;
             }
+            std::uint32_t peerPlayerId = it->second;
+
+            const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)datas.data();
+            const TafnetBufferedHeader* tafBufferedHeader = (TafnetBufferedHeader*)datas.data();
+
+            DataBuffer &tcpReceiveBuffer = m_receiveBuffer[peerPlayerId];
+            DataBuffer &tcpSendBuffer = m_sendBuffer[peerPlayerId];
+            bool &resendRequestEnabled = m_resendRequestEnabled[peerPlayerId].value;
+
+            if (tafBufferedHeader->action == Payload::ACTION_TCP_ACK)
+            {
+                if (tcpSendBuffer.ackData(tafBufferedHeader->seq))
+                {
+                    m_resendRates[peerPlayerId].ackCount++;
+                }
+            }
+
+            else if (tafBufferedHeader->action == Payload::ACTION_TCP_RESEND)
+            {
+                std::uint32_t seq = tafBufferedHeader->seq;
+                Payload data = tcpSendBuffer.get(seq);
+                if (data.buf)
+                {
+                    int nRepeats = m_resendRates[peerPlayerId].get(true);
+                    qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- peer" << peerPlayerId << "requested resend packet" << seq << "resendrate=" << nRepeats;
+                    sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
+                }
+                else
+                {
+                    qWarning() << "[TafnetNode::onReadyRead] no payload found for seq number" << seq;
+                }
+            }
+
+            else if (tafBufferedHeader->action >= Payload::ACTION_TCP_DATA)
+            {
+                // received data that requires ACK
+                tcpReceiveBuffer.insert(
+                    tafBufferedHeader->seq, tafBufferedHeader->action,
+                    datas.data() + sizeof(TafnetBufferedHeader), datas.size() - sizeof(TafnetBufferedHeader));
+
+                int nRepeats = m_resendRates[peerPlayerId].get(false);
+                sendMessage(peerPlayerId, Payload::ACTION_TCP_ACK, tafBufferedHeader->seq, "", 0, nRepeats);
+
+                QByteArray &reassemblyBuffer = m_reassemblyBuffer[peerPlayerId];
+                while (tcpReceiveBuffer.readyRead())
+                {
+                    resendRequestEnabled = true;    // is also reenabled on a timer
+                    // clear receive buffer and acknowledge receipt
+                    std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
+                    Payload data = tcpReceiveBuffer.pop();
+                    reassemblyBuffer += *data.buf;
+                    if (data.action != Payload::ACTION_MORE)
+                    {
+                        handleMessage(data.action, peerPlayerId, reassemblyBuffer.data(), reassemblyBuffer.size());
+                        reassemblyBuffer.clear();
+                    }
+                }
+
+                if (!tcpReceiveBuffer.empty() && resendRequestEnabled)
+                {
+                    resendRequestEnabled = false;    // is also reenabled on a timer
+                    int remainingMaxResend = 10;
+                    for (std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
+                        seq < tcpReceiveBuffer.earliestAvailable() && remainingMaxResend > 0;
+                        ++seq, --remainingMaxResend)
+                    {
+                        qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- req resend packet" << seq << "from peer" << peerPlayerId;
+                        sendMessage(peerPlayerId, Payload::ACTION_TCP_RESEND, seq, "", 0, nRepeats);
+                    }
+                }
+            }
+
             else
             {
-                qWarning() << "[TafnetNode::onReadyRead] no payload found for seq number" << seq;
-            }
-        }
-
-        else if (tafBufferedHeader->action >= Payload::ACTION_TCP_DATA)
-        {
-            // received data that requires ACK
-            tcpReceiveBuffer.insert(
-                tafBufferedHeader->seq, tafBufferedHeader->action,
-                datas.data() + sizeof(TafnetBufferedHeader), datas.size() - sizeof(TafnetBufferedHeader));
-
-            int nRepeats = m_resendRates[peerPlayerId].get(false);
-            sendMessage(peerPlayerId, Payload::ACTION_TCP_ACK, tafBufferedHeader->seq, "", 0, nRepeats);
-
-            QByteArray &reassemblyBuffer = m_reassemblyBuffer[peerPlayerId];
-            while (tcpReceiveBuffer.readyRead())
-            {
-                resendRequestEnabled = true;    // is also reenabled on a timer
-                // clear receive buffer and acknowledge receipt
-                std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
-                Payload data = tcpReceiveBuffer.pop();
-                reassemblyBuffer += *data.buf;
-                if (data.action != Payload::ACTION_MORE)
+                // received data not requiring ACK
+                if (!m_udpDuplicateDetection.isLikelyDuplicate(peerPlayerId, 0, datas.data(), datas.size()))
                 {
-                    handleMessage(data.action, peerPlayerId, reassemblyBuffer.data(), reassemblyBuffer.size());
-                    reassemblyBuffer.clear();
-                }
-            }
-
-            if (!tcpReceiveBuffer.empty() && resendRequestEnabled)
-            {
-                resendRequestEnabled = false;    // is also reenabled on a timer
-                int remainingMaxResend = 10;
-                for (std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
-                    seq < tcpReceiveBuffer.earliestAvailable() && remainingMaxResend > 0;
-                    ++seq, --remainingMaxResend)
-                {
-                    qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- req resend packet" << seq << "from peer" << peerPlayerId;
-                    sendMessage(peerPlayerId, Payload::ACTION_TCP_RESEND, seq, "", 0, nRepeats);
+                    handleMessage(tafheader->action, peerPlayerId, datas.data() + sizeof(TafnetMessageHeader), datas.size() - sizeof(TafnetMessageHeader));
                 }
             }
         }
-
-        else
-        {
-            // received data not requiring ACK
-            if (!m_udpDuplicateDetection.isLikelyDuplicate(peerPlayerId, 0, datas.data(), datas.size()))
-            {
-                handleMessage(tafheader->action, peerPlayerId, datas.data() + sizeof(TafnetMessageHeader), datas.size() - sizeof(TafnetMessageHeader));
-            }
-        }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TafnetNode::onReadyRead] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TafnetNode::onReadyRead] unknown exception";
     }
 }
 

@@ -60,65 +60,109 @@ quint32 TaLobby::getLocalPlayerDplayId()
 
 void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
 {
-    if (m_game)
+    try
     {
-        return;
-    }
+        if (m_game)
+        {
+            return;
+        }
 
-    m_tafnetIdsByPlayerName[playerName] = playerId;
-    m_gameMonitor->setHostPlayerName(playerName.toStdString()); // assume we're host until call to onJoinGame() indicates otherwise
-    m_gameMonitor->setLocalPlayerName(playerName.toStdString()); // this won't change
-    m_proxy.reset(new tafnet::TafnetNode(
-        playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
-    m_game.reset(new tafnet::TafnetGameNode(
-        m_proxy.data(),
-        m_packetParser.data(),
-        [this]() { return new tafnet::GameSender(this->m_gameAddress, 47624); },
-        [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 0, 0, udpSocket);
-    }));
+        m_tafnetIdsByPlayerName[playerName] = playerId;
+        m_gameMonitor->setHostPlayerName(playerName.toStdString()); // assume we're host until call to onJoinGame() indicates otherwise
+        m_gameMonitor->setLocalPlayerName(playerName.toStdString()); // this won't change
+        m_proxy.reset(new tafnet::TafnetNode(
+            playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
+        m_game.reset(new tafnet::TafnetGameNode(
+            m_proxy.data(),
+            m_packetParser.data(),
+            [this]() { return new tafnet::GameSender(this->m_gameAddress, 47624); },
+            [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 0, 0, udpSocket);
+        }));
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TaLobby::onCreateLobby] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaLobby::onCreateLobby] unknown exception";
+    }
 }
 
 void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
 {
-    if (!m_proxy || !m_game)
+    try
     {
-        return;
-    }
+        if (!m_proxy || !m_game)
+        {
+            return;
+        }
 
-    m_tafnetIdsByPlayerName[playerName] = playerId;
-    QHostAddress host("127.0.0.1");
-    quint16 port = 6112;
-    SplitHostAndPort(_host, host, port);
-    m_gameMonitor->setHostPlayerName(playerName.toStdString());
-    m_proxy->joinGame(host, port, playerId);
-    m_game->registerRemotePlayer(playerId, 47624);
+        m_tafnetIdsByPlayerName[playerName] = playerId;
+        QHostAddress host("127.0.0.1");
+        quint16 port = 6112;
+        SplitHostAndPort(_host, host, port);
+        m_gameMonitor->setHostPlayerName(playerName.toStdString());
+        m_proxy->joinGame(host, port, playerId);
+        m_game->registerRemotePlayer(playerId, 47624);
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TaLobby::onJoinGame] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaLobby::onJoinGame] unknown exception";
+    }
 }
 
 void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
 {
-    if (!m_proxy || !m_game)
+    try
     {
-        return;
-    }
+        if (!m_proxy || !m_game)
+        {
+            return;
+        }
 
-    m_tafnetIdsByPlayerName[playerName] = playerId;
-    QHostAddress host("127.0.0.1");
-    quint16 port = 6112;
-    SplitHostAndPort(_host, host, port);
-    m_proxy->connectToPeer(host, port, playerId);
-    m_game->registerRemotePlayer(playerId, 0);
+        m_tafnetIdsByPlayerName[playerName] = playerId;
+        QHostAddress host("127.0.0.1");
+        quint16 port = 6112;
+        SplitHostAndPort(_host, host, port);
+        m_proxy->connectToPeer(host, port, playerId);
+        m_game->registerRemotePlayer(playerId, 0);
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TaLobby::onConnectToPeer] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaLobby::onConnectToPeer] unknown exception";
+    }
 }
 
 void TaLobby::onDisconnectFromPeer(int playerId)
 {
-    qDebug() << "[TaLobby::onDisconnectFromPeer]" << playerId;
-    if (!m_proxy || !m_game)
+    try
     {
-        return;
-    }
+        qDebug() << "[TaLobby::onDisconnectFromPeer]" << playerId;
+        if (!m_proxy || !m_game)
+        {
+            return;
+        }
 
-    m_proxy->disconnectFromPeer(playerId);
-    m_game->unregisterRemotePlayer(playerId);
+        m_proxy->disconnectFromPeer(playerId);
+        m_game->unregisterRemotePlayer(playerId);
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[TaLobby::onDisconnectFromPeer] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaLobby::onDisconnectFromPeer] unknown exception";
+    }
 }
 
 void TaLobby::echoToGame(bool isPrivate, QString name, QString chat)

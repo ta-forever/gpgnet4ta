@@ -17,78 +17,122 @@ GpgNetGameLauncher::GpgNetGameLauncher(
 
 void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
 {
-    qInfo() << "[GpgNetGameLauncher::handleCreateLobby] playername=" << playerName << "playerId=" << playerId;
-    m_thisPlayerName = playerName;
-    m_thisPlayerId = playerId;
-    m_jdplay.updatePlayerName(playerName.toStdString().c_str());
-    m_gpgNetSend.gameState("Lobby");
+    try
+    {
+        qInfo() << "[GpgNetGameLauncher::handleCreateLobby] playername=" << playerName << "playerId=" << playerId;
+        m_thisPlayerName = playerName;
+        m_thisPlayerId = playerId;
+        m_jdplay.updatePlayerName(playerName.toStdString().c_str());
+        m_gpgNetSend.gameState("Lobby");
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetGameLauncher::onCreateLobby] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetGameLauncher::onCreateLobby] unknown exception";
+    }
 }
 
 void GpgNetGameLauncher::pollJdplayStillActive()
 {
-    if (!m_jdplay.pollStillActive())
+    try
     {
-        m_jdplay.releaseDirectPlay();
-        m_pollStillActiveTimer.stop();
-        m_gpgNetSend.gameEnded();
-        emit gameTerminated();
+        if (!m_jdplay.pollStillActive())
+        {
+            m_jdplay.releaseDirectPlay();
+            m_pollStillActiveTimer.stop();
+            m_gpgNetSend.gameEnded();
+            emit gameTerminated();
+        }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetGameLauncher::pollJdplayStillActive] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetGameLauncher::pollJdplayStillActive] unknown exception";
     }
 }
 
 void GpgNetGameLauncher::onHostGame(QString mapName)
 {
-    qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
-    QString sessionName = m_thisPlayerName + "'s Game";
-    createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, mapName, m_playerLimit, m_lockOptions);
-    bool ret = m_jdplay.initialize(m_guid.toStdString().c_str(), "127.0.0.1", true, 10);
-    if (!ret)
+    try
     {
-        qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to initialise dplay";
-        emit gameFailedToLaunch();
-        return;
-    }
-    qInfo() << "[GpgNetGameLauncher::handleHostGame] jdplay.launch(host)";
-    ret = m_jdplay.launch(true);
-    if (!ret)
-    {
-        qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to launch game";
-        emit gameFailedToLaunch();
-        return;
-    }
+        qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
+        QString sessionName = m_thisPlayerName + "'s Game";
+        createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, mapName, m_playerLimit, m_lockOptions);
+        bool ret = m_jdplay.initialize(m_guid.toStdString().c_str(), "127.0.0.1", true, 10);
+        if (!ret)
+        {
+            qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to initialise dplay";
+            emit gameFailedToLaunch();
+            return;
+        }
+        qInfo() << "[GpgNetGameLauncher::handleHostGame] jdplay.launch(host)";
+        ret = m_jdplay.launch(true);
+        if (!ret)
+        {
+            qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to launch game";
+            emit gameFailedToLaunch();
+            return;
+        }
 
-    m_pollStillActiveTimer.start(3000);
-    m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
-    m_gpgNetSend.gameOption("Slots", m_playerLimit);
+        m_pollStillActiveTimer.start(3000);
+        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
+        m_gpgNetSend.gameOption("Slots", m_playerLimit);
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetGameLauncher::onHostGame] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetGameLauncher::onHostGame] unknown exception";
+    }
 }
 
 void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int playerId)
 {
-    qInfo() << "[GpgNetGameLauncher::handleJoinGame] playername=" << playerName << "playerId=" << playerId;
-    const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
-
-    char hostip[257] = { 0 };
-    std::strncpy(hostip, hostOn47624, 256);
-
-    qInfo() << "[GpgNetGameLauncher::handleJoinGame] jdplay.initialize(join):" << m_guid << hostip;
-    bool ret = m_jdplay.initialize(m_guid.toStdString().c_str(), hostip, false, m_playerLimit);
-    if (!ret)
+    try
     {
-        qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to initialise dplay";
-        emit gameFailedToLaunch();
-        return;
-    }
+        qInfo() << "[GpgNetGameLauncher::handleJoinGame] playername=" << playerName << "playerId=" << playerId;
+        const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
 
-    qInfo() << "[GpgNetGameLauncher::handleJoinGame] jdplay.launch(join)";
-    ret = m_jdplay.launch(true);
-    if (!ret)
-    {
-        qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to launch game";
-        m_jdplay.releaseDirectPlay();
-        emit gameFailedToLaunch();
-        return;
+        char hostip[257] = { 0 };
+        std::strncpy(hostip, hostOn47624, 256);
+
+        qInfo() << "[GpgNetGameLauncher::handleJoinGame] jdplay.initialize(join):" << m_guid << hostip;
+        bool ret = m_jdplay.initialize(m_guid.toStdString().c_str(), hostip, false, m_playerLimit);
+        if (!ret)
+        {
+            qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to initialise dplay";
+            emit gameFailedToLaunch();
+            return;
+        }
+
+        qInfo() << "[GpgNetGameLauncher::handleJoinGame] jdplay.launch(join)";
+        ret = m_jdplay.launch(true);
+        if (!ret)
+        {
+            qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to launch game";
+            m_jdplay.releaseDirectPlay();
+            emit gameFailedToLaunch();
+            return;
+        }
+        m_pollStillActiveTimer.start(3000);
+        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
     }
-    m_pollStillActiveTimer.start(3000);
-    m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetGameLauncher::onJoinGame] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetGameLauncher::onJoinGame] unknown exception";
+    }
 }
 
 void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions)

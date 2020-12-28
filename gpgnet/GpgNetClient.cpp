@@ -38,49 +38,60 @@ m_datastream(&m_socket)
 
 void GpgNetClient::onReadyRead()
 {
-    QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
-    while (sender->bytesAvailable() > 0)
+    try
     {
-        QVariantList serverCommand = gpgnet::GpgNetParse::GetCommand(m_datastream);
-        QString cmd = serverCommand[0].toString();
-        qInfo() << "[GpgNetClient::onReadyRead] gpgnet command received:" << cmd;
+        QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
+        while (sender->bytesAvailable() > 0)
+        {
+            QVariantList serverCommand = gpgnet::GpgNetParse::GetCommand(m_datastream);
+            QString cmd = serverCommand[0].toString();
+            qInfo() << "[GpgNetClient::onReadyRead] gpgnet command received:" << cmd;
 
-        if (cmd == "CreateLobby")
-        {
-            CreateLobbyCommand clc;
-            clc.Set(serverCommand);
-            m_gpgnetPlayerIds[clc.playerName] = clc.playerId;
-            emit createLobby(
-                clc.protocol, clc.localPort, clc.playerName,
-                clc.playerId, clc.natTraversal);
+            if (cmd == "CreateLobby")
+            {
+                CreateLobbyCommand clc;
+                clc.Set(serverCommand);
+                m_gpgnetPlayerIds[clc.playerName] = clc.playerId;
+                emit createLobby(
+                    clc.protocol, clc.localPort, clc.playerName,
+                    clc.playerId, clc.natTraversal);
+            }
+            else if (cmd == "HostGame")
+            {
+                HostGameCommand hgc;
+                hgc.Set(serverCommand);
+                emit hostGame(hgc.mapName);
+            }
+            else if (cmd == "JoinGame")
+            {
+                JoinGameCommand jgc(serverCommand);
+                m_gpgnetPlayerIds[jgc.remotePlayerName()] = jgc.remotePlayerId;
+                qInfo() << "[GpgNetClient::onReadyRead] join game: playername=" << jgc.remotePlayerName() << "playerId=" << jgc.remotePlayerId;
+                emit joinGame(jgc.remoteHost(), jgc.remotePlayerName(), jgc.remotePlayerId);
+            }
+            else if (cmd == "ConnectToPeer")
+            {
+                ConnectToPeerCommand ctp(serverCommand);
+                m_gpgnetPlayerIds[ctp.playerName()] = ctp.playerId;
+                qInfo() << "[GpgNetClient::onReadyRead] connect to peer: playername=" << ctp.playerName() << "playerId=" << ctp.playerId;
+                emit connectToPeer(ctp.host(), ctp.playerName(), ctp.playerId);
+            }
+            else if (cmd == "DisconnectFromPeer")
+            {
+                DisconnectFromPeerCommand ctp(serverCommand);
+                qInfo() << "[GpgNetClient::onReadyRead] disconnect from peer: playerid=" << ctp.playerId;
+                //gpgPlayerIds erase where value == ctp.playerId; // not super important
+                emit disconnectFromPeer(ctp.playerId);
+            }
         }
-        else if (cmd == "HostGame")
-        {
-            HostGameCommand hgc;
-            hgc.Set(serverCommand);
-            emit hostGame(hgc.mapName);
-        }
-        else if (cmd == "JoinGame")
-        {
-            JoinGameCommand jgc(serverCommand);
-            m_gpgnetPlayerIds[jgc.remotePlayerName()] = jgc.remotePlayerId;
-            qInfo() << "[GpgNetClient::onReadyRead] join game: playername=" << jgc.remotePlayerName() << "playerId=" << jgc.remotePlayerId;
-            emit joinGame(jgc.remoteHost(), jgc.remotePlayerName(), jgc.remotePlayerId);
-        }
-        else if (cmd == "ConnectToPeer")
-        {
-            ConnectToPeerCommand ctp(serverCommand);
-            m_gpgnetPlayerIds[ctp.playerName()] = ctp.playerId;
-            qInfo() << "[GpgNetClient::onReadyRead] connect to peer: playername=" << ctp.playerName() << "playerId=" << ctp.playerId;
-            emit connectToPeer(ctp.host(), ctp.playerName(), ctp.playerId);
-        }
-        else if (cmd == "DisconnectFromPeer")
-        {
-            DisconnectFromPeerCommand ctp(serverCommand);
-            qInfo() << "[GpgNetClient::onReadyRead] disconnect from peer: playerid=" << ctp.playerId;
-            //gpgPlayerIds erase where value == ctp.playerId; // not super important
-            emit disconnectFromPeer(ctp.playerId);
-        }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetClient::onReadyRead] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetClient::onReadyRead] unknown exception";
     }
 }
 
@@ -102,9 +113,20 @@ quint32 GpgNetClient::lookupPlayerId(QString playerName)
 
 void GpgNetClient::onSocketStateChanged(QAbstractSocket::SocketState socketState)
 {
-    if (socketState == QAbstractSocket::UnconnectedState)
+    try
     {
-        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
-        qInfo() << "[GpgNetClient::onSocketStateChanged/UnconnectedState]" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        if (socketState == QAbstractSocket::UnconnectedState)
+        {
+            QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+            qInfo() << "[GpgNetClient::onSocketStateChanged/UnconnectedState]" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        }
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetClient::onSocketStateChanged] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetClient::onSocketStateChanged] unknown exception";
     }
 }

@@ -122,8 +122,8 @@ public:
             }
             case 0x20: // status
             {
-                std::cout << "status" << std::endl;
-                TADemo::HexDump(s.data(), s.size(), std::cout);
+                //std::cout << "status" << std::endl;
+                //TADemo::HexDump(s.data(), s.size(), std::cout);
                 break;
             }
             case 0x2c: // tick
@@ -185,10 +185,10 @@ public:
 
 int main(int argc, char **argv)
 {
-    for (const char *fn : {
-        R"(D:\wrk\faf\gamelogs\20201224 gamma false positive victory condition\2020-12-24 - [V] Cold Steel - gamma, Starmander.ted)"
-    })
+    for (int narg = 1; narg < argc; ++narg)
     {
+        const char *fn = argv[narg];
+
         std::cout << "---------------" << std::endl;
         std::cout << fn << std::endl;
         GameEventPrinter printer;

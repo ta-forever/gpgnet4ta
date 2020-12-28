@@ -186,78 +186,133 @@ public:
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
     {
-        qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] GameOption" << mapName << "host" << hostName << "local" << localName;
-        m_isHost = hostName == localName;
-        if (m_isHost)
+        try
         {
-            m_gpgNetClient.gameOption("MapName", mapName);
+            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] GameOption" << mapName << "host" << hostName << "local" << localName;
+            m_isHost = hostName == localName;
+            if (m_isHost)
+            {
+                m_gpgNetClient.gameOption("MapName", mapName);
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameSettings] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameSettings] unknown exception";
         }
     }
 
     virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
-        QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
-
-        // Forged Alliance reserves Team=1 for the team-not-selected team
-        if (isAI || gpgnetId == 0)
+        try
         {
-            int teamNumber = int(_teamNumber);
-            QString aiName = makeAiName(name, slot);
-            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] AiOption" << aiName << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
-            if (m_isHost)
+            QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
+
+            // Forged Alliance reserves Team=1 for the team-not-selected team
+            if (isAI || gpgnetId == 0)
             {
-                m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
-                m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
-                m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
-                m_gpgNetClient.aiOption(aiName, "Faction", side);
+                int teamNumber = int(_teamNumber);
+                QString aiName = makeAiName(name, slot);
+                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] AiOption" << aiName << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+                if (m_isHost)
+                {
+                    m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
+                    m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
+                    m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
+                    m_gpgNetClient.aiOption(aiName, "Faction", side);
+                }
+            }
+            else
+            {
+                int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
+                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] PlayerOption" << name << "id" << gpgnetId << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+                if (m_isHost)
+                {
+                    m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
+                    m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
+                    m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
+                    m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+                }
             }
         }
-        else
+        catch (std::exception &e)
         {
-            int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
-            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] PlayerOption" << name << "id" << gpgnetId << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
-            if (m_isHost)
-            {
-                m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
-                m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
-                m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
-                m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
-            }
+            qWarning() << "[ForwardGameEventsToGpgNet::onPlayerStatus] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onPlayerStatus] unknown exception";
         }
     }
 
     virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot)
     {
-        qInfo() << "[ForwardGameEventsToGpgNet::onClearSlot]" << name << "slot" << slot;
-        if (m_isHost)
+        try
         {
-            m_gpgNetClient.clearSlot(slot);
+            qInfo() << "[ForwardGameEventsToGpgNet::onClearSlot]" << name << "slot" << slot;
+            if (m_isHost)
+            {
+                m_gpgNetClient.clearSlot(slot);
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onClearSlot] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onClearSlot] unknown exception";
         }
     }
 
     virtual void onGameStarted(quint32 tick, bool teamsFrozen)
     {
-        if (teamsFrozen)
+        try
         {
-            qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState Launching";
-            if (m_isHost)
+            if (teamsFrozen)
             {
-                m_gpgNetClient.gameState("Launching");
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState Launching";
+                if (m_isHost)
+                {
+                    m_gpgNetClient.gameState("Launching");
+                }
             }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameStarted] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameStarted] unknown exception";
         }
     }
 
     virtual void onGameEnded(QList<QVariantMap> results)
     {
-        for (const QVariantMap& result : results)
+        try
         {
-            int army = result.value("army").toInt();
-            int score = result.value("score").toInt();
-            qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded]" << result;
-            m_gpgNetClient.gameResult(army, score);
+            for (const QVariantMap& result : results)
+            {
+                int army = result.value("army").toInt();
+                int score = result.value("score").toInt();
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded]" << result;
+                m_gpgNetClient.gameResult(army, score);
+            }
+            qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded] GameState Ended";
+            m_gpgNetClient.gameState("Ended");
         }
-        qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded] GameState Ended";
-        m_gpgNetClient.gameState("Ended");
+        catch (std::exception &e)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameEnded] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[ForwardGameEventsToGpgNet::onGameEnded] unknown exception";
+        }
     }
 
     virtual void onChat(QString msg, bool isLocalPlayerSource)
@@ -289,112 +344,178 @@ public:
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
     {
-        if (mapName != m_selectedMap)
+        try
         {
-            doSend("Map changed to: " + mapName.toStdString(), true, false);
-            m_selectedMap = mapName;
+            if (mapName != m_selectedMap)
+            {
+                doSend("Map changed to: " + mapName.toStdString(), true, false);
+                m_selectedMap = mapName;
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onGameSettings] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onGameSettings] unknown exception";
         }
     }
 
     virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
-        if (slot < m_playerNames.size())
+        try
         {
-            m_playerNames[slot] = name;
-            m_isAI[slot] = isAI;
+            if (slot < m_playerNames.size())
+            {
+                m_playerNames[slot] = name;
+                m_isAI[slot] = isAI;
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onPlayerStatus] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onPlayerStatus] unknown exception";
         }
     }
 
     virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot)
     {
-        if (slot < m_playerNames.size())
+        try
         {
-            m_playerNames[slot].clear();
-            m_isAI[slot] = false;
+            if (slot < m_playerNames.size())
+            {
+                m_playerNames[slot].clear();
+                m_isAI[slot] = false;
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onClearSlot] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onClearSlot] unknown exception";
         }
     }
 
     virtual void onGameStarted(quint32 tick, bool teamsFrozen)
     {
-        const int occupancyCount = getOccupancyCount();
-        const int aiCount = getAiCount();
-        const int humanCount = occupancyCount - aiCount;
-
-        if (!teamsFrozen && aiCount == 0)
+        try
         {
-            if (humanCount >= 3)
-            {
-                doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
-                doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
-                doSend("/quit to disconnect so team can .take (unless UR host!)", false, true);
-            }
-            else if (humanCount == 2)
-            {
-                doSend("Game becomes rated after 1:00", false, true);
-                doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
-            }
+            const int occupancyCount = getOccupancyCount();
+            const int aiCount = getAiCount();
+            const int humanCount = occupancyCount - aiCount;
 
-            if (m_irc && m_irc->isActive())
+            if (!teamsFrozen && aiCount == 0)
             {
-                doSend("/closeirc to close your ingame/TAF chat relay", false, true);
+                if (humanCount >= 3)
+                {
+                    doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
+                    doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                    doSend("/quit to disconnect so team can .take (unless UR host!)", false, true);
+                }
+                else if (humanCount == 2)
+                {
+                    doSend("Game becomes rated after 1:00", false, true);
+                    doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                }
+
+                if (m_irc && m_irc->isActive())
+                {
+                    doSend("/closeirc to close your ingame/TAF chat relay", false, true);
+                }
             }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onGameStarted] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onGameStarted] unknown exception";
         }
     }
 
     virtual void onGameEnded(QList<QVariantMap> results)
     {
-        doSend("Game over man, game over!", true, true);
-        for (const QVariantMap &result: results)
+        try
         {
-            std::ostringstream ss;
-            std::string name = result.value("name").toString().toStdString();
-            int slot = result.value("slot").toInt();
-            int team = result.value("team").toInt();
-            int score = result.value("score").toInt();
-            std::string outcome;
-            if (score > 0)
-                outcome = "VICTORY";
-            else if (score == 0)
-                outcome = "DRAW";
-            else
-                outcome = "DEFEAT";
+            doSend("Game over man, game over!", true, true);
+            for (const QVariantMap &result : results)
+            {
+                std::ostringstream ss;
+                std::string name = result.value("name").toString().toStdString();
+                int slot = result.value("slot").toInt();
+                int team = result.value("team").toInt();
+                int score = result.value("score").toInt();
+                std::string outcome;
+                if (score > 0)
+                    outcome = "VICTORY";
+                else if (score == 0)
+                    outcome = "DRAW";
+                else
+                    outcome = "DEFEAT";
 
-            ss << name << ": " << outcome;
-            doSend(ss.str(), true, true);
+                ss << name << ": " << outcome;
+                doSend(ss.str(), true, true);
+            }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onGameEnded] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onGameEnded] unknown exception";
         }
     }
 
     virtual void onChat(QString msg, bool isLocalPlayerSource)
     {
-        if (isLocalPlayerSource && msg.size()>0)
+        try
         {
-            int n = msg.lastIndexOf("> ");
-            if (msg[0] == '<' && n >= 0 && n + 2 < msg.size())
+            if (isLocalPlayerSource && msg.size() > 0)
             {
-                // remove the <name> tag so player doesn't get pinged in IRC
-                msg = msg.mid(n + 2);
-            }
+                int n = msg.lastIndexOf("> ");
+                if (msg[0] == '<' && n >= 0 && n + 2 < msg.size())
+                {
+                    // remove the <name> tag so player doesn't get pinged in IRC
+                    msg = msg.mid(n + 2);
+                }
 
-            doSend(msg.toStdString(), true, false);
+                doSend(msg.toStdString(), true, false);
 
-            m_quitRequested = msg == "/quit" ? ++m_quitRequested : 0;
-            if (m_quitRequested == 1)
-            {
-                doSend("Type /quit again to disconnect your game", false, true);
-            }
-            else if (m_quitRequested == 2)
-            {
-                doSend("ok your game is disconnected you can alt-f4", false, true);
-                qApp->quit();
-            }
-            else if (msg == "/closeirc")
-            {
-                if (m_irc && m_irc->isActive()) {
-                    m_irc->quit(m_irc->realName());
-                    m_irc->close();
-                    doSend("ok IRC relay is closed", false, true);
+                m_quitRequested = msg == "/quit" ? ++m_quitRequested : 0;
+                if (m_quitRequested == 1)
+                {
+                    doSend("Type /quit again to disconnect your game", false, true);
+                }
+                else if (m_quitRequested == 2)
+                {
+                    doSend("ok your game is disconnected you can alt-f4", false, true);
+                    qApp->quit();
+                }
+                else if (msg == "/closeirc")
+                {
+                    if (m_irc && m_irc->isActive()) {
+                        m_irc->quit(m_irc->realName());
+                        m_irc->close();
+                        doSend("ok IRC relay is closed", false, true);
+                    }
                 }
             }
+        }
+        catch (std::exception &e)
+        {
+            qWarning() << "[HandleGameStatus::onChat] exception" << e.what();
+        }
+        catch (...)
+        {
+            qWarning() << "[HandleGameStatus::onChat] unknown exception";
         }
     }
 
@@ -854,7 +975,18 @@ int main(int argc, char* argv[])
             qInfo() << "[main] connecting IRC to lobby";
             QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby](IrcPrivateMessage* msg)
             {
-                lobby.echoToGame(msg->isPrivate(), msg->nick(), msg->content());
+                try
+                {
+                    lobby.echoToGame(msg->isPrivate(), msg->nick(), msg->content());
+                }
+                catch (std::exception &e)
+                {
+                    qInfo() << "[main::privateMessageReceived] exception" << e.what();
+                }
+                catch (...)
+                {
+                    qInfo() << "[main::privateMessageReceived] unknown exception";
+                }
             });
         }
         app.exec();

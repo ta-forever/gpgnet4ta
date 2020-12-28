@@ -71,60 +71,104 @@ int GameReceiver::getChannelCodeFromSocket(QAbstractSocket* socket)
 
 void GameReceiver::onNewConnection()
 {
-    QTcpSocket* clientSocket = m_tcpServer.nextPendingConnection();
-    if (clientSocket == NULL)
+    try
     {
-        clientSocket = m_enumServer.nextPendingConnection();
+        QTcpSocket* clientSocket = m_tcpServer.nextPendingConnection();
+        if (clientSocket == NULL)
+        {
+            clientSocket = m_enumServer.nextPendingConnection();
+        }
+        if (clientSocket == NULL)
+        {
+            qInfo() << "[GameReceiver::onNewConnection] unexpected connection";
+            return;
+        }
+        qInfo() << "[GameReceiver::onNewConnection]" << clientSocket->localAddress().toString() << ":" << clientSocket->localPort() << "from" << clientSocket->peerAddress().toString();
+        QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadTcp);
+        QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &GameReceiver::onSocketStateChanged);
+        m_sockets.push_back(clientSocket);
     }
-    if (clientSocket == NULL)
+    catch (std::exception &e)
     {
-        qInfo() << "[GameReceiver::onNewConnection] unexpected connection";
-        return;
+        qWarning() << "[GameReceiver::onNewConnection] exception" << e.what();
     }
-    qInfo() << "[GameReceiver::onNewConnection]" << clientSocket->localAddress().toString() << ":" << clientSocket->localPort() << "from" << clientSocket->peerAddress().toString();
-    QObject::connect(clientSocket, &QTcpSocket::readyRead, this, &GameReceiver::onReadyReadTcp);
-    QObject::connect(clientSocket, &QTcpSocket::stateChanged, this, &GameReceiver::onSocketStateChanged);
-    m_sockets.push_back(clientSocket);
+    catch (...)
+    {
+        qWarning() << "[GameReceiver::onNewConnection] unknown exception";
+    }
 }
 
 void GameReceiver::onSocketStateChanged(QAbstractSocket::SocketState socketState)
 {
-    if (socketState == QAbstractSocket::UnconnectedState)
+    try
     {
-        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
-        qInfo() << "[GameReceiver::onSocketStateChanged/UnconnectedState]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString();
-        m_sockets.removeOne(sender);
-        if (sender->localPort() == m_tcpPort)
+        if (socketState == QAbstractSocket::UnconnectedState)
         {
-            handleMessage(sender, CHANNEL_TCP, NULL, 0);
+            QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+            qInfo() << "[GameReceiver::onSocketStateChanged/UnconnectedState]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString();
+            m_sockets.removeOne(sender);
+            if (sender->localPort() == m_tcpPort)
+            {
+                handleMessage(sender, CHANNEL_TCP, NULL, 0);
+            }
+            //delete sender;
         }
-        //delete sender;
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GameReceiver::onSocketStateChanged] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GameReceiver::onSocketStateChanged] unknown exception";
     }
 }
 
 void GameReceiver::onReadyReadTcp()
 {
-    QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
-    //qInfo() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
-    QByteArray datas = sender->readAll();
-    handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
+    try
+    {
+        QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
+        //qInfo() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        QByteArray datas = sender->readAll();
+        handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GameReceiver::onReadyReadTcp] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GameReceiver::onReadyReadTcp] unknown exception";
+    }
 }
 
 void GameReceiver::onReadyReadUdp()
 {
-    //QByteArray datas;
-    //datas.resize(m_proxySocket.pendingDatagramSize());
-    //QHostAddress sender;
-    //quint16 senderPort;
-    //m_proxySocket.readDatagram(datas.data(), datas.size(), &sender, &senderPort);
-    QUdpSocket* sender = dynamic_cast<QUdpSocket*>(QObject::sender());
-    //qInfo() << "[GameReceiver::onReadyReadUdp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
-    QByteArray datas;
-    datas.resize(sender->pendingDatagramSize());
-    QHostAddress senderAddress;
-    quint16 senderPort;
-    sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
-    handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
+    try
+    {
+        //QByteArray datas;
+        //datas.resize(m_proxySocket.pendingDatagramSize());
+        //QHostAddress sender;
+        //quint16 senderPort;
+        //m_proxySocket.readDatagram(datas.data(), datas.size(), &sender, &senderPort);
+        QUdpSocket* sender = dynamic_cast<QUdpSocket*>(QObject::sender());
+        //qInfo() << "[GameReceiver::onReadyReadUdp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
+        QByteArray datas;
+        datas.resize(sender->pendingDatagramSize());
+        QHostAddress senderAddress;
+        quint16 senderPort;
+        sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+        handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GameReceiver::onReadyReadUdp] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GameReceiver::onReadyReadUdp] unknown exception";
+    }
 }
 
 void GameReceiver::handleMessage(QAbstractSocket* receivingSocket, int channel, char* data, int len)
