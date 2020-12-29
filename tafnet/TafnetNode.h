@@ -10,6 +10,8 @@
 namespace tafnet
 {
 
+    const int MAX_PACKET_SIZE = 500;
+
     struct Payload
     {
         static const unsigned ACTION_INVALID = 0;
@@ -24,6 +26,8 @@ namespace tafnet
         static const unsigned ACTION_TCP_RESEND = 8;
         static const unsigned ACTION_MORE = 9;
         static const unsigned ACTION_ENUM = 10;
+        static const unsigned ACTION_UDP_PROTECTED = 11;
+
 
         std::uint8_t action;
         QSharedPointer<QByteArray> buf;
@@ -55,6 +59,7 @@ namespace tafnet
         std::uint32_t earliestAvailable();
     };
 
+#pragma pack(push, 1)
     struct TafnetMessageHeader
     {
         std::uint8_t action;
@@ -65,6 +70,7 @@ namespace tafnet
         std::uint8_t action;
         std::uint32_t seq;
     };
+#pragma pack(pop)
 
     class TafnetNode : public QObject
     {

@@ -86,7 +86,12 @@ namespace TADemo
 
         static std::vector<bytestring> unsmartpak(const bytestring &c, unsigned version);
         static bytestring trivialSmartpak(const bytestring& subpacket, std::uint32_t tcpseq);
+        static bytestring smartpak(const std::vector<bytestring> &subpackets, std::size_t from, std::size_t to);
+        static void smartpak(const std::vector<bytestring> &unpaked, std::size_t maxCompressedSize, std::vector<bytestring> &resultsPakedAndCompressed, std::size_t from, std::size_t to);
+        static std::vector<bytestring> resmartpak(const bytestring &encrypted, std::size_t maxCompressedSize);
         static bytestring createChatSubpacket(const std::string& message);
+
+
 
         // @param s string who's characters contain bits of an integer <char1>,<char2>,<char3>,<char4>,etc
         // @param start number of bits into the string from where the number starts.  eg 0 starts at LSB of char1.  8 starts at LSB of char2.

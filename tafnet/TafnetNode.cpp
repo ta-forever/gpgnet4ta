@@ -7,17 +7,13 @@
 #endif
 
 //#define SIM_PACKET_LOSS 50
-#define SIM_PACKET_TRUNCATE 300
-
+//#define SIM_PACKET_TRUNCATE 250
 
 #ifdef SIM_PACKET_LOSS
 #include <random>
 std::default_random_engine generator;
 std::uniform_int_distribution<int> distribution(0, 99);
 #endif
-
-
-static const int MAX_PACKET_SIZE = 256;
 
 using namespace tafnet;
 
@@ -190,6 +186,12 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     m_proactiveResendEnabled(proactiveResend)
 {
     qInfo() << "[TafnetNode::TafnetNode] proactiveResend=" << proactiveResend;
+    qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetMessageHeader)=" << sizeof(TafnetMessageHeader);
+    qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetBufferedHeader)=" << sizeof(TafnetBufferedHeader);
+    qInfo() << "[TafnetNode::TafnetNode] MAX_PACKET_SIZE=" << MAX_PACKET_SIZE;
+#ifdef SIM_PACKET_TRUNCATE
+    qInfo() << "[TafnetNode::TafnetNode] SIM_PACKET_TRUNCATE=" << SIM_PACKET_TRUNCATE;
+#endif
 
     m_lobbySocket.bind(bindAddress, bindPort);
     qInfo() << "[TafnetNode::TafnetNode] playerId" << m_playerId << "udp binding to" << m_lobbySocket.localAddress().toString() << ":" << m_lobbySocket.localPort();

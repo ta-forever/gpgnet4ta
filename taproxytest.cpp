@@ -54,8 +54,8 @@ public:
 
 void runtests()
 {
-    //TADemo::TPacket::test();
-    GameMonitor2::test();
+    TADemo::TPacket::test();
+    //GameMonitor2::test();
 }
 
 int main(int argc, char* argv[])

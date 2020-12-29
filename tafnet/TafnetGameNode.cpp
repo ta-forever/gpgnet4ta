@@ -110,6 +110,16 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         resetGameConnection();
     }
 
+    else if (channelCode == GameReceiver::CHANNEL_UDP && len > MAX_PACKET_SIZE)
+    {
+        // split/reassemble with ack/resend to ensure delivery to remote TafnetNode, but still delivered to game's UDP port
+        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_PROTECTED, data, len);
+        if (m_packetParser)
+        {
+            m_packetParser->parseGameData(data, len);
+        }
+    }
+
     else if (channelCode == GameReceiver::CHANNEL_UDP)
     {
         m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_DATA, data, len);
@@ -192,6 +202,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
         gameSender->closeTcpSocket();
         break;
 
+    case Payload::ACTION_UDP_PROTECTED:
     case Payload::ACTION_UDP_DATA:
     {
         gameSender->sendUdpData(data, len);
@@ -223,11 +234,6 @@ TafnetGameNode::TafnetGameNode(
     m_tafnetNode->setHandler([this](std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len) {
         this->handleTafnetMessage(action, peerPlayerId, data, len);
     });
-
-    // we'll use tafnetid=0 for relaying IRC chat messages
-    // and also ensure we receive game status updates before anyone else joins game
-    GameSender *sender = getGameSender(0);
-    GameReceiver* receiver = getGameReceiver(0, sender->getUdpSocket());
 }
 
 void TafnetGameNode::sendEnumRequest(QUuid gameGuid, std::uint32_t asPeerId)
@@ -329,14 +335,9 @@ void TafnetGameNode::resetGameConnection()
 
 void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat)
 {
-    if (true) //m_gameSenders.count(tafnetid) > 0)
+    if (!m_gameSenders.empty())
     {
-        //GameSender* sender = m_gameSenders[tafnetid].get();
-        //GameReceiver* receiver = m_gameReceivers[tafnetid].get();
-
-        GameSender* sender = getGameSender(0);
-        GameReceiver* receiver = getGameReceiver(0, sender->getUdpSocket());
-
+        GameSender* sender = m_gameSenders.begin()->second.get();
         std::string message(chat);
         if (nick.size() > 0)
         {
@@ -355,10 +356,11 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
         bs = TADemo::TPacket::compress(bs);
         bs = TADemo::TPacket::encrypt(bs);
 
-        TADemo::DPHeader dpheader(
-            receiver->getBindAddress().toIPv4Address(), receiver->getTcpListenPort(), &sourceDplayId, TADemo::DPlayCommandCode::NONE, 0, bs.size());
-        bs = TADemo::bytestring((const uint8_t*)&dpheader, sizeof(dpheader)) + bs;
+        std::uint32_t zeroDplayId = 0u;
+        bs = TADemo::bytestring((std::uint8_t*) & sourceDplayId, 4)
+            + TADemo::bytestring((std::uint8_t*) & zeroDplayId, 4)
+            + bs;
 
-        sender->sendTcpData((char*)bs.data(), bs.size());
+        sender->sendUdpData((char*)bs.data(), bs.size());
     }
 }
