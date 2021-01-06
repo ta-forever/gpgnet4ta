@@ -22,8 +22,13 @@ namespace gpgnet
         m_os << quint8(0) << quint32(arg);
     }
 
-    void GpgNetSend::gameState(QString state)
+    void GpgNetSend::gameState(QString state, QString substate)
     {
+        // ICE adapter drops 2nd GameState argument. So here we just bung the substate into a GameOption beforehand
+        // ..... @todo work out how to build the ICE adapter so we can customise it for our own purposes
+        SendCommand("GameOption", 2);
+        SendArgument("SubState");
+        SendArgument(substate);
         SendCommand("GameState", 1);
         SendArgument(state);
     }

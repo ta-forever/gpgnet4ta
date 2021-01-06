@@ -6,28 +6,33 @@
 #include <QtCore/qtimer.h>
 
 #include "tademo/DuplicateDetection.h"
+#include "tademo/nswfl_crc32.h"
 
 namespace tafnet
 {
 
-    const int MAX_PACKET_SIZE = 500;
+    const std::uint32_t MAX_PACKET_SIZE_UPPER_LIMIT = 1492;
+    const std::uint32_t MAX_PACKET_SIZE_LOWER_LIMIT = 250;
 
     struct Payload
     {
         static const unsigned ACTION_INVALID = 0;
 
-        static const unsigned ACTION_HELLO = 1;
-        static const unsigned ACTION_UDP_DATA = 3;
-        static const unsigned ACTION_TCP_OPEN = 4;
-        static const unsigned ACTION_TCP_CLOSE = 5;
+        // messages wrapped with TafnetMessageHeader
+        static const unsigned ACTION_UDP_DATA = 2;
+        static const unsigned ACTION_TCP_OPEN = 3;
+        static const unsigned ACTION_TCP_CLOSE = 4;
 
-        static const unsigned ACTION_TCP_DATA = 6;
-        static const unsigned ACTION_TCP_ACK = 7;
-        static const unsigned ACTION_TCP_RESEND = 8;
-        static const unsigned ACTION_MORE = 9;
-        static const unsigned ACTION_ENUM = 10;
-        static const unsigned ACTION_UDP_PROTECTED = 11;
-
+        // messsages wrapped with TafnetBufferedHeader
+        static const unsigned ACTION_TCP_DATA = 5;
+        static const unsigned ACTION_TCP_ACK = 6;
+        static const unsigned ACTION_TCP_RESEND = 7;
+        static const unsigned ACTION_MORE = 8;
+        static const unsigned ACTION_ENUM = 9;
+        static const unsigned ACTION_UDP_PROTECTED = 10;
+        static const unsigned ACTION_PACKSIZE_TEST = 11;
+        static const unsigned ACTION_PACKSIZE_ACK = 12;
+        static const unsigned ACTION_HELLO = 13;
 
         std::uint8_t action;
         QSharedPointer<QByteArray> buf;
@@ -109,6 +114,7 @@ namespace tafnet
         {
             std::uint32_t sendCount = 0u;
             std::uint32_t ackCount = 0u;
+            std::uint32_t maxPacketSize = MAX_PACKET_SIZE_LOWER_LIMIT;
             int get(bool incSendCount);
         };
         std::map<std::uint32_t, ResendRate> m_resendRates;      // keyed by peer tafnet player id
@@ -122,6 +128,7 @@ namespace tafnet
         // they're reenabled on a timer
         std::map<std::uint32_t, BoolDefaultToTrue> m_resendRequestEnabled;
         QTimer m_resendReqReenableTimer;
+        NSWFL::Hashing::CRC32 m_crc32;
 
     public:
         TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend);
@@ -130,6 +137,8 @@ namespace tafnet
         virtual std::uint32_t getPlayerId() const;
         virtual std::uint32_t getHostPlayerId() const;
         virtual bool isHost() { return getPlayerId() == getHostPlayerId(); }
+        virtual std::uint32_t maxPacketSizeForPlayerId(std::uint32_t id) const;
+        virtual void sendPacksizeTests(std::uint32_t peerPlayerId);
 
         virtual void joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);
         virtual void connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId);

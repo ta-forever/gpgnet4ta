@@ -110,7 +110,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         resetGameConnection();
     }
 
-    else if (channelCode == GameReceiver::CHANNEL_UDP && len > MAX_PACKET_SIZE)
+    else if (channelCode == GameReceiver::CHANNEL_UDP && len > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId))
     {
         // split/reassemble with ack/resend to ensure delivery to remote TafnetNode, but still delivered to game's UDP port
         m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_PROTECTED, data, len);
@@ -181,7 +181,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
     switch (action)
     {
     case Payload::ACTION_HELLO:
-        // no further action beyond creating a gameSender/Receiver required
+        m_tafnetNode->sendPacksizeTests(peerPlayerId);
         break;
 
     case Payload::ACTION_ENUM:

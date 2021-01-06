@@ -17,7 +17,7 @@ namespace gpgnet
 
         GpgNetSend(QDataStream& os);
 
-        void gameState(QString state);
+        void gameState(QString state, QString substate);
         void createLobby(int /* eg 0 */, int /* eg 0xb254 */, const char* playerName, int /* eg 0x9195 */, int /* eg 1 */);
         void hostGame(QString mapName);
         void joinGame(QString hostAndPort, QString remotePlayerName, int remotePlayerId);

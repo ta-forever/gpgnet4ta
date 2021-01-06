@@ -31,11 +31,20 @@ void GameSender::enumSessions(char* data, int len)
     //TADemo::HexDump(data, len, std::cout);
     //m_enumSocket.writeDatagram(data, len, m_gameAddress, m_enumPort);
     //m_enumSocket.flush();
-    m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
-    if (!m_enumSocket.waitForConnected(3000))
+    for (int n = 0; n < 10; ++n)
+    {
+        m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
+        if (m_enumSocket.waitForConnected(1000))
+        {
+            break;
+        }
+    }
+    if (!m_enumSocket.waitForConnected(1000))
     {
         qWarning() << "[GameSender::enumSessions] unable to connect to enumeration socket!";
+        return;
     }
+
     m_enumSocket.write(data, len);
     m_enumSocket.flush();
     m_enumSocket.disconnectFromHost();

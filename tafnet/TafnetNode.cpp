@@ -7,7 +7,8 @@
 #endif
 
 //#define SIM_PACKET_LOSS 50
-//#define SIM_PACKET_TRUNCATE 250
+//#define SIM_PACKET_TRUNCATE 800
+//#define SIM_PACKET_ERROR_LARGER_THAN 400
 
 #ifdef SIM_PACKET_LOSS
 #include <random>
@@ -165,6 +166,7 @@ int TafnetNode::ResendRate::get(bool incSendCount)
     return rate;
 }
 
+
 TafnetNode::HostAndPort::HostAndPort() :
 ipv4addr(0),
 port(0)
@@ -185,12 +187,16 @@ TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAdd
     m_hostPlayerId(isHost ? playerId : 0u),
     m_proactiveResendEnabled(proactiveResend)
 {
+    m_crc32.Initialize();
+
     qInfo() << "[TafnetNode::TafnetNode] proactiveResend=" << proactiveResend;
     qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetMessageHeader)=" << sizeof(TafnetMessageHeader);
     qInfo() << "[TafnetNode::TafnetNode] sizeof(TafnetBufferedHeader)=" << sizeof(TafnetBufferedHeader);
-    qInfo() << "[TafnetNode::TafnetNode] MAX_PACKET_SIZE=" << MAX_PACKET_SIZE;
 #ifdef SIM_PACKET_TRUNCATE
     qInfo() << "[TafnetNode::TafnetNode] SIM_PACKET_TRUNCATE=" << SIM_PACKET_TRUNCATE;
+#endif
+#ifdef SIM_PACKET_ERROR_LARGER_THAN
+    qInfo() << "[TafnetNode::TafnetNode] SIM_PACKET_ERROR_LARGER_THAN=" << SIM_PACKET_ERROR_LARGER_THAN;
 #endif
 
     m_lobbySocket.bind(bindAddress, bindPort);
@@ -282,6 +288,13 @@ void TafnetNode::onReadyRead()
             datas.resize(std::min(datas.size(), SIM_PACKET_TRUNCATE));
 #endif
 
+#ifdef SIM_PACKET_ERROR_LARGER_THAN
+            if (datas.size() > SIM_PACKET_ERROR_LARGER_THAN)
+            {
+                *datas.rbegin() ^= 0xff;
+            }
+#endif
+
             auto it = m_peerPlayerIds.find(senderHostAndPort);
             if (it == m_peerPlayerIds.end())
             {
@@ -318,6 +331,42 @@ void TafnetNode::onReadyRead()
                 else
                 {
                     qWarning() << "[TafnetNode::onReadyRead] no payload found for seq number" << seq;
+                }
+            }
+
+            else if (tafBufferedHeader->action == Payload::ACTION_PACKSIZE_TEST)
+            {
+                std::uint32_t testPacketSize = tafBufferedHeader->seq;
+                if (datas.size() == testPacketSize + sizeof(TafnetBufferedHeader))
+                {
+                    const std::uint32_t *testPacketCrc = (std::uint32_t*)(tafBufferedHeader + 1);
+                    const unsigned char *testPacketData = (const unsigned char*)(testPacketCrc + 1);
+                    const std::uint32_t crc = m_crc32.FullCRC(testPacketData, testPacketSize - sizeof(std::uint32_t));
+                    if (crc == *testPacketCrc)
+                    {
+                        qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize;
+                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                    }
+                    else
+                    {
+                        qWarning() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize << "crc error";
+                    }
+                }
+                else
+                {
+                    qWarning() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize=" << testPacketSize << "mismatch. received=" << datas.size();
+                }
+            }
+
+            else if (tafBufferedHeader->action == Payload::ACTION_PACKSIZE_ACK)
+            {
+                std::uint32_t ackedPacketSize = tafBufferedHeader->seq;
+                if (ackedPacketSize > m_resendRates[peerPlayerId].maxPacketSize)
+                {
+                    qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_ACK peer=" << peerPlayerId << "packsize=" << ackedPacketSize << "setting new maximum";
+                    m_resendRates[peerPlayerId].maxPacketSize = ackedPacketSize;
                 }
             }
 
@@ -400,6 +449,19 @@ std::uint32_t TafnetNode::getHostPlayerId() const
     return m_hostPlayerId;
 }
 
+std::uint32_t TafnetNode::maxPacketSizeForPlayerId(std::uint32_t id) const
+{
+    auto it = m_resendRates.find(id);
+    if (it == m_resendRates.end())
+    {
+        return MAX_PACKET_SIZE_LOWER_LIMIT;
+    }
+    else
+    {
+        return it->second.maxPacketSize;
+    }
+}
+
 void TafnetNode::joinGame(QHostAddress peer, quint16 peerPort, std::uint32_t peerPlayerId)
 {
     connectToPeer(peer, peerPort, peerPlayerId);
@@ -412,7 +474,7 @@ void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_
     HostAndPort hostAndPort(peer, peerPort);
     m_peerAddresses[peerPlayerId] = hostAndPort;
     m_peerPlayerIds[hostAndPort] = peerPlayerId;
-    sendMessage(peerPlayerId, Payload::ACTION_HELLO, 0, "HELLO", 5, 1);
+    forwardGameData(peerPlayerId, Payload::ACTION_HELLO, "HELLO", 5);
 }
 
 void TafnetNode::disconnectFromPeer(std::uint32_t peerPlayerId)
@@ -471,8 +533,9 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     }
 }
 
-void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int len)
+void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int _len)
 {
+    const unsigned len = (unsigned)_len;
     if (m_peerAddresses.count(destPlayerId) == 0)
     {
         return;
@@ -481,11 +544,17 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     if (action >= Payload::ACTION_TCP_DATA)
     {
         DataBuffer &sendBuffer = m_sendBuffer[destPlayerId];
+        std::uint32_t maxPacketSize = m_resendRates[destPlayerId].maxPacketSize;
 
-        for (int fragOffset = 0; fragOffset < len; fragOffset += MAX_PACKET_SIZE)
+        unsigned numFragments = len / (maxPacketSize+1) + 1;
+        maxPacketSize = (len+numFragments-1) / numFragments;
+        maxPacketSize = std::min(maxPacketSize, MAX_PACKET_SIZE_UPPER_LIMIT);
+        maxPacketSize = std::max(maxPacketSize, MAX_PACKET_SIZE_LOWER_LIMIT);
+
+        for (std::uint32_t fragOffset = 0u; fragOffset < len; fragOffset += maxPacketSize)
         {
             const char *p = data + fragOffset;
-            int sz = std::min(MAX_PACKET_SIZE, len - fragOffset);
+            int sz = std::min(maxPacketSize, len - fragOffset);
 
             int nRepeats = m_resendRates[destPlayerId].get(true);
             if (fragOffset + sz >= len)
@@ -504,6 +573,23 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     {
         int nRepeats = m_resendRates[destPlayerId].get(false);
         sendMessage(destPlayerId, action, 0, data, len, nRepeats);
+    }
+}
+
+void TafnetNode::sendPacksizeTests(std::uint32_t peerPlayerId)
+{
+    char testData[MAX_PACKET_SIZE_UPPER_LIMIT];
+    for (unsigned n = 0; n < MAX_PACKET_SIZE_UPPER_LIMIT; ++n)
+    {
+        testData[n] = (char)n;
+    }
+
+    m_resendRates[peerPlayerId].maxPacketSize = MAX_PACKET_SIZE_LOWER_LIMIT;
+    for (std::uint32_t sz = MAX_PACKET_SIZE_LOWER_LIMIT; sz <= MAX_PACKET_SIZE_UPPER_LIMIT; sz = 1563*sz/1000)
+    {
+        *(std::uint32_t*)testData = m_crc32.FullCRC((unsigned char*)testData + sizeof(std::uint32_t), sz - sizeof(std::uint32_t));
+        qInfo() << "[TafnetNode::sendPacksizeTests] sending ACTION_PACKSIZE_TEST to peer=" << peerPlayerId << "packsize=" << sz;
+        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_TEST, sz, testData, sz, 3);
     }
 }
 

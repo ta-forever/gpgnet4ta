@@ -11,15 +11,18 @@ tafnet_proto.fields = {ACTION, SEQ, DATA}
 local get_action_name = 
 {
   [0] = "INVALID",
-  [1] = "HELLO",
-  [3] = "UDP_DATA",
-  [4] = "TCP_OPEN",
-  [5] = "TCP_CLOSE",
-  [6] = "TCP_DATA",
-  [7] = "TCP_ACK",
-  [8] = "TCP_RESEND",
-  [9] = "TCP_SEQ_REBASE",
-  [10] = "ENUM"
+  [2] = "UDP_DATA",
+  [3] = "TCP_OPEN",
+  [4] = "TCP_CLOSE",
+  [5] = "TCP_DATA",
+  [6] = "TCP_ACK",
+  [7] = "TCP_RESEND",
+  [8] = "TCP_SEQ_REBASE",
+  [9] = "ENUM"
+  [10] = "UDP_PROTECTED",
+  [11] = "PACKSIZE_TEST",
+  [12] = "PACKSIZE_ACK",
+  [13] = "HELLO"
 }
 
 -- create a function to dissect it
@@ -41,5 +44,4 @@ function tafnet_proto.dissector(buffer,pinfo,tree)
 end
 
 udp_table = DissectorTable.get("udp.port")
-udp_table:add(64625,tafnet_proto)
-udp_table:add(60612,tafnet_proto)
+udp_table:add(6112,tafnet_proto)

@@ -11,6 +11,7 @@
 #include <miniupnpc/upnpcommands.h>
 
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 #include "gpgnet/GpgNetClient.h"
@@ -18,6 +19,7 @@
 #include "tademo/TADemoParser.h"
 #include "tafnet/TafnetGameNode.h"
 
+#include "ConsoleReader.h"
 #include "GpgNetGameLauncher.h"
 #include "IrcForward.h"
 #include "TaLobby.h"
@@ -272,12 +274,20 @@ public:
     {
         try
         {
-            if (teamsFrozen)
+            if (!teamsFrozen)
             {
-                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState Launching";
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Starting'";
                 if (m_isHost)
                 {
-                    m_gpgNetClient.gameState("Launching");
+                    m_gpgNetClient.gameState("Launching", "Launching");
+                }
+            }
+            else
+            {
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Playing'";
+                if (m_isHost)
+                {
+                    m_gpgNetClient.gameState("Launching", "Live");
                 }
             }
         }
@@ -303,7 +313,7 @@ public:
                 m_gpgNetClient.gameResult(army, score);
             }
             qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded] GameState Ended";
-            m_gpgNetClient.gameState("Ended");
+            m_gpgNetClient.gameState("Ended", "Ended");
         }
         catch (std::exception &e)
         {
@@ -688,43 +698,45 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.9.1");
+    QCoreApplication::setApplicationVersion("0.10");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
     parser.addHelpOption();
     parser.addVersionOption();
+    parser.addOption(QCommandLineOption("autolaunch", "Normally gpgnet4ta sets up the connections then waits for a /launch command before it launches TA. This option causes TA to launch straight away."));
+    parser.addOption(QCommandLineOption("cmdfile", "gpgnet4ta will follow this file to find /quit and /launch commands.", "stdin"));
     parser.addOption(QCommandLineOption("country", "Player country code.", "code"));
-    parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to", "connecttopeer"));
+    parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to.", "connecttopeer"));
     parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
     parser.addOption(QCommandLineOption("deviation", "Player rating deviation.", "deviation"));
     parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
     parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
-    parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
+    parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant.", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
     parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
     parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
-    parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join", "irc"));
-    parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip", "joingame", "0.0.0.0"));
-    parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface", "lobbybindaddress", "127.0.0.1"));
-    parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options"));
-    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs", "logfile", "c:\\temp\\gpgnet4ta.log"));
-    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug)", "logfile", "5"));
+    parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join.", "irc"));
+    parser.addOption(QCommandLineOption("joingame", "When test launching, join game hosted at specified ip.", "joingame", "0.0.0.0"));
+    parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface.", "lobbybindaddress", "127.0.0.1"));
+    parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options."));
+    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", "c:\\temp\\gpgnet4ta.log"));
+    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
     parser.addOption(QCommandLineOption("mean", "Player rating mean.", "mean"));
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
-    parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10", "players", "10"));
-    parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly"));
+    parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10.", "players", "10"));
+    parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
     parser.addOption(QCommandLineOption("registerdplay", "Register the dplay lobbyable app with --gamepath, --gameexe, --gameargs. (requires run as admin)."));
-    parser.addOption(QCommandLineOption("uac", "run as admin"));
-    parser.addOption(QCommandLineOption("upnp", "Attempt to set up a port forward using UPNP"));
+    parser.addOption(QCommandLineOption("uac", "run as admin."));
+    parser.addOption(QCommandLineOption("upnp", "Attempt to set up a port forward using UPNP."));
     parser.process(app);
 
     if (parser.isSet("uac"))
     {
         QStringList args;
         for (const char *arg : {
-            "gpgnet", "mean", "deviation", "country", "numgames", "players",
+            "autolaunch", "gpgnet", "mean", "deviation", "country", "numgames", "players",
             "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
-            "logfile", "loglevel", "irc", "proactiveresend" })
+            "logfile", "loglevel", "irc", "proactiveresend", "cmdfile" })
         {
             if (parser.isSet(arg))
             {
@@ -926,6 +938,7 @@ int main(int argc, char* argv[])
             dplayGuid,
             parser.value("players").toInt(),
             parser.isSet("lockoptions"),
+            parser.value("gamemod").toUpper()=="TAESC" ? 1000 : 1500,
             jdplay,
             gpgNetClient);
 
@@ -940,10 +953,16 @@ int main(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &launcher, &GpgNetGameLauncher::onCreateLobby);
-        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, &launcher, &GpgNetGameLauncher::onHostGame);
-        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &launcher, &GpgNetGameLauncher::onJoinGame);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, [&launcher, &parser](QString mapName) {
+            launcher.onHostGame(mapName);
+            if (parser.isSet("autolaunch")) launcher.onLaunchGame();
+        });
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, int playerId) {
+            launcher.onJoinGame(host, playerName, playerId);
+            if (parser.isSet("autolaunch")) launcher.onLaunchGame();
+        });
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
-        QObject::connect(&launcher, &GpgNetGameLauncher::gameFailedToLaunch, &app, [&app, &parser]() {
+        QObject::connect(&launcher, &GpgNetGameLauncher::gameFailedToLaunch, [&app, &parser]() {
             QString err = QString("Unable to launch ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\"\n";
             err +=
                 "- Please check path is correct\n"
@@ -973,7 +992,7 @@ int main(int argc, char* argv[])
         if (ircForward)
         {
             qInfo() << "[main] connecting IRC to lobby";
-            QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby](IrcPrivateMessage* msg)
+            QObject::connect(ircForward.get(), &IrcConnection::privateMessageReceived, [&lobby, &launcher](IrcPrivateMessage* msg)
             {
                 try
                 {
@@ -989,6 +1008,17 @@ int main(int argc, char* argv[])
                 }
             });
         }
+
+        std::shared_ptr<std::istream> ifstream;
+        std::istream *istream = &std::cin; // NB stdin doesn't work properly with ConsoleReader :(
+        if (parser.isSet("cmdfile"))
+        {
+            ifstream.reset(new std::ifstream(parser.value("cmdfile").toStdString()));
+            istream = ifstream.get();
+        }
+        ConsoleReader consoleReader(*istream);
+        QObject::connect(&consoleReader, &ConsoleReader::textReceived, &launcher, &GpgNetGameLauncher::onExtendedMessage);
+        consoleReader.start();
         app.exec();
     }
     return 0;

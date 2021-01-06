@@ -18,27 +18,35 @@ class GpgNetGameLauncher: public QObject
     const QString m_guid;
     const int m_playerLimit;
     const bool m_lockOptions;
+    const int m_maxUnits;
     JDPlay &m_jdplay;
     gpgnet::GpgNetSend &m_gpgNetSend;
 
     QString m_thisPlayerName;
     int m_thisPlayerId;
     QTimer m_pollStillActiveTimer;
+    bool m_readyToLaunch = false;
+    bool m_alreadyLaunched = false;
+    bool m_isHost = false;
+    bool m_autoLaunch = false;
 
 public:
     GpgNetGameLauncher(
-        QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions,
+        QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
         JDPlay &jdplay, gpgnet::GpgNetSend &gpgNetSend);
 
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
     void onHostGame(QString mapName);
     void onJoinGame(QString host, QString playerName, int playerId);
 
+    void onExtendedMessage(QString msg);
+    void onLaunchGame();
+
 signals:
     void gameTerminated();
     void gameFailedToLaunch();
 
 private:
-    static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions);
+    static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits);
     void pollJdplayStillActive();
 };
