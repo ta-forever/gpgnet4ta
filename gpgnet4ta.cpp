@@ -276,7 +276,7 @@ public:
         {
             if (!teamsFrozen)
             {
-                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Starting'";
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Launching'";
                 if (m_isHost)
                 {
                     m_gpgNetClient.gameState("Launching", "Launching");
@@ -284,7 +284,7 @@ public:
             }
             else
             {
-                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Playing'";
+                qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Live'";
                 if (m_isHost)
                 {
                     m_gpgNetClient.gameState("Launching", "Live");
@@ -698,7 +698,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.10");
+    QCoreApplication::setApplicationVersion("0.10.1");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");

@@ -11,7 +11,7 @@
 namespace tafnet
 {
 
-    const std::uint32_t MAX_PACKET_SIZE_UPPER_LIMIT = 1492;
+    const std::uint32_t MAX_PACKET_SIZE_UPPER_LIMIT = 1400;
     const std::uint32_t MAX_PACKET_SIZE_LOWER_LIMIT = 250;
 
     struct Payload

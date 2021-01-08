@@ -67,6 +67,7 @@ void GpgNetGameLauncher::onHostGame(QString mapName)
     {
         qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
         QString sessionName = m_thisPlayerName + "'s Game";
+
         createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, mapName, m_playerLimit, m_lockOptions, m_maxUnits);
         if (!m_jdplay.initialize(m_guid.toStdString().c_str(), "127.0.0.1", true, 10))
         {
@@ -171,7 +172,7 @@ void GpgNetGameLauncher::onLaunchGame()
         return;
     }
 
-    qInfo() << "[GpgNetGameLauncher::doLaunchGame] jdplay.launch(host)";
+    qInfo() << "[GpgNetGameLauncher::doLaunchGame] jdplay.launch()";
     if (!m_jdplay.launch(true))
     {
         qWarning() << "[GpgNetGameLauncher::doLaunchGame] unable to launch game";

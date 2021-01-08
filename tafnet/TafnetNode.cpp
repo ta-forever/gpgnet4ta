@@ -584,12 +584,18 @@ void TafnetNode::sendPacksizeTests(std::uint32_t peerPlayerId)
         testData[n] = (char)n;
     }
 
-    m_resendRates[peerPlayerId].maxPacketSize = MAX_PACKET_SIZE_LOWER_LIMIT;
-    for (std::uint32_t sz = MAX_PACKET_SIZE_LOWER_LIMIT; sz <= MAX_PACKET_SIZE_UPPER_LIMIT; sz = 1563*sz/1000)
+    std::uint32_t sz = m_resendRates[peerPlayerId].maxPacketSize = MAX_PACKET_SIZE_LOWER_LIMIT;
+    for (;;)
     {
         *(std::uint32_t*)testData = m_crc32.FullCRC((unsigned char*)testData + sizeof(std::uint32_t), sz - sizeof(std::uint32_t));
         qInfo() << "[TafnetNode::sendPacksizeTests] sending ACTION_PACKSIZE_TEST to peer=" << peerPlayerId << "packsize=" << sz;
         sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_TEST, sz, testData, sz, 3);
+
+        if (sz >= MAX_PACKET_SIZE_UPPER_LIMIT)
+        {
+            break;
+        }
+        sz = std::min(1412 * sz / 1000, MAX_PACKET_SIZE_UPPER_LIMIT);
     }
 }
 
