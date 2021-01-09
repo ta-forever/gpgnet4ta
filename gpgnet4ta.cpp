@@ -507,6 +507,7 @@ public:
                 else if (m_quitRequested == 2)
                 {
                     doSend("ok your game is disconnected you can alt-f4", false, true);
+                    qInfo() << "[HandleGameStatus::onChat] terminating with m_quitRequested=" << m_quitRequested;
                     qApp->quit();
                 }
                 else if (msg == "/closeirc")
@@ -685,6 +686,7 @@ void RunAs(QString cmd, QStringList args)
     CloseHandle(ShExecInfo.hProcess);
 }
 
+
 int main(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
@@ -698,7 +700,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.10.1");
+    QCoreApplication::setApplicationVersion("0.10.2");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");

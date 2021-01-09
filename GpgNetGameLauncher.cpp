@@ -16,6 +16,7 @@ GpgNetGameLauncher::GpgNetGameLauncher(
 {
     m_gpgNetSend.gameState("Idle", "Idle");
     QObject::connect(&m_pollStillActiveTimer, &QTimer::timeout, this, &GpgNetGameLauncher::pollJdplayStillActive);
+    QObject::connect(&m_quitCountResetTimer, &QTimer::timeout, this, &GpgNetGameLauncher::onResetQuitCount);
 }
 
 void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
@@ -138,13 +139,26 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
 {
     try
     {
+        qInfo() << "[GpgNetGameLauncher::onExtendedMessage] currentThreadId=" << QThread::currentThreadId();
         if (msg == "/launch")
         {
             onLaunchGame();
         }
         else if (msg == "/quit")
         {
-            qApp->quit();
+            if (!m_jdplay.pollStillActive() || ++m_quitCount == 2)
+            {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] terminating with m_quitCount=" << m_quitCount;
+                qApp->quit();
+            }
+            else
+            {
+                // If game has been launched we're going to need need some more convincing to actually shut down
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] waiting for another /quit to confirm shutdown.  m_quitCount=" << m_quitCount;
+                m_quitCountResetTimer.setSingleShot(true);
+                m_quitCountResetTimer.setInterval(1000);
+                m_quitCountResetTimer.start();
+            }
         }
     }
     catch (std::exception &e)
@@ -154,6 +168,23 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
     catch (...)
     {
         qWarning() << "[GpgNetGameLauncher::onLaunchGame] unknown exception";
+    }
+}
+
+void GpgNetGameLauncher::onResetQuitCount()
+{
+    try
+    {
+        qInfo() << "[GpgNetGameLauncher::onResetQuitCount] resetting m_quitCount.  currentThreadId=" << QThread::currentThreadId();
+        m_quitCount = 0;
+    }
+    catch (std::exception &e)
+    {
+        qWarning() << "[GpgNetGameLauncher::onResetQuitCount] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[GpgNetGameLauncher::onResetQuitCount] unknown exception";
     }
 }
 

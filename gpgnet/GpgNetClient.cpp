@@ -21,6 +21,7 @@ GpgNetClient::GpgNetClient(QString gpgnetHostAndPort) :
 GpgNetSend(m_datastream),
 m_datastream(&m_socket)
 {
+    qInfo() << "[GpgNetClient::GpgNetClient] constructing";
     QHostAddress gpgnetHost("127.0.0.1");
     quint16 gpgnetPort = 0xdead;
     SplitHostAndPort(gpgnetHostAndPort, gpgnetHost, gpgnetPort);
@@ -31,7 +32,7 @@ m_datastream(&m_socket)
     {
         throw std::runtime_error("unable to connect to gpgnet");
     }
-    qInfo() << "[GpgNetClient::GpgNetGameLauncher] connect" << m_socket.peerAddress().toString() << ':' << m_socket.peerPort();
+    qInfo() << "[GpgNetClient::GpgNetClient] connect" << m_socket.peerAddress().toString() << ':' << m_socket.peerPort();
     QObject::connect(&m_socket, &QTcpSocket::readyRead, this, &GpgNetClient::onReadyRead);
     QObject::connect(&m_socket, &QTcpSocket::stateChanged, this, &GpgNetClient::onSocketStateChanged);
 }

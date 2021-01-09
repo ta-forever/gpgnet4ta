@@ -29,6 +29,8 @@ class GpgNetGameLauncher: public QObject
     bool m_alreadyLaunched = false;
     bool m_isHost = false;
     bool m_autoLaunch = false;
+    int m_quitCount = 0;
+    QTimer m_quitCountResetTimer;
 
 public:
     GpgNetGameLauncher(
@@ -46,7 +48,10 @@ signals:
     void gameTerminated();
     void gameFailedToLaunch();
 
+public slots:
+    void pollJdplayStillActive();
+    void onResetQuitCount();
+
 private:
     static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits);
-    void pollJdplayStillActive();
 };

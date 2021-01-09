@@ -36,7 +36,7 @@ void ConsoleReader::run()
             }
 
             QString qline = QString::fromStdString(line);
-            qInfo() << "[ConsoleReader::run] received" << qline;
+            qInfo() << "[ConsoleReader::run] received" << qline << "currentThreadId=" << QThread::currentThreadId();
             emit textReceived(qline);
         }
     }
