@@ -53,7 +53,7 @@ namespace TADemo
         }
         if (m_state == State::READ_RECORD)
         {
-            std::uint8_t *ptr = &m_readBuffer[m_bytesRead];
+            std::uint8_t *ptr = &m_readBuffer[(unsigned)m_bytesRead];
             is->read((char*)ptr, m_readBuffer.size() - m_bytesRead);
             m_bytesRead += is->gcount();
             if (m_bytesRead < m_readBuffer.size())
@@ -69,13 +69,7 @@ namespace TADemo
         return record;
     }
 
-    Parser::Parser() :
-        m_numExtraSectorsRead(0),
-        m_numPlayersRead(0),
-        m_numPlayerStatusMessagesRead(0),
-        m_numUnitDataRead(0),
-        m_numPacketsRead(0),
-        m_numTimesNewDataReceived(0)
+    Parser::Parser()
     { }
 
     void Parser::load(Header &h)
@@ -162,7 +156,17 @@ namespace TADemo
     {
         bytestring data = m_recordReader(m_is);
         msg.number = data[0];
-        msg.statusMessage = TPacket::decompress(TPacket::decrypt(data.substr(1))).substr(7);
+        std::uint16_t checks[2];
+        TPacket::decrypt(data, 1u, checks[0], checks[1]);
+        if (checks[0] != checks[1])
+        {
+            std::cerr << "[Parser::load PlayerStatusMessage] checksum error";
+        }
+        msg.statusMessage = TPacket::decompress(data.data()+1, data.size()-1, 3).substr(7);
+        if (msg.statusMessage[0] != 0x03)
+        {
+            std::cerr << "[Parser::load PlayerStatusMessage] decompression ran out of bytes!";
+        }
     }
 
     void Parser::load(UnitData &ud)
@@ -186,7 +190,7 @@ namespace TADemo
             return false;
         }
 
-        int numPacketsRead = m_numPacketsRead;
+        unsigned numPacketsRead = m_numPacketsRead;
         try
         {
             doParse();
@@ -269,7 +273,9 @@ namespace TADemo
         {
             Packet p;
             load(p);
-            std::vector<bytestring> unpacked = TPacket::unsmartpak(p.data, m_header->version);
+            const bool hasTimestamp = m_header->version == 3;
+            const bool hasChecksum = false;
+            std::vector<bytestring> unpacked = TPacket::unsmartpak(p.data, hasTimestamp, hasChecksum);
             handle(p, unpacked, m_numPacketsRead);
         }
     }

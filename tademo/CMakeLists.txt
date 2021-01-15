@@ -1,3 +1,5 @@
+set(CMAKE_AUTOMOC ON)
+
 add_library(tademo
     TPacket.h
     TPacket.cpp
@@ -12,8 +14,15 @@ add_library(tademo
     nswfl_crc32.h
     nswfl_crc32.cpp
     DuplicateDetection.h
-    DuplicateDetection.cpp)
+    DuplicateDetection.cpp
+    Watchdog.h
+    Watchdog.cpp
+    TestPackets.h
+    TestPackets.cpp)
 
 target_include_directories(tademo 
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tademo
+    Qt5::Core)

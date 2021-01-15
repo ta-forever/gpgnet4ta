@@ -1,4 +1,5 @@
 #include "GpgNetGameLauncher.h"
+#include "tademo/Watchdog.h"
 #include <QtCore/qcoreapplication.h>
 #include "QtCore/qthread.h"
 
@@ -23,6 +24,7 @@ void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString play
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetGameLauncher::onCreateLobby", 100);
         qInfo() << "[GpgNetGameLauncher::handleCreateLobby] playername=" << playerName << "playerId=" << playerId;
         m_thisPlayerName = playerName;
         m_thisPlayerId = playerId;
@@ -43,6 +45,7 @@ void GpgNetGameLauncher::pollJdplayStillActive()
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetGameLauncher::pollJdplayStillActive", 100);
         if (!m_jdplay.pollStillActive())
         {
             qInfo() << "[GpgNetGameLauncher::pollJdplayStillActive] game stopped running. exit (or crash?)";
@@ -66,6 +69,7 @@ void GpgNetGameLauncher::onHostGame(QString mapName)
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetGameLauncher::onHostGame", 1000);
         qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
         QString sessionName = m_thisPlayerName + "'s Game";
 
@@ -102,6 +106,7 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int player
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetGameLauncher::onJoinGame", 1000);
         qInfo() << "[GpgNetGameLauncher::handleJoinGame] playername=" << playerName << "playerId=" << playerId;
         const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
 
@@ -139,7 +144,8 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
 {
     try
     {
-        qInfo() << "[GpgNetGameLauncher::onExtendedMessage] currentThreadId=" << QThread::currentThreadId();
+        TADemo::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 100);
+        qInfo() << "[GpgNetGameLauncher::onExtendedMessage]" << msg;
         if (msg == "/launch")
         {
             onLaunchGame();
@@ -175,7 +181,8 @@ void GpgNetGameLauncher::onResetQuitCount()
 {
     try
     {
-        qInfo() << "[GpgNetGameLauncher::onResetQuitCount] resetting m_quitCount.  currentThreadId=" << QThread::currentThreadId();
+        TADemo::Watchdog wd("GpgNetGameLauncher::onResetQuitCount", 100);
+        qInfo() << "[GpgNetGameLauncher::onResetQuitCount] resetting m_quitCount";
         m_quitCount = 0;
     }
     catch (std::exception &e)
@@ -213,9 +220,6 @@ void GpgNetGameLauncher::onLaunchGame()
     m_alreadyLaunched = true;
     m_pollStillActiveTimer.start(3000);
 
-    // give TA a bit of time to start up since there seems to be a race condition on simultaneous host/join
-    // @todo when change to reporter.dll we'll be able to detect existance of battleroom and move this gameState notification into GameMonitor
-    QThread::msleep(300);
     m_gpgNetSend.gameState("Lobby", "Battleroom");
     // from here on, game state is not driven by GpgNetGameLauncher but instead is inferred by GameMonitor
 }

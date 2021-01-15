@@ -3,9 +3,13 @@
 
 #include <algorithm>
 #include <fstream>
+#include <sstream>
 
 #include "HexDump.h"
 #include "TPacket.h"
+#include "Watchdog.h"
+
+#include <QtCore/qdebug.h>
 
 using namespace TADemo;
 
@@ -15,6 +19,7 @@ m_packetHandler(packetHandler)
 
 void TAPacketParser::parseGameData(const char *data, int len)
 {
+    Watchdog wd("TAPacketParser::parseGameData", 100);
     const DPHeader *header = NULL;
     for (const char *ptr = data; ptr < data + len; ptr += header->size())
     {
@@ -23,7 +28,7 @@ void TAPacketParser::parseGameData(const char *data, int len)
         {
             std::uint32_t id1 = *(std::uint32_t*)data;
             std::uint32_t id2 = *(std::uint32_t*)(data + 4);
-            parseTaPacket(id1, id2, data+8, len-8);
+            parseTaPacket(id1, id2, data+8, len-8, "no dplay header");
             return;
         }
 
@@ -33,13 +38,14 @@ void TAPacketParser::parseGameData(const char *data, int len)
         }
         else
         {
-            parseTaPacket(*(std::uint32_t*)header->actionstring, 0, ptr + sizeof(DPHeader), header->size() - sizeof(DPHeader));
+            parseTaPacket(*(std::uint32_t*)header->actionstring, 0, ptr + sizeof(DPHeader), header->size() - sizeof(DPHeader), "with dplay header");
         }
     }
 }
 
 void TAPacketParser::parseDplayPacket(const DPHeader *header, const char *data, int len)
 {
+    Watchdog wd("TAPacketParser::parseDplayPacket", 100);
     switch (header->command)
     {
     case 0x0029:
@@ -61,6 +67,7 @@ void TAPacketParser::parseDplayPacket(const DPHeader *header, const char *data, 
 
 void TAPacketParser::parseDplaySuperEnumReply(const DPHeader *header, const char *data, int len)
 {
+    Watchdog wd("TAPacketParser::parseDplaySuperEnumReply", 100);
     struct DPSuperEnumPlayersReplyHeader
     {
         std::uint32_t player_count;
@@ -142,6 +149,7 @@ void TAPacketParser::parseDplaySuperEnumReply(const DPHeader *header, const char
 
 void TAPacketParser::parseDplayCreateOrForwardPlayer(const DPHeader *header, const char *data, int len)
 {
+    Watchdog wd("TAPacketParser::parseDplayCreateOrForwardPlayer", 100);
     struct DPForwardOrCreateRequest
     {
         std::uint32_t id_to;
@@ -176,6 +184,7 @@ void TAPacketParser::parseDplayCreateOrForwardPlayer(const DPHeader *header, con
 
 void TAPacketParser::parseDplayDeletePlayer(const DPHeader *header, const char *data, int len)
 {
+    Watchdog wd("TAPacketParser::parseDplayDeletePlayer", 100);
     struct DPDeleteRequest
     {
         std::uint32_t id_to;
@@ -190,39 +199,57 @@ void TAPacketParser::parseDplayDeletePlayer(const DPHeader *header, const char *
     m_packetHandler->onDplayDeletePlayer(req->player_id);
 }
 
-void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *_payload, int _payloadSize)
+void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *_payload, int _payloadSize, const std::string & context)
 {
+    Watchdog wd(QString("TAPacketParser::parseTaPacket sz=") + QString::number(_payloadSize), 100);
     if (otherDplayId == 0u && m_taDuplicateDetection.isLikelyDuplicate(sourceDplayId, otherDplayId, _payload, _payloadSize))
     {
         return;
     }
 
-    bytestring payloadDecrypted = TPacket::decrypt(bytestring((std::uint8_t*)_payload, _payloadSize));
-
-    bytestring payloadDecompressed;
-    if (PacketCode(payloadDecrypted[0]) == PacketCode::COMPRESSED)
+    bytestring payload((const std::uint8_t*)_payload, _payloadSize);
     {
-        payloadDecompressed = TPacket::decompress(payloadDecrypted);
-    }
-    else
-    {
-        payloadDecompressed = payloadDecrypted;
+        Watchdog wd2("TAPacketParser::parseTaPacket decrypt", 100);
+        std::uint16_t checksum[2];
+        TPacket::decrypt(payload, 0u, checksum[0], checksum[1]);
+        if (checksum[0] != checksum[1])
+        {
+            qWarning() << "[TAPacketParser::parseTaPacket] checksum mismatch! context=" << QString::fromStdString(context);
+        }
     }
 
-    for (const bytestring &s : TPacket::unsmartpak(payloadDecompressed, 3))
+    if (PacketCode(payload[0]) == PacketCode::COMPRESSED)
+    {
+        Watchdog wd3("TAPacketParser::parseTaPacket decompress", 100);
+        payload = TPacket::decompress(payload, 3);
+        if (payload[0] != 0x03)
+        {
+            qWarning() << "[TAPacketParser::parseTaPacket] decompression ran out of bytes! context=" << QString::fromStdString(context);
+        }
+    }
+
+    std::vector<bytestring> subpaks;
+    {
+        Watchdog wd3("TAPacketParser::parseTaPacket unsmartpak", 100);
+        subpaks = TPacket::unsmartpak(payload, true, true);
+    }
+
+    for (const bytestring &s : subpaks)
     {
         unsigned expectedSize = TPacket::getExpectedSubPacketSize(s);
         if (expectedSize == 0u || s.size() != expectedSize)
         {
-            std::cout << "[TAPacketParser::parseTaPacket] subpacket error. packet code " << std::hex << unsigned(s[0]) << ", expected size " << expectedSize << ", actual size " << s.size() << '\n';
-            std::cout << "extracted from _payload:\n";
-            TADemo::HexDump(_payload, _payloadSize, std::cout);
+            qWarning() << "[TAPacketParser::parseTaPacket] unknown subpacket. packet code" << QString::number(s[0],16) << "expected size " << QString::number(expectedSize,16) << "actual size " << QString::number(s.size(),16) << "context=" << QString::fromStdString(context);
+            std::ostringstream ss;
+            ss << "  _payload:\n";
+            TADemo::StrHexDump(_payload, _payloadSize, ss);
+            qWarning() << ss.str().c_str();
             continue;
         }
 
         switch (SubPacketCode(s[0]))
         {
-        case SubPacketCode::STATUS:
+        case SubPacketCode::PLAYER_INFO_20:
             {
                 std::string mapName = (const char*)(&s[1]);
                 std::uint16_t maxUnits = *(std::uint16_t*)(&s[0xa6]);
@@ -239,28 +266,28 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
             }
             break;
 
-        case SubPacketCode::CHAT:
+        case SubPacketCode::CHAT_05:
             {
                 std::string chat = (const char*)(&s[1]);
                 m_packetHandler->onChat(sourceDplayId, chat);
             }
             break;
 
-        case SubPacketCode::UNIT_DIED:
+        case SubPacketCode::UNIT_KILLED_0C:
             {
                 std::uint16_t unitId = *(std::uint16_t*)(&s[1]);
                 m_packetHandler->onUnitDied(sourceDplayId, unitId);
             }
             break;
 
-        case SubPacketCode::REJECT:
+        case SubPacketCode::REJECT_1B:
             {
                 std::uint32_t rejectedDplayId = *(std::uint32_t*)(&s[1]);
                 m_packetHandler->onRejectOther(sourceDplayId, rejectedDplayId);
             }
             break;
 
-        case SubPacketCode::TICK:
+        case SubPacketCode::UNIT_STAT_AND_MOVE_2C:
             {
                 std::uint32_t tick = *(std::uint32_t*)(&s[3]);
                 m_packetHandler->onGameTick(sourceDplayId, tick);

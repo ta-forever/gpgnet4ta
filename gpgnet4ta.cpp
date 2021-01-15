@@ -18,6 +18,7 @@
 #include "jdplay/JDPlay.h"
 #include "tademo/TADemoParser.h"
 #include "tafnet/TafnetGameNode.h"
+#include "tademo/Watchdog.h"
 
 #include "ConsoleReader.h"
 #include "GpgNetGameLauncher.h"
@@ -190,7 +191,8 @@ public:
     {
         try
         {
-            qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] GameOption" << mapName << "host" << hostName << "local" << localName;
+            TADemo::Watchdog wd("ForwardGameEventsToGpgNet::onGameSettings", 100);
+            qInfo() << "[ForwardGameEventsToGpgNet::onGameSettings] GameOption" << mapName << "host" << hostName << "local" << localName;
             m_isHost = hostName == localName;
             if (m_isHost)
             {
@@ -211,6 +213,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("ForwardGameEventsToGpgNet::onPlayerStatus", 100);
             QString gpgnetId = QString::number(m_gpgNetClient.lookupPlayerId(name));
 
             // Forged Alliance reserves Team=1 for the team-not-selected team
@@ -254,6 +257,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("ForwardGameEventsToGpgNet::onClearSlot", 100);
             qInfo() << "[ForwardGameEventsToGpgNet::onClearSlot]" << name << "slot" << slot;
             if (m_isHost)
             {
@@ -274,6 +278,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("ForwardGameEventsToGpgNet::onGameStarted", 100);
             if (!teamsFrozen)
             {
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Launching'";
@@ -305,6 +310,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("ForwardGameEventsToGpgNet::onGameEnded", 100);
             for (const QVariantMap& result : results)
             {
                 int army = result.value("army").toInt();
@@ -356,6 +362,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("HandleGameStatus::onGameSettings", 100);
             if (mapName != m_selectedMap)
             {
                 doSend("Map changed to: " + mapName.toStdString(), true, false);
@@ -396,6 +403,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("HandleGameStatus::onClearSlot", 100);
             if (slot < m_playerNames.size())
             {
                 m_playerNames[slot].clear();
@@ -416,6 +424,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("HandleGameStatus::onGameStarted", 100);
             const int occupancyCount = getOccupancyCount();
             const int aiCount = getAiCount();
             const int humanCount = occupancyCount - aiCount;
@@ -454,6 +463,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("HandleGameStatus::onGameEnded", 100);
             doSend("Game over man, game over!", true, true);
             for (const QVariantMap &result : results)
             {
@@ -488,6 +498,7 @@ public:
     {
         try
         {
+            TADemo::Watchdog wd("HandleGameStatus::onChat", 100);
             if (isLocalPlayerSource && msg.size() > 0)
             {
                 int n = msg.lastIndexOf("> ");
@@ -594,35 +605,35 @@ public:
             if (m_verbosity >= Verbosity::DEBUG)
             {
                 QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
-                m_logfile << datetime.toStdString() << " [Debug] " << msg.toStdString() << std::endl;
+                m_logfile << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Debug] " << msg.toStdString() << std::endl;
             }
             break;
         case QtInfoMsg:
             if (m_verbosity >= Verbosity::INFO)
             {
                 QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
-                m_logfile << datetime.toStdString() << " [Info] " << msg.toStdString() << std::endl;
+                m_logfile << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Info] " << msg.toStdString() << std::endl;
             }
             break;
         case QtCriticalMsg:
             if (m_verbosity >= Verbosity::CRITICAL)
             {
                 QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
-                m_logfile << datetime.toStdString() << " [Critical] " << msg.toStdString() << std::endl;
+                m_logfile << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Critical] " << msg.toStdString() << std::endl;
             }
             break;
         case QtWarningMsg:
             if (m_verbosity >= Verbosity::WARNING)
             {
                 QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
-                m_logfile << datetime.toStdString() << " [Warning] " << msg.toStdString() << std::endl;
+                m_logfile << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Warning] " << msg.toStdString() << std::endl;
             }
             break;
         case QtFatalMsg:
             if (m_verbosity >= Verbosity::FATAL)
             {
                 QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
-                m_logfile << datetime.toStdString() << " [Fatal] " << msg.toStdString() << std::endl;
+                m_logfile << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Fatal] " << msg.toStdString() << std::endl;
             }
             abort();
         }
@@ -998,6 +1009,7 @@ int main(int argc, char* argv[])
             {
                 try
                 {
+                    TADemo::Watchdog wd("main::privateMessageReceived", 100);
                     lobby.echoToGame(msg->isPrivate(), msg->nick(), msg->content());
                 }
                 catch (std::exception &e)

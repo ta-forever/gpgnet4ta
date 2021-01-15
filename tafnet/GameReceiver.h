@@ -43,7 +43,6 @@ namespace tafnet
         virtual quint16 getTcpListenPort();
         virtual quint16 getUdpListenPort();
         virtual quint16* getListenPorts(quint16 ports[2]);
-        virtual void resetGameConnection();
         virtual void bindEnumerationPort(quint16 port);
     };
 }

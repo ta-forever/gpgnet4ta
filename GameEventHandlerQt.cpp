@@ -1,14 +1,17 @@
 #include "GameEventHandlerQt.h"
 #include <QtCore/qmap.h>
 #include <QtCore/qvariant.h>
+#include "tademo/Watchdog.h"
 
 void GameEventsSignalQt::onGameSettings(const std::string &mapName, std::uint16_t maxUnits, const std::string &hostName, const std::string &localName)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onGameSettings", 100);
     emit gameSettings(QString::fromStdString(mapName), maxUnits, QString::fromStdString(hostName), QString::fromStdString(localName));
 }
 
 void GameEventsSignalQt::onPlayerStatus(const PlayerData &player, const std::set<std::string> & _mutualAllies)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onPlayerStatus", 100);
     QStringList mutualAllies;
     for (const std::string & other: _mutualAllies)
     {
@@ -22,16 +25,19 @@ void GameEventsSignalQt::onPlayerStatus(const PlayerData &player, const std::set
 
 void GameEventsSignalQt::onClearSlot(const PlayerData &player)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onClearSlot", 100);
     emit clearSlot(player.dplayid, QString::fromStdString(player.name), player.slotNumber);
 }
 
 void GameEventsSignalQt::onGameStarted(std::uint32_t tick, bool teamsFrozen)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onGameStarted", 100);
     emit gameStarted(tick, teamsFrozen);
 }
 
 void GameEventsSignalQt::onGameEnded(const GameResult &result)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onGameEnded", 100);
     QList<QVariantMap> qresults;
     for (const auto &r: result.results)
     {
@@ -49,5 +55,6 @@ void GameEventsSignalQt::onGameEnded(const GameResult &result)
 
 void GameEventsSignalQt::onChat(const std::string& msg, bool isLocalPlayerSource)
 {
+    TADemo::Watchdog wd("GameEventsSignalQt::onChat", 100);
     emit chat(QString::fromStdString(msg), isLocalPlayerSource);
 }

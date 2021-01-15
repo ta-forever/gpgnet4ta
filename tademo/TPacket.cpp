@@ -4,85 +4,87 @@
 #include <cctype>
 #include <sstream>
 #include <vector>
+#include <map>
 
 #include "TPacket.h"
 #include "HexDump.h"
+#include "TestPackets.h"
 
 namespace TADemo
 {
 
-    bytestring TPacket::decrypt(const bytestring &data)
+    void TPacket::decrypt(bytestring &data, std::size_t ofs, ::uint16_t &checkExtracted, std::uint16_t &checkCalculated)
     {
-        bytestring result = data;
-
-        if (data.size() < 4)
+        if (data.size() < 4+ofs)
         {
-            result += std::uint8_t(0x06);
-            return result;
+            data += std::uint8_t(0x06);
+            return;
         }
 
-        std::uint16_t check = 0u;
-        for (std::size_t i = 3u; i <= result.size() - 4; ++i)
+        checkExtracted = *(std::uint16_t*)&data[ofs+1];
+        checkCalculated = 0u;
+        std::uint8_t xorKey = 3u;
+        std::size_t i = ofs+3u;
+        for (; i <= data.size() - 4; ++i)
         {
-            result[i] ^= std::uint8_t(i);
-            check += result[i];
+            checkCalculated += data[i];
+            data[i] ^= xorKey;
+            ++xorKey;
         }
-
-        return result;
     }
 
-    bytestring TPacket::encrypt(const bytestring& data)
+    void TPacket::encrypt(bytestring& data)
     {
-        bytestring result = data;
-
         if (data.size() < 4)
         {
-            result += std::uint8_t(0x06);
-            return result;
+            data += std::uint8_t(0x06);
+            return;
         }
 
         std::uint16_t check = 0u;
-        for (std::size_t i = 3u; i <= result.size() - 4; ++i)
+        for (std::size_t i = 3u; i <= data.size() - 4; ++i)
         {
-            result[i] ^= std::uint8_t(i);
-            check += result[i];
+            data[i] ^= std::uint8_t(i);
+            check += data[i];
         }
-        result[1] = check & 0x00ff;
-        result[2] = check >> 8;
-        return result;
+        data[1] = check & 0x00ff;
+        data[2] = check >> 8;
     }
 
 
     bytestring TPacket::compress(const bytestring &data)
     {
-        int index, cbf, count, a, matchl, cmatchl;
+        unsigned index, cbf, count, a, matchl, cmatchl;
         std::uint16_t kommando, match;
         std::uint16_t *p;
 
         bytestring result;
-        count = 7;
-        index = 4;
-        while (index < data.size() + 1)
+        count = 7u;
+        index = 4u;
+        while (index < data.size() + 1u)
         {
-            if (count == 7)
+            if (count == 7u)
             {
-                count = -1;
-                result += std::uint8_t(0);
+                count = 0u;
+                result += std::uint8_t(0u);
                 cbf = result.size();
             }
-            ++count;
-            if (index < 6 || index>2000)
+            else
             {
-                result += data[index - 1];
+                ++count;
+            }
+            if (index < 6u || index>2000u)
+            {
+                result += data[index - 1u];
                 ++index;
             }
             else
             {
-                matchl = 2;
-                for (a = 4; a < index - 1; ++a)
+                matchl = 2u;
+                for (a = 4u; a < index - 1u; ++a)
                 {
                     cmatchl = 0;
-                    while (a + cmatchl < index && index + cmatchl < data.size() && data[a + cmatchl - 1] == data[index + cmatchl - 1])
+                    while (a + cmatchl < index && index + cmatchl < data.size() && data[a + cmatchl - 1u] == data[index + cmatchl - 1u])
                     {
                         ++cmatchl;
                     }
@@ -90,82 +92,91 @@ namespace TADemo
                     {
                         matchl = cmatchl;
                         match = a;
-                        if (matchl > 17)
+                        if (matchl > 17u)
                         {
                             break;
                         }
                     }
                 }
-                cmatchl = 0;
-                while (index + cmatchl < data.size() && data[index + cmatchl - 1] == data[index - 2])
+                cmatchl = 0u;
+                while (index + cmatchl < data.size() && data[index + cmatchl - 1u] == data[index - 2u])
                 {
                     ++cmatchl;
                 }
                 if (cmatchl > matchl)
                 {
                     matchl = cmatchl;
-                    match = index - 1;
+                    match = index - 1u;
                 }
                 if (matchl>2)
                 {
-                    result[cbf - 1] |= (1 << count);
-                    matchl = (matchl - 2) & 0x0f;
-                    kommando = ((match - 3) << 4) | matchl;
+                    result[cbf - 1u] |= (1u << count);
+                    matchl = (matchl - 2u) & 0x0f;
+                    kommando = ((match - 3u) << 4) | matchl;
                     result += bytestring((const std::uint8_t*)"\0\0", 2);
-                    p = (std::uint16_t*)&result[result.size() - 2];
+                    p = (std::uint16_t*)&result[result.size() - 2u];
                     *p = kommando;
-                    index += matchl + 2;
+                    index += matchl + 2u;
                 }
                 else
                 {
-                    result += data[index - 1];
+                    result += data[index - 1u];
                     ++index;
                 }
             }
         }
-        if (count == 7)
+        if (count == 7u)
         {
             result += 0xff;
         }
         else
         {
-            result[cbf - 1] |= (0xff << (count + 1));
+            result[cbf - 1u] |= (0xff << (count + 1u));
         }
-        result += bytestring((const std::uint8_t*)"\0\0", 2);
+        result += bytestring((const std::uint8_t*)"\0\0", 2u);
 
-        if (result.size() + 3 < data.size())
+        if (result.size() + 3u < data.size())
         {
-            result = bytestring(1, 4) + data[1] + data[2] + result;
+            result = bytestring(1u, 0x04) + data[1u] + data[2u] + result;
         }
         else
         {
             result = data;
-            result[0] = 3;
+            result[0] = 0x03;
         }
         return result;
     }
 
+    bytestring TPacket::decompress(const bytestring &data, const unsigned headerSize)
+    {
+        return decompress(data.data(), data.size(), headerSize);
+    }
 
-    bytestring TPacket::decompress(const bytestring &data)
+    bytestring TPacket::decompress(const std::uint8_t *data, const unsigned len, const unsigned headerSize)
     {
         bytestring result;
         if (data[0] != 0x04)
         {
-            result = data;
+            result.append(data, len);
             return result;
         }
 
-        unsigned index = 3;
-        while (index < data.size())
+        result.reserve(std::max(0x1000u, 2*len));
+        result.append(data, headerSize);
+        result[0] = 0x03;
+
+        unsigned index = headerSize;
+        while (index < len)
         {
             unsigned cbf = data[index];
             ++index;
 
             for (unsigned nump = 0; nump < 8; ++nump)
             {
-                if (index >= data.size())
+                if (index >= len)
                 {
-                    result = data.substr(0, 3) + result;
+                    // error: ran out of bytes. if you get here theres a bug
+                    result[0] = 0x04;
                     return result;
                 }
                 if (((cbf >> nump) & 1) == 0)
@@ -175,101 +186,110 @@ namespace TADemo
                 }
                 else
                 {
-                    unsigned uop = data[index + 1] << 8;
-                    uop += data[index];
+                    unsigned uop = *(std::uint16_t*)(&data[index]);
                     index += 2;
                     unsigned a = uop >> 4;
                     if (a == 0)
                     {
-                        result = data.substr(0, 3) + result;
-                        result[0] = 0x03;
                         return result;
                     }
                     uop = uop & 0x0f;
+                    a += headerSize;
                     for (unsigned b = a; b < uop + a + 2; ++b)
                     {
-                        result += b < result.size() ? result[b-1] : 0;
+                        result += b <= result.size() ? result[b-1] : 0;
                     }
                 }
             }
         }
-        result = data.substr(0, 3) + result;
-        result[0] = 0x03;
         return result;
     }
 
-
-    unsigned TPacket::getExpectedSubPacketSize(const bytestring &s)
+    unsigned TPacket::getExpectedSubPacketSize(const bytestring &bytes)
     {
-        unsigned len = 0u;
-        if (s.empty())
+        return getExpectedSubPacketSize(bytes.data(), bytes.size());
+    }
+
+    unsigned TPacket::getExpectedSubPacketSize(const std::uint8_t *s, unsigned sz)
+    {
+        if (sz == 0u)
         {
-            return len;
+            return 0u;
         }
 
+        unsigned len = 0u;
         SubPacketCode spc = SubPacketCode(s[0]);
 
         switch (spc)
         {
-        case SubPacketCode:: ZERO:                     // decompression artifact??
-        {
-            std::size_t pos = s.find_first_not_of(std::uint8_t(0));
-            len = pos == bytestring::npos ? s.size() : pos;
+        case SubPacketCode:: ZERO_00:
+            for (; len < sz && s[len] == 0u; ++len);
             break;
-        }
-        case SubPacketCode::PING: len = 13;   break;  // ping
-        case SubPacketCode::PAD_ENCRYPT: len = 1;    break;
-        case SubPacketCode::UNK_07: len = 1;    break;
-        case SubPacketCode::STATUS: len = 192;  break;  // status
-        case SubPacketCode::UNIT_DATA: len = 14;   break;  // unit data
-        case SubPacketCode::UNK_17: len = 2;    break;
-        case SubPacketCode::SERVER_NUM: len = 2;    break;  // servernumber
-        case SubPacketCode::UNK_15: len = 1;    break;
-        case SubPacketCode::UNK_08:  len = 1;    break;
-        case SubPacketCode::CHAT:  len = 65;   break;
-        case SubPacketCode::SELECT_TEAM: len = 6; break;
-        case SubPacketCode::UNK_26:  len = 41;   break;  // 0x26
-        case SubPacketCode::UNK_22:  len = 6;    break;  // 0x22
-        case SubPacketCode::UNK_2A:  len = 2;    break;  // 0x2a
-        case SubPacketCode::UNK_1E: len = 2;    break;
-        case SubPacketCode::TICK:  len = unsigned(s[1]) + (unsigned(s[2]) << 8);
-            break;                      // 0x2c
-            //Nya paket
-
-        case SubPacketCode::UNK_09: len = 23;    break;   //Seems to be the package that gives orders for something newly built to be shown immediately. However, shows for the wrong person ..
-        case SubPacketCode::UNK_11: len = 4;     break;   //?? crash
-        case SubPacketCode::UNK_10: len = 22;    break;   //Gives explosions! However, they appear in the wrong place
-        case SubPacketCode::UNK_12: len = 5;     break;   //?? crash
-        case SubPacketCode::UNK_0a: len = 7;     break;   //?? crash
-        case SubPacketCode::RESOURCES: len = 58;    break;   //resource stats
-        case SubPacketCode::SPEED: len = 3;     break;   /// speed / pause /unpause
-        case SubPacketCode::SHOT: len = 36;    break;   //Shot. however, the shots remain. and they miss ..
-        case SubPacketCode::SHOT_RESIDUE: len = 9;     break;   //Eliminates shot residues
-        case SubPacketCode::POSE: len = 6;     break;   //Makes the commander's upper body rotate correctly when he builds, among other things
-        case SubPacketCode::UNIT_DIED: len = 11;    break;   //hmm. seems to give explosions with
-
-        case SubPacketCode::UNK_1F: len = 5;     break;
-        case SubPacketCode::UNK_23: len = 14;    break;
-        case SubPacketCode::SHARE: len = 17;    break;   // share resources
-        case SubPacketCode::REJECT: len = 6;     break;
-        case SubPacketCode::UNK_29: len = 3;     break;
-        case SubPacketCode::UNK_14: len = 24;    break;
-        case SubPacketCode::UNK_21: len = 10;    break;
+        case SubPacketCode::PING_02: len = 13;   break;
         case SubPacketCode::UNK_03: len = 7;     break;
-        case SubPacketCode::UNK_0e: len = 14;    break;
-
-        case SubPacketCode::SMARTPAK_TICK_FF10: len = 1;     break;     //smartpak packages should not be in the wild
-        case SubPacketCode::SMARTPACK_TICK_START: len = 5;     break;     //smartpak
-        case SubPacketCode::SMARTPAK_TICK_OTHER: len = unsigned(s[1]) + (unsigned(s[2]) << 8) - 4; //smartpak
+        case SubPacketCode::CHAT_05:
+            len = 65;
+            if (s[len - 1] != 0)
+            {
+                // older recorder versions sometimes emit more text than they should
+                // however, it is send as a single packet.
+                len = sz;
+                // And if map position is enabled, the last 5 bytes should be the map
+                // pos data
+                if (SubPacketCode(s[len - 5]) == SubPacketCode::MAP_POSITION_FC)
+                {
+                    len -= 5;
+                }
+            }
             break;
-
-        case SubPacketCode::CHAT_ENEMY: len = 73;    break;     //enemy-chat
-        case SubPacketCode::RECORDER_DATA_CONNECT: len = unsigned(s[1]) + 3; //recorder data connect
+        case SubPacketCode::PAD_ENCRYPT_06: len = 1;    break;
+        case SubPacketCode::UNK_07: len = 1;    break;
+        case SubPacketCode::LOADING_STARTED_08:  len = 1;    break;
+        case SubPacketCode::UNIT_BUILDSTARTED_09: len = 23;    break;
+        case SubPacketCode::UNK_0A: len = 7;     break;
+        case SubPacketCode::UNIT_TAKE_DAMAGE_0B: len = 9;     break;
+        case SubPacketCode::UNIT_KILLED_0C: len = 11;    break;
+        case SubPacketCode::WEAPON_FIRED_0D: len = 36;    break;
+        case SubPacketCode::AREA_OF_EFFECT_0E: len = 14;    break;
+        case SubPacketCode::FEATURE_ACTION_0F: len = 6;     break;
+        case SubPacketCode::UNIT_START_SCRIPT_10: len = 22;    break;
+        case SubPacketCode::UNIT_STATE_11: len = 4;     break;
+        case SubPacketCode::UNIT_BUILD_FINISHED_12: len = 5;     break;
+        case SubPacketCode::GIVE_UNIT_14: len = 24;    break;
+        case SubPacketCode::UNK_15: len = 1;    break;
+        case SubPacketCode::SHARE_RESOURCES_16: len = 17;    break;
+        case SubPacketCode::UNK_17: len = 2;    break;
+        case SubPacketCode::HOST_MIGRATION_18: len = 2;    break;
+        case SubPacketCode::SPEED_19: len = 3;     break;
+        case SubPacketCode::UNIT_TYPES_SYNC_1A: len = 14;   break;
+        case SubPacketCode::REJECT_1B: len = 6;     break;
+        case SubPacketCode::UNK_1E: len = 2;    break;
+        case SubPacketCode::UNK_1F: len = 5;     break;
+        case SubPacketCode::PLAYER_INFO_20: len = 192;  break;
+        case SubPacketCode::UNK_21: len = 10;    break;
+        case SubPacketCode::UNK_22:  len = 6;    break;
+        case SubPacketCode::ALLY_23: len = 14;    break;
+        case SubPacketCode::TEAM_24: len = 6; break;
+        case SubPacketCode::UNK_26:  len = 41;   break;
+        case SubPacketCode::PLAYER_RESOURCE_INFO_28: len = 58;    break;
+        case SubPacketCode::UNK_29: len = 3;     break;
+        case SubPacketCode::UNK_2A:  len = 2;    break;
+        case SubPacketCode::UNIT_STAT_AND_MOVE_2C:
+            if (sz >= 3) len = *(std::uint16_t*)(&s[1]);
             break;
-
-        case SubPacketCode::MAP_POSITION: len = 5;     break;     //map position
-        case SubPacketCode::UNK_FA: len = 1;     break;
+        case SubPacketCode::UNK_2E: len = 9; break;
         case SubPacketCode::UNK_F6: len = 1;     break;
+        case SubPacketCode::ENEMY_CHAT_F9: len = 73;    break;
+        case SubPacketCode::REPLAYER_SERVER_FA: len = 1;     break;
+        case SubPacketCode::RECORDER_DATA_CONNECT_FB:
+            if (sz >= 2) len = unsigned(s[1]) + 3;
+            break;
+        case SubPacketCode::MAP_POSITION_FC: len = 5;     break;
+        case SubPacketCode::SMARTPAK_TICK_OTHER_FD:
+            if (sz >= 3) len = *(std::uint16_t*)(&s[1]) - 4;
+            break;
+        case SubPacketCode::SMARTPAK_TICK_START_FE: len = 5;     break;
+        case SubPacketCode::SMARTPAK_TICK_FF: len = 1;     break;
         default: len = 0;
         };
 
@@ -317,19 +337,19 @@ namespace TADemo
 
     unsigned TPacket::bin2int(const bytestring &s, unsigned start, unsigned num)
     {
-        int i = 0;  // index into s
+        unsigned i = 0u;  // index into s
         while (start > 7)
         {
             // skip bytes
             ++i;
-            start -= 8;
+            start -= 8u;
         };
 
-        int result = 0;
+        int result = 0u;
         std::uint8_t mask = 1 << start;
         std::uint8_t byte = s[i];
 
-        for (int j = 0; j < num; ++j)
+        for (unsigned j = 0u; j < num; ++j)
         {
             // for the jth bit of result
             if (byte & mask)
@@ -345,24 +365,37 @@ namespace TADemo
                 ++i;
                 byte = s[i];
                 start = 0;
-                mask = 1;
+                mask = 1u;
             }
         }
         return result;
     }
 
-    std::vector<bytestring> TPacket::unsmartpak(const bytestring &_c, unsigned version)
+    std::vector<bytestring> TPacket::slowUnsmartpak(const bytestring &_c, bool hasTimestamp, bool hasChecksum)
     {
-        bytestring c = _c.substr(0, 1) + (const std::uint8_t *)"xx" + _c.substr(1);
-        if (c[0] == 0x04)
+        bytestring c;
+
+        if (hasChecksum)
         {
-            c = TPacket::decompress(c);
+            c = _c;
+        }
+        else
+        {
+            c = _c.substr(0, 1) + (const std::uint8_t *)"xx" + _c.substr(1);
         }
 
-        c = c.substr(3);
-        if (version == 3)
+        if (c[0] == 0x04)
         {
-            c = c.substr(4);
+            c = TPacket::decompress(c, 3);
+        }
+
+        if (hasTimestamp)
+        {
+            c = c.substr(7);
+        }
+        else
+        {
+            c = c.substr(3);
         }
 
         std::vector<bytestring> ut;
@@ -374,13 +407,13 @@ namespace TADemo
 
             switch (SubPacketCode(s[0]))
             {
-            case SubPacketCode::SMARTPACK_TICK_START:
+            case SubPacketCode::SMARTPAK_TICK_START_FE:
             {
                 packnum = *(std::uint32_t*)(&s[1]);
                 break;
             }
 
-            case SubPacketCode::SMARTPAK_TICK_FF10:
+            case SubPacketCode::SMARTPAK_TICK_FF:
             {
                 bytestring tmp({ ',', 0x0b, 0, 'x', 'x', 'x', 'x', 0xff, 0xff, 1, 0 });
                 *(std::uint32_t*)(&tmp[3]) = packnum;
@@ -389,7 +422,7 @@ namespace TADemo
                 break;
             }
 
-            case SubPacketCode::SMARTPAK_TICK_OTHER:
+            case SubPacketCode::SMARTPAK_TICK_OTHER_FD:
             {
                 bytestring tmp = s.substr(0, 3) + (const std::uint8_t*)"zzzz" + s.substr(3);
                 *(std::uint32_t*)(&tmp[3]) = packnum;
@@ -402,6 +435,72 @@ namespace TADemo
             default:
                 ut.push_back(s);
             };
+        }
+        return ut;
+    }
+
+    std::vector<bytestring> TPacket::unsmartpak(const bytestring &_c, bool hasTimestamp, bool hasChecksum)
+    {
+        const std::uint8_t *ptr = _c.data();;
+        const std::uint8_t *end = ptr + _c.size();
+
+        bytestring buffer;
+        if (_c[0] == 0x04)
+        {
+            buffer = decompress(_c, hasChecksum ? 3 : 1);
+            ptr = buffer.data();
+            end = ptr + buffer.size();
+        }
+
+        ++ptr;
+        if (hasChecksum) ptr += 2;
+        if (hasTimestamp) ptr += 4;
+
+        std::vector<bytestring> ut;
+        std::uint32_t packnum = 0u;
+        while (ptr < end)
+        {
+            unsigned subpakLen = getExpectedSubPacketSize(ptr, end-ptr);
+            if (subpakLen == 0 || ptr+subpakLen > end)
+            {
+                subpakLen = end - ptr;
+            }
+
+            switch (SubPacketCode(ptr[0]))
+            {
+            case SubPacketCode::SMARTPAK_TICK_START_FE:
+            {
+                packnum = *(std::uint32_t*)(&ptr[1]);
+                break;
+            }
+
+            case SubPacketCode::SMARTPAK_TICK_FF:
+            {
+                bytestring tmp({ ',', 0x0b, 0, 'x', 'x', 'x', 'x', 0xff, 0xff, 1, 0 });
+                *(std::uint32_t*)(&tmp[3]) = packnum;
+                ++packnum;
+                ut.push_back(tmp);
+                break;
+            }
+
+            case SubPacketCode::SMARTPAK_TICK_OTHER_FD:
+            {
+                ut.push_back(bytestring());
+                bytestring &tmp = ut.back();
+                tmp.reserve(end - ptr + 4);
+                tmp.append(ptr, 3);
+                tmp.append((std::uint8_t*)&packnum, 4);
+                tmp.append(ptr + 3, end);
+                ++packnum;
+                tmp[0] = 0x2c;
+                break;
+            }
+
+            default:
+                ut.push_back(bytestring());
+                ut.back().append(ptr, subpakLen);
+            };
+            ptr += subpakLen;
         }
         return ut;
     }
@@ -424,22 +523,22 @@ namespace TADemo
         {
             const bytestring &sn = subpackets[n];
             SubPacketCode code = SubPacketCode(sn[0]);
-            if (code == SubPacketCode::TICK)
+            if (code == SubPacketCode::UNIT_STAT_AND_MOVE_2C)
             {
                 std::uint32_t thisPacknum = *(std::uint32_t*)(&sn[3]);
                 if (firstpak || thisPacknum != packnum)
                 {
                     firstpak = false;
                     packnum = thisPacknum;
-                    tosave += std::uint8_t(SubPacketCode::SMARTPACK_TICK_START);
+                    tosave += std::uint8_t(SubPacketCode::SMARTPAK_TICK_START_FE);
                     tosave += sn.substr(3, 4);
                 }
                 bytestring shorterTick = sn.substr(0, 3) + sn.substr(7);
-                shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_OTHER);
+                shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_OTHER_FD);
                 if (shorterTick[1] == 0x0b && shorterTick[2] == 0x00)
                 {
                     shorterTick.resize(1);
-                    shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_FF10);
+                    shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_FF);
                 }
                 tosave += shorterTick;
                 ++packnum;
@@ -499,21 +598,17 @@ namespace TADemo
         }
         else
         {
-            bytestring decrypted = decrypt(encrypted);
-            bytestring decompressed = decompress(decrypted);
-            std::vector<bytestring> unpaked = unsmartpak(decompressed, 3);
+            std::uint16_t checksum[2];
+            bytestring decrypted(encrypted);
+            decrypt(decrypted, 0u, checksum[0], checksum[1]);
+            bytestring decompressed = decompress(decrypted, 3);
+            std::vector<bytestring> unpaked = unsmartpak(decompressed, true, true);
             smartpak(unpaked, maxCompressedSize, results, 0, unpaked.size());
 
             for (auto &r : results)
             {
-                r = encrypt(r);
+                encrypt(r);
             }
-
-            for (const auto &r : results)
-            {
-                bytestring rdecomp = decompress(decrypt(r));
-            }
-
         }
         return results;
     }
@@ -521,7 +616,7 @@ namespace TADemo
     bytestring TPacket::createChatSubpacket(const std::string& message)
     {
         char chatMessage[65];
-        chatMessage[0] = std::uint8_t(SubPacketCode::CHAT);
+        chatMessage[0] = std::uint8_t(SubPacketCode::CHAT_05);
         std::strncpy(&chatMessage[1], message.c_str(), 64);
         chatMessage[64] = 0;
         return bytestring((std::uint8_t*)chatMessage, sizeof(chatMessage));
@@ -532,76 +627,186 @@ namespace TADemo
 #define AT __FILE__ ":" TOSTRING(__LINE__)
 #define TESTASSERT(x) if (!(x)) { throw std::runtime_error(AT); }
 
+
     void TPacket::test()
     {
-        const std::uint8_t _encrypted[] = {
-            0x04, 0xf6, 0x55, 0x3, 0xd0, 0xfb, 0xf9, 0xf8, 0x24, 0x7, 0xa, 0xb9, 0xc, 0x6, 0xe, 0xf,
-            0x15, 0x11, 0x73, 0xe3, 0xeb, 0xa1, 0x9, 0x17, 0x49, 0x19, 0xa9, 0x82, 0x1c, 0x6d, 0x1f, 0xab,
-            0x51, 0x20, 0x77, 0x13, 0x24, 0x24, 0x24, 0x25, 0x9d, 0x71, 0x28, 0x9d, 0x24, 0x2e, 0x99, 0x3e,
-            0x86, 0x32, 0x17, 0x33, 0x8c, 0x56, 0x32, 0x7e, 0xd8, 0x17, 0x3a, 0x3b, 0x38, 0x39, 0xfb, 0x3b,
-            0x99, 0x42, 0x42, 0x43, 0x84, 0x4f, 0x46, 0x53, 0x49, 0x15, 0xe9, 0xbd, 0xf, 0x6d, 0x48, 0xea,
-            0x56, 0x7d, 0x73, 0x53, 0xed, 0x6, 0x54, 0xda, 0xf8, 0x51, 0x70, 0x5b, 0x78, 0x59, 0x2e, 0x58,
-            0x82, 0x92, 0x67, 0x2, 0x64, 0x62, 0x30, 0x24, 0x1c, 0x79, 0x89, 0x6d, 0x8c, 0x69, 0xd4, 0x66,
-            0x13, 0x76, 0xb1, 0x9b, 0x84, 0x70, 0x76, 0x93, 0x77, 0x9f, 0x78, 0x98, 0x8e, 0x78, 0x1e, 0x65,
-            0x98, 0xa3, 0x41, 0x15, 0x92, 0x9e, 0x21, 0x81, 0xc8, 0x80, 0x31, 0xf2, 0x85, 0x2e, 0x88, 0x6b,
-            0x91, 0xc3, 0x98, 0xb3, 0x5b, 0x94, 0xb0, 0x34, 0x72, 0x8b, 0x1f, 0x92, 0x97, 0x21, 0xe6, 0x96,
-            0x84, 0x70, 0xa3, 0x43, 0xe6, 0xad, 0x66, 0x27, 0xed, 0x4d, 0x8b, 0x28, 0x57, 0x5d, 0xaf, 0xc7,
-            0xbd, 0xd3, 0xf, 0xab, 0xba, 0xd1, 0x5d, 0xbe, 0x99, 0xb5, 0x7a, 0xb7, 0xfc, 0x7d, 0x85, 0xbd,
-            0xe2, 0x22, 0x85, 0xc5, 0x62, 0xc3, 0x0, 0x0, 0x0 };
+        //testCompression(16);
+        //testCompression(32);
+        //testCompression(64);
+        //return;
 
-        bytestring encrypted(_encrypted, sizeof(_encrypted));
-        std::cout << "encrypted:\n";
-        HexDump(encrypted.data(), encrypted.size(), std::cout);
+        std::map<int, unsigned> badSubPacketCounts;
+        std::uint8_t filter = 0x00;
 
-        bytestring decrypted = decrypt(encrypted);
-        std::cout << "decrypted:\n";
-        HexDump(decrypted.data(), decrypted.size(), std::cout);
+        using namespace TADemo::TestPackets;
+        ++badSubPacketCounts[testDecode(td1, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td2, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td3, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td4, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td5, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td6, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td7, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td8, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td9, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td10, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td11, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td12, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td13, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td14, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td15, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td16, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td17, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td18, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td19, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td20, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td21, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td22, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td23, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td24, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td25, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td26, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td27, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td28, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td29, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td30, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td31, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td32, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td33, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td34, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td35, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td36, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td37, true, true, filter)];
+        ++badSubPacketCounts[testDecode(td38, true, true, filter)];
 
-        bytestring decompressed = decompress(decrypted);
-        std::cout << "decompressed:\n";
-        HexDump(decompressed.data(), decompressed.size(), std::cout);
-
-        std::vector<bytestring> unpaked = unsmartpak(decompressed, 3);
-        for (const auto &subpak : unpaked)
+        for (auto p : badSubPacketCounts)
         {
-            std::cout << "subpacket:\n";
-            HexDump(decompressed.data(), decompressed.size(), std::cout);
+            std::cout << "bad subpak code:" << std::hex << p.first << ", count=" << p.second << '\n';
         }
+    }
 
-        bytestring repaked = smartpak(unpaked, 0, repaked.size());
-        std::cout << "repaked:\n";
-        HexDump(repaked.data(), repaked.size(), std::cout);
-        TESTASSERT(repaked == decompressed);
-
-        bytestring recompressed = compress(repaked);
-        std::cout << "recompressed:\n";
-        HexDump(recompressed.data(), recompressed.size(), std::cout);
-        TESTASSERT(recompressed == decrypted);
-
-        bytestring reencrypted = encrypt(recompressed);
-        std::cout << "reencrypted:\n";
-        HexDump(reencrypted.data(), reencrypted.size(), std::cout);
-        TESTASSERT(reencrypted == encrypted);
-
-        std::vector<bytestring> parts = resmartpak(encrypted, 200);
-        std::vector<bytestring> repakedsubpackets;
-        for (const auto &part : parts)
+    bool TPacket::testUnpakability(bytestring s, int recurseDepth)
+    {
+        unsigned sz = TPacket::getExpectedSubPacketSize(s);
+        if (sz == 0 || sz > s.size() || s[0] == 0)
         {
-            std::cout << "repaked part (decompressed):\n";
-            bytestring temp = decompress(decrypt(part));
-            HexDump(temp.data(), temp.size(), std::cout);
+            return false;
+        }
+        else if (recurseDepth>0)
+        {
+            return testUnpakability(s.substr(sz), recurseDepth-1);
+        }
+        else
+        {
+            return true;
+        }
+    }
 
-            std::cout << "repaked part (subpackets):\n";
-            for (const auto &subpacket : unsmartpak(part, 3))
+    void TPacket::testCompression(unsigned dictionarySize)
+    {
+        std::vector<bytestring> dictionary(dictionarySize);
+        for (bytestring & symbol : dictionary)
+        {
+            unsigned N = 1 + std::rand() % 31;  // random sized symbols up to 32 bytes in length
+            for (unsigned n = 0; n < N; ++n)
             {
-                HexDump(subpacket.data(), subpacket.size(), std::cout);
-                repakedsubpackets.push_back(subpacket);
+                symbol.append(1, std::rand() % 0xff);
             }
         }
-        TESTASSERT(unpaked.size() == repakedsubpackets.size());
-        for (std::size_t n = 0u; n < unpaked.size(); ++n)
+
+        const unsigned I = 10000u;
+        unsigned nPass = 0;
+        unsigned nFail = 0;
+        for (unsigned i = 0u; i < I; ++i)
         {
-            TESTASSERT(unpaked[n] == repakedsubpackets[n])
+            const unsigned N = std::rand() % 256;   // select upto 255 symbols from the dictionary
+            bytestring data;
+            data.reserve(N + 3);
+            data.append((const std::uint8_t*)"\x03\x00\x00", 3);
+            for (unsigned n = 0; n < N; ++n)
+            {
+                data.append(dictionary[std::rand() % dictionarySize]);  // append a random word
+            }
+            bytestring compressed = compress(data);
+            bytestring decompressed = decompress(compressed, 3);
+
+            if (decompressed == data)
+            {
+                ++nPass;
+            }
+            else
+            {
+                ++nFail;
+                std::cout << "---------- compress/decompress error\n";
+                std::cout << "original:\n";
+                HexDump(data.data(), data.size(), std::cout);
+                std::cout << "compressed:\n";
+                HexDump(compressed.data(), compressed.size(), std::cout);
+                std::cout << "decompr:\n";
+                HexDump(decompressed.data(), decompressed.size(), std::cout);
+            }
+
+            if (i % 100 == 0)
+            {
+                std::cout << "nPass:" << nPass << ", nFail:" << nFail << '\r';
+            }
         }
+        std::cout << std::endl;
+    }
+
+    int TPacket::testDecode(const bytestring & encrypted, bool hasTimestamp, bool hasChecksum, std::uint8_t filter)
+    {
+        std::cout << "-------------------- encrypted len=" << std::dec << encrypted.size() << "\n";
+
+        std::uint16_t checksum[2];
+        bytestring decrypted(encrypted);
+        decrypt(decrypted, 0u, checksum[0], checksum[1]);
+        //std::cout << "decrypted: (checkpacked=" << checksum[0] << ", checkcalced=" << checksum[1] << ")\n";
+        //HexDump(decrypted.data(), decrypted.size(), std::cout);
+
+        bytestring decompressed = decompress(decrypted, 3);
+        //std::cout << "decompressed:\n";
+        //HexDump(decompressed.data(), decompressed.size(), std::cout);
+
+        std::vector<bytestring> unpaked = unsmartpak(decompressed, hasTimestamp, hasChecksum);
+        int nSubPak = 0;
+        for (const auto &subpak : unpaked)
+        {
+            ++nSubPak;
+            unsigned sizeExpected = TPacket::getExpectedSubPacketSize(subpak);
+
+            if (sizeExpected == subpak.size())
+            {
+                if (filter == 0u || subpak[0] == filter)
+                {
+                    std::cout << "subpacket " << nSubPak << " of " << unpaked.size() << ": (szExpected=" << std::hex << sizeExpected << ", sizeActual=" << subpak.size() << ")\n";
+                    HexDump(subpak.data(), subpak.size(), std::cout);
+                }
+            }
+            else
+            {
+                if (filter == 0u || subpak[0] == filter)
+                {
+                    std::cout << "***UNKNOWN SUBPACKET: (szExpected=" << std::hex << sizeExpected << ", sizeActual=" << subpak.size() << ")\n";
+                    HexDump(subpak.data(), subpak.size(), std::cout);
+                    for (std::size_t ofs = 1; ofs < subpak.size(); ++ofs)
+                    {
+                        bytestring testpak = subpak.substr(ofs);
+                        if (testUnpakability(testpak, 5))
+                        {
+                            std::cout << "possible futher subpackets at ofs=" << std::hex << ofs << '\n';
+                            while (!testpak.empty())
+                            {
+                                bool error;
+                                bytestring subtestpak = TPacket::split2(testpak, true, error);
+                                HexDump(subtestpak.data(), subtestpak.size(), std::cout);
+                            }
+                            break;
+                        }
+                    }
+                }
+                return subpak[0];
+            }
+        }
+        return -1;
     }
 }

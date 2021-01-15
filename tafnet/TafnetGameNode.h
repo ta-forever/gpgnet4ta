@@ -48,7 +48,6 @@ namespace tafnet
 
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
         virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
-        virtual void resetGameConnection();
         virtual void sendEnumRequest(QUuid gameGuid, std::uint32_t asPeerId);
 
         virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat);

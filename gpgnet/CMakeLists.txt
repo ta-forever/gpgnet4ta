@@ -9,8 +9,9 @@ add_library(gpgnet
     GpgNetClient.cpp)
 
 target_link_libraries(gpgnet
-    Qt5::Core)
+    Qt5::Core
+    tademo)
 
 target_include_directories(gpgnet 
     PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR})
+    ${CMAKE_SOURCE_DIR})

@@ -1,4 +1,5 @@
 #include "TafnetNode.h"
+#include "TADemo/Watchdog.h"
 
 #include <QtNetwork/qtcpsocket.h>
 
@@ -214,6 +215,7 @@ void TafnetNode::onResendTimer()
 {
     try
     {
+        TADemo::Watchdog wd("TafnetNode::onResendTimer", 100);
         for (auto &pairPlayer : m_sendBuffer)
         {
             std::uint32_t peerPlayerId = pairPlayer.first;
@@ -250,6 +252,7 @@ void TafnetNode::onResendReqReenableTimer()
 {
     try
     {
+        TADemo::Watchdog wd("TafnetNode::onResendReqReenableTimer", 100);
         for (auto &pair : m_resendRequestEnabled)
         {
             pair.second.value = true;
@@ -269,10 +272,12 @@ void TafnetNode::onReadyRead()
 {
     try
     {
+        TADemo::Watchdog wd("TafnetNode::onReadyRead", 100);
         QUdpSocket* sender = static_cast<QUdpSocket*>(QObject::sender());
 
         while (sender->hasPendingDatagrams())
         {
+            TADemo::Watchdog wd("TafnetNode::onReadyRead while hasPendingDatagrams()", 100);
             QByteArray datas;
             datas.resize(sender->pendingDatagramSize());
             QHostAddress senderAddress;
@@ -312,6 +317,7 @@ void TafnetNode::onReadyRead()
 
             if (tafBufferedHeader->action == Payload::ACTION_TCP_ACK)
             {
+                TADemo::Watchdog wd("TafnetNode::onReadyRead TCP_ACK", 100);
                 if (tcpSendBuffer.ackData(tafBufferedHeader->seq))
                 {
                     m_resendRates[peerPlayerId].ackCount++;
@@ -320,10 +326,12 @@ void TafnetNode::onReadyRead()
 
             else if (tafBufferedHeader->action == Payload::ACTION_TCP_RESEND)
             {
+                TADemo::Watchdog wd("TafnetNode::onReadyRead TCP_RESEND", 100);
                 std::uint32_t seq = tafBufferedHeader->seq;
                 Payload data = tcpSendBuffer.get(seq);
                 if (data.buf)
                 {
+                    TADemo::Watchdog wd("TafnetNode::onReadyRead TCP_RESEND data.buf", 100);
                     int nRepeats = m_resendRates[peerPlayerId].get(true);
                     qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "- peer" << peerPlayerId << "requested resend packet" << seq << "resendrate=" << nRepeats;
                     sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
@@ -339,11 +347,13 @@ void TafnetNode::onReadyRead()
                 std::uint32_t testPacketSize = tafBufferedHeader->seq;
                 if (datas.size() == testPacketSize + sizeof(TafnetBufferedHeader))
                 {
+                    TADemo::Watchdog wd("TafnetNode::onReadyRead PACKSIZE_TEST", 100);
                     const std::uint32_t *testPacketCrc = (std::uint32_t*)(tafBufferedHeader + 1);
                     const unsigned char *testPacketData = (const unsigned char*)(testPacketCrc + 1);
                     const std::uint32_t crc = m_crc32.FullCRC(testPacketData, testPacketSize - sizeof(std::uint32_t));
                     if (crc == *testPacketCrc)
                     {
+                        TADemo::Watchdog wd("TafnetNode::onReadyRead PACKSIZE_TEST send", 100);
                         qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize;
                         sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
                         sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
@@ -362,6 +372,7 @@ void TafnetNode::onReadyRead()
 
             else if (tafBufferedHeader->action == Payload::ACTION_PACKSIZE_ACK)
             {
+                TADemo::Watchdog wd("TafnetNode::onReadyRead PACKSIZE_ACK", 100);
                 std::uint32_t ackedPacketSize = tafBufferedHeader->seq;
                 if (ackedPacketSize > m_resendRates[peerPlayerId].maxPacketSize)
                 {
@@ -373,6 +384,7 @@ void TafnetNode::onReadyRead()
             else if (tafBufferedHeader->action >= Payload::ACTION_TCP_DATA)
             {
                 // received data that requires ACK
+                TADemo::Watchdog wd("TafnetNode::onReadyRead >=TCP_DATA", 100);
                 tcpReceiveBuffer.insert(
                     tafBufferedHeader->seq, tafBufferedHeader->action,
                     datas.data() + sizeof(TafnetBufferedHeader), datas.size() - sizeof(TafnetBufferedHeader));
@@ -383,6 +395,7 @@ void TafnetNode::onReadyRead()
                 QByteArray &reassemblyBuffer = m_reassemblyBuffer[peerPlayerId];
                 while (tcpReceiveBuffer.readyRead())
                 {
+                    TADemo::Watchdog wd("TafnetNode::onReadyRead >=TCP_DATA while tcpReceiveBuffer", 100);
                     resendRequestEnabled = true;    // is also reenabled on a timer
                     // clear receive buffer and acknowledge receipt
                     std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
@@ -390,6 +403,7 @@ void TafnetNode::onReadyRead()
                     reassemblyBuffer += *data.buf;
                     if (data.action != Payload::ACTION_MORE)
                     {
+                        TADemo::Watchdog wd("TafnetNode::onReadyRead >=TCP_DATA handleMessage", 100);
                         handleMessage(data.action, peerPlayerId, reassemblyBuffer.data(), reassemblyBuffer.size());
                         reassemblyBuffer.clear();
                     }
@@ -397,6 +411,7 @@ void TafnetNode::onReadyRead()
 
                 if (!tcpReceiveBuffer.empty() && resendRequestEnabled)
                 {
+                    TADemo::Watchdog wd("TafnetNode::onReadyRead >=TCP_DATA !tcpReceiveBuffer.empty", 100);
                     resendRequestEnabled = false;    // is also reenabled on a timer
                     int remainingMaxResend = 10;
                     for (std::uint32_t seq = tcpReceiveBuffer.nextExpectedPopSeq();
@@ -412,8 +427,10 @@ void TafnetNode::onReadyRead()
             else
             {
                 // received data not requiring ACK
+                TADemo::Watchdog wd("TafnetNode::onReadyRead other data", 100);
                 if (!m_udpDuplicateDetection.isLikelyDuplicate(peerPlayerId, 0, datas.data(), datas.size()))
                 {
+                    TADemo::Watchdog wd("TafnetNode::onReadyRead other data not duplicate", 100);
                     handleMessage(tafheader->action, peerPlayerId, datas.data() + sizeof(TafnetMessageHeader), datas.size() - sizeof(TafnetMessageHeader));
                 }
             }
@@ -535,6 +552,7 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
 
 void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t action, const char* data, int _len)
 {
+    TADemo::Watchdog wd("TafnetNode::forwardGameData", 100);
     const unsigned len = (unsigned)_len;
     if (m_peerAddresses.count(destPlayerId) == 0)
     {
@@ -578,6 +596,7 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
 
 void TafnetNode::sendPacksizeTests(std::uint32_t peerPlayerId)
 {
+    TADemo::Watchdog wd("TafnetNode::sendPacksizeTests", 100);
     char testData[MAX_PACKET_SIZE_UPPER_LIMIT];
     for (unsigned n = 0; n < MAX_PACKET_SIZE_UPPER_LIMIT; ++n)
     {

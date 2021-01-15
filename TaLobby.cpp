@@ -2,6 +2,7 @@
 
 #include "tafnet/TafnetNode.h"
 #include "tafnet/TafnetGameNode.h"
+#include "tademo/Watchdog.h"
 #include "tademo/TAPacketParser.h"
 
 static const std::uint32_t TICKS_TO_GAME_START = 1800;  // 60 sec
@@ -62,6 +63,7 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
 {
     try
     {
+        TADemo::Watchdog wd("TaLobby::onCreateLobby", 100);
         if (m_game)
         {
             return;
@@ -93,6 +95,7 @@ void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
 {
     try
     {
+        TADemo::Watchdog wd("TaLobby::onJoinGame", 100);
         if (!m_proxy || !m_game)
         {
             return;
@@ -120,6 +123,7 @@ void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
 {
     try
     {
+        TADemo::Watchdog wd("TaLobby::onConnectToPeer", 100);
         if (!m_proxy || !m_game)
         {
             return;
@@ -146,6 +150,7 @@ void TaLobby::onDisconnectFromPeer(int playerId)
 {
     try
     {
+        TADemo::Watchdog wd("TaLobby::onDisconnectFromPeer", 100);
         qDebug() << "[TaLobby::onDisconnectFromPeer]" << playerId;
         if (!m_proxy || !m_game)
         {

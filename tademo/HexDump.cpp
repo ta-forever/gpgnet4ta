@@ -41,4 +41,26 @@ namespace TADemo
         }
     }
 
+    void StrHexDump(const void* _buff, std::size_t size, std::ostream& s)
+    {
+        const unsigned char* buff = (const unsigned char*)_buff;
+        const unsigned bytesPerLine = 32;
+
+        for (std::size_t n = 0u; n < size;)
+        {
+            if (n % bytesPerLine == 0)
+            {
+                s << '"';
+            }
+
+            unsigned byte = buff[n] & 0x0ff;
+            s << '\\' << 'x' << std::setfill('0') << std::setw(2) << std::hex << byte;
+
+            ++n;
+            if (n % bytesPerLine == 0 || n == size)
+            {
+                s << '"' << '\n';
+            }
+        }
+    }
 }

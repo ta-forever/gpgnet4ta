@@ -23,11 +23,9 @@ namespace tafnet
 
         virtual void setTcpPort(quint16 port);
         virtual void setUdpPort(quint16 port);
-        virtual void resetGameConnection();
         virtual void enumSessions(char* data, int len);
         virtual bool openTcpSocket(int timeoutMillisecond);
         virtual void sendTcpData(char* data, int len);
-        virtual void closeTcpSocket();
         virtual void sendUdpData(char* data, int len);
         virtual QSharedPointer<QUdpSocket> getUdpSocket();
     };

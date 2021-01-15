@@ -28,7 +28,7 @@ namespace TADemo
 
     private:
         virtual void parseDplayPacket(const DPHeader *header, const char *data, int len);
-        virtual void parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *data, int len);
+        virtual void parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *data, int len, const std::string &context);
         virtual void parseDplaySuperEnumReply(const DPHeader *header, const char *data, int len);
         virtual void parseDplayCreateOrForwardPlayer(const DPHeader *header, const char *data, int len);
         virtual void parseDplayDeletePlayer(const DPHeader *header, const char *data, int len);

@@ -8,13 +8,16 @@
 
 #ifdef QT_CORE_LIB
 #include "QtCore/qDebug.h"
+#include "tademo/Watchdog.h"
 #define LOG_WARNING(x) qWarning() << x
 #define LOG_INFO(x) qInfo() << x
 #define LOG_DEBUG(x) qDebug() << x
+#define WATCHDOG(name,timeout) TADemo::Watchdog wd(name,timeout)
 #else
 #define LOG_WARNING(x) std::cout << x << std::endl
 #define LOG_INFO(x) std::cout << x << std::endl
 #define LOG_DEBUG(x) std::cout << x << std::endl
+#define WATCHDOG(name,timeout)
 #endif
 
 Player::Player() :
@@ -145,6 +148,7 @@ const PlayerData& GameMonitor2::getPlayerData(std::uint32_t dplayId) const
 
 void GameMonitor2::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std::string &name, TADemo::DPAddress *, TADemo::DPAddress *)
 {
+    WATCHDOG("GameMonitor2::onDplaySuperEnumPlayerReply", 100);
     if (!m_gameStarted && !name.empty() && dplayId > 0u)
     {
         auto &player = m_players[dplayId];
@@ -175,6 +179,7 @@ void GameMonitor2::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std:
 
 void GameMonitor2::onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint32_t dplayId, const std::string &name, TADemo::DPAddress *, TADemo::DPAddress *)
 {
+    WATCHDOG("GameMonitor2::onDplayCreateOrForwardPlayer", 100);
     if (command == 0x0008 && !m_gameStarted && !name.empty() && dplayId>0u) // 0x0008 CREATE PLAYER
     {
         auto &player = m_players[dplayId];
@@ -207,6 +212,7 @@ void GameMonitor2::onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint
 
 void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
 {
+    WATCHDOG("GameMonitor2::onDplayDeletePlayer", 100);
     if (dplayId == 0u || m_players.count(dplayId) == 0)
     {
         return;
@@ -240,6 +246,7 @@ void GameMonitor2::onStatus(
     std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
     unsigned playerSlotNumber, TADemo::Side playerSide, bool isAI, bool cheats)
 {
+    WATCHDOG("GameMonitor2::onStatus", 100);
     if (m_players.count(sourceDplayId) == 0)
     {
         LOG_WARNING("[GameMonitor2::onStatus] ERROR unexpected dplayid=" << sourceDplayId);
@@ -279,6 +286,7 @@ void GameMonitor2::onStatus(
 
 void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
 {
+    WATCHDOG("GameMonitor2::onChat", 100);
     if (m_players.count(sourceDplayId) == 0)
     {
         LOG_WARNING("[GameMonitor2::onChat] ERROR unexpected dplayid=" << sourceDplayId);
@@ -307,6 +315,7 @@ void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
 
 void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
 {
+    WATCHDOG("GameMonitor2::onUnitDied", 100);
     if (m_players.count(sourceDplayId) == 0)
     {
         LOG_WARNING("[GameMonitor2::onUnitDied] ERROR unexpected dplayid=" << sourceDplayId);
@@ -341,6 +350,7 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
 
 void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId)
 {
+    WATCHDOG("GameMonitor2::onRejectOther", 100);
     if (m_players.count(sourceDplayId) == 0)
     {
         LOG_WARNING("[GameMonitor2::onRejectOther] ERROR unexpected sourceDplayId=" << sourceDplayId);
@@ -391,6 +401,7 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
 
 void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
 {
+    WATCHDOG("GameMonitor2::onGameTick", 100);
     if (m_players.count(sourceDplayId) == 0)
     {
         LOG_WARNING("[GameMonitor2::onGameTick] ERROR unexpected sourceDplayId=" << sourceDplayId);

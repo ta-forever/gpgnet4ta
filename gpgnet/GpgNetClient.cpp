@@ -1,5 +1,6 @@
 #include "GpgNetClient.h"
 #include "GpgNetParse.h"
+#include "tademo/Watchdog.h"
 
 using namespace gpgnet;
 
@@ -41,6 +42,7 @@ void GpgNetClient::onReadyRead()
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetClient::onReadyRead", 100);
         QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
         while (sender->bytesAvailable() > 0)
         {
@@ -116,6 +118,7 @@ void GpgNetClient::onSocketStateChanged(QAbstractSocket::SocketState socketState
 {
     try
     {
+        TADemo::Watchdog wd("GpgNetClient::onSocketStateChanged", 100);
         if (socketState == QAbstractSocket::UnconnectedState)
         {
             QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());

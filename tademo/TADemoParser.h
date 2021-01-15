@@ -90,11 +90,11 @@ namespace TADemo
         // remember state for benefit of re-entry
         std::unique_ptr<Header> m_header;
         std::unique_ptr<ExtraHeader> m_extraHeader;
-        int m_numExtraSectorsRead;
-        int m_numPlayersRead;
-        int m_numPlayerStatusMessagesRead;
-        int m_numUnitDataRead;
-        int m_numPacketsRead;
+        unsigned m_numExtraSectorsRead = 0u;
+        unsigned m_numPlayersRead = 0u;
+        unsigned m_numPlayerStatusMessagesRead = 0u;
+        unsigned m_numUnitDataRead = 0u;
+        unsigned m_numPacketsRead = 0u;
 
         // running count of how many times we reached EOF and then later received more data
         // as a mechanism to distrimincate between a live game and one where user just copied a .tad into the demo folder

@@ -2,6 +2,7 @@
 #include "TafnetGameNode.h"
 #include "GameAddressTranslater.h"
 #include "GetUpnpPortMap.h"
+#include "TADemo/Watchdog.h"
 #include "tademo/HexDump.h"
 #include "tademo/TAPacketParser.h"
 #include "tademo/DPlayPacket.h"
@@ -81,11 +82,8 @@ void TafnetGameNode::translateMessageFromLocalGame(char* data, int len, std::uin
 
 void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channelCode, char* data, int len)
 {
-    //qInfo() << "[TafnetGameNode::handleGameData] recievePort=" << receivingSocket->localPort() << "channelCode=" << channelCode << "len=" << len;
-    //if (data)
-    //{
-    //    TADemo::HexDump(data, len, std::cout);
-    //}
+    TADemo::Watchdog wd("TafnetGameNode::handleGameData", 100);
+
     if (m_remotePlayerIds.count(receivingSocket->localPort()) == 0)
     {
         qWarning() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "unable to find a peerid associated with game data received on port" << receivingSocket->localPort();
@@ -100,17 +98,24 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         return;
     }
 
-    if (data && (m_gameTcpPort == 0 || m_gameUdpPort == 0))
+    if (!data)
+    {
+        qWarning() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "encountered null data() on port" << receivingSocket->localPort();
+        return;
+    }
+
+    if (len == 0)
+    {
+        qWarning() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "encountered empty data() on port" << receivingSocket->localPort();
+        return;
+    }
+
+    if (m_gameTcpPort == 0 || m_gameUdpPort == 0)
     {
         updateGameSenderPorts(data, len);
     }
 
-    if (!data)
-    {
-        resetGameConnection();
-    }
-
-    else if (channelCode == GameReceiver::CHANNEL_UDP && len > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId))
+    if (channelCode == GameReceiver::CHANNEL_UDP && unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId))
     {
         // split/reassemble with ack/resend to ensure delivery to remote TafnetNode, but still delivered to game's UDP port
         m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_PROTECTED, data, len);
@@ -172,12 +177,12 @@ void TafnetGameNode::translateMessageFromRemoteGame(char* data, int len, std::ui
 
 void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len)
 {
+    TADemo::Watchdog wd("TafnetGameNode::handleTafnetMessage", 100);
     GameSender* gameSender = getGameSender(peerPlayerId);
     GameReceiver* gameReceiver = getGameReceiver(peerPlayerId, gameSender->getUdpSocket());
     quint16 replyPorts[2];
     gameReceiver->getListenPorts(replyPorts);
 
-    //qInfo() << "[TafnetGameNode::handleTafnetMessage] me=" << m_tafnetNode->getPlayerId() << "from=" << peerPlayerId << "action=" << tafheader.action;
     switch (action)
     {
     case Payload::ACTION_HELLO:
@@ -187,6 +192,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
     case Payload::ACTION_ENUM:
         GameAddressTranslater(gameReceiver->getBindAddress().toIPv4Address(), replyPorts)(data, len);
         gameSender->enumSessions(data, len);
+        break;
 
     case Payload::ACTION_TCP_OPEN:
         gameSender->openTcpSocket(500);
@@ -195,23 +201,20 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
     case Payload::ACTION_TCP_DATA:
         translateMessageFromRemoteGame(data, len, gameReceiver->getBindAddress().toIPv4Address(), replyPorts);
         gameSender->sendTcpData(data, len);
-        if (m_packetParser) m_packetParser->parseGameData(data, len);
-        break;
-
-    case Payload::ACTION_TCP_CLOSE:
-        gameSender->closeTcpSocket();
+        if (m_packetParser)
+        {
+            m_packetParser->parseGameData(data, len);
+        }
         break;
 
     case Payload::ACTION_UDP_PROTECTED:
     case Payload::ACTION_UDP_DATA:
-    {
         gameSender->sendUdpData(data, len);
         if (m_packetParser)
         {
             m_packetParser->parseGameData(data, len);
         }
         break;
-    }
 
     default:
         qInfo() << "[TafnetGameNode::handleTafnetMessage] playerId" << m_tafnetNode->getPlayerId() << "ERROR unknown action!";
@@ -272,6 +275,7 @@ void TafnetGameNode::unregisterRemotePlayer(std::uint32_t remotePlayerId)
 
 void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
 {
+    TADemo::Watchdog wd2("TafnetGameNode::updateGameSenderPorts", 100);
     TADemo::DPHeader* header = (TADemo::DPHeader*)data;
     if (header->looksOk())
     {
@@ -319,20 +323,6 @@ void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
     }
 }
 
-void TafnetGameNode::resetGameConnection()
-{
-    qInfo() << "[TafnetGameNode::resetGameConnection] playerId" << m_tafnetNode->getPlayerId();
-    m_gameTcpPort = m_gameUdpPort = 0;
-    for (auto &pair : m_gameSenders)
-    {
-        pair.second->resetGameConnection();
-    }
-    for (auto &pair : m_gameReceivers)
-    {
-        pair.second->resetGameConnection();
-    }
-}
-
 void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat)
 {
     if (!m_gameSenders.empty())
@@ -354,7 +344,7 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
         TADemo::bytestring bs = TADemo::TPacket::createChatSubpacket(message);
         bs = TADemo::TPacket::trivialSmartpak(bs, -1);
         bs = TADemo::TPacket::compress(bs);
-        bs = TADemo::TPacket::encrypt(bs);
+        TADemo::TPacket::encrypt(bs);
 
         std::uint32_t zeroDplayId = 0u;
         bs = TADemo::bytestring((std::uint8_t*) & sourceDplayId, 4)
