@@ -15,13 +15,6 @@ namespace TADemo
         COMPRESSED = 0x04
     };
 
-    enum class Side {
-        ARM = 0,
-        CORE = 1,
-        WATCH = 2,
-        UNKNOWN = 3
-    };
-
     enum class SubPacketCode
     {
         ZERO_00 = 0x00,
@@ -31,7 +24,7 @@ namespace TADemo
         PAD_ENCRYPT_06 = 0x06,
         UNK_07 = 0x07,
         LOADING_STARTED_08 = 0x08,
-        UNIT_BUILDSTARTED_09 = 0x09,
+        UNIT_BUILD_STARTED_09 = 0x09,
         UNK_0A = 0x0a,
         UNIT_TAKE_DAMAGE_0B = 0x0b,
         UNIT_KILLED_0C = 0x0c,
@@ -115,7 +108,7 @@ namespace TADemo
 
         virtual void onStatus(
             std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits, 
-            unsigned playerSlotNumber, Side playerSide, bool isAI, bool cheats) = 0;
+            unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats) = 0;
         virtual void onChat(std::uint32_t sourceDplayId, const std::string &chat) = 0;
         virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId) = 0;
         virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId) = 0;

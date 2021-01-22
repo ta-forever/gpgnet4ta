@@ -209,7 +209,7 @@ public:
         }
     }
 
-    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isWatcher, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
         try
         {
@@ -221,7 +221,7 @@ public:
             {
                 int teamNumber = int(_teamNumber);
                 QString aiName = makeAiName(name, slot);
-                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] AiOption" << aiName << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] aiName:" << aiName << "slot:" << slot << "army:" << armyNumber << "team:" << teamNumber << "side:" << side << "isDead:" << isDead << "isWatcher:" << isWatcher;
                 if (m_isHost)
                 {
                     m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
@@ -232,8 +232,8 @@ public:
             }
             else
             {
-                int teamNumber = TADemo::Side(side) == TADemo::Side::WATCH ? -1 : int(_teamNumber);
-                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] PlayerOption" << name << "id" << gpgnetId << "slot" << slot << "army" << armyNumber << "team" << teamNumber << "side" << side << "isDead" << isDead;
+                int teamNumber = isWatcher ? -1 : int(_teamNumber);
+                qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] playerName:" << name << "id:" << gpgnetId << "slot:" << slot << "army:" << armyNumber << "team:" << teamNumber << "side:" << side << "isDead:" << isDead << "isWatcher:" << isWatcher;
                 if (m_isHost)
                 {
                     m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
@@ -347,6 +347,7 @@ class HandleGameStatus : public GameEventHandlerQt
     // fixed size 10 slots
     QVector<QString> m_playerNames;
     QVector<bool> m_isAI;
+    QVector<bool> m_isWatcher;
 
 public:
     HandleGameStatus(IrcForward* irc, QString channel, TaLobby& taLobby) :
@@ -355,7 +356,8 @@ public:
         m_taLobby(taLobby),
         m_quitRequested(0),
         m_playerNames(10u),
-        m_isAI(10u, false)
+        m_isAI(10u, false),
+        m_isWatcher(10u, false)
     { }
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
@@ -379,7 +381,7 @@ public:
         }
     }
 
-    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isWatcher, bool isAI, bool isDead, quint8 armyNumber, quint8 _teamNumber, QStringList mutualAllies)
     {
         try
         {
@@ -387,6 +389,7 @@ public:
             {
                 m_playerNames[slot] = name;
                 m_isAI[slot] = isAI;
+                m_isWatcher[slot] = isWatcher;
             }
         }
         catch (std::exception &e)
@@ -408,6 +411,7 @@ public:
             {
                 m_playerNames[slot].clear();
                 m_isAI[slot] = false;
+                m_isWatcher[slot] = false;
             }
         }
         catch (std::exception &e)
@@ -427,17 +431,18 @@ public:
             TADemo::Watchdog wd("HandleGameStatus::onGameStarted", 100);
             const int occupancyCount = getOccupancyCount();
             const int aiCount = getAiCount();
-            const int humanCount = occupancyCount - aiCount;
+            const int watcherCount = getWatcherCount();
+            const int humanPlayerCount = occupancyCount - aiCount - watcherCount;
 
             if (!teamsFrozen && aiCount == 0)
             {
-                if (humanCount >= 3)
+                if (humanPlayerCount >= 3)
                 {
                     doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
                     doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
                     doSend("/quit to disconnect so team can .take (unless UR host!)", false, true);
                 }
-                else if (humanCount == 2)
+                else if (humanPlayerCount == 2)
                 {
                     doSend("Game becomes rated after 1:00", false, true);
                     doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
@@ -564,6 +569,13 @@ private:
     {
         return std::accumulate(m_isAI.begin(), m_isAI.end(), 0u,
             [](int a, bool isAI) { return isAI ? a + 1 : a; });
+    }
+
+    int getWatcherCount()
+    {
+        return std::accumulate(m_isWatcher.begin(), m_isWatcher.end(), 0u,
+            [](int a, bool isWatcher) { return isWatcher ? a + 1 : a; });
+
     }
 };
 
@@ -697,8 +709,7 @@ void RunAs(QString cmd, QStringList args)
     CloseHandle(ShExecInfo.hProcess);
 }
 
-
-int main(int argc, char* argv[])
+int doMain(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
     const char* DEFAULT_GAME_INI = "TAForever.ini";
@@ -711,7 +722,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.10.2");
+    QCoreApplication::setApplicationVersion("0.10.4");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
@@ -832,7 +843,7 @@ int main(int argc, char* argv[])
                 break;
 
             RunAs(app.applicationFilePath(), args);
-        } 
+        }
     }
 
     QString serviceName = "GPGNet4TA / Total Annihilation";
@@ -951,7 +962,7 @@ int main(int argc, char* argv[])
             dplayGuid,
             parser.value("players").toInt(),
             parser.isSet("lockoptions"),
-            parser.value("gamemod").toUpper()=="TAESC" ? 1000 : 1500,
+            1000,
             jdplay,
             gpgNetClient);
 
@@ -1036,4 +1047,24 @@ int main(int argc, char* argv[])
         app.exec();
     }
     return 0;
+}
+
+int main(int argc, char* argv[])
+{
+    try
+    {
+        return doMain(argc, argv);
+    }
+    catch (std::exception & e)
+    {
+        std::cerr << "[main catch std::exception] " << e.what() << std::endl;
+        qWarning() << "[main catch std::exception]" << e.what();
+        return 1;
+    }
+    catch (...)
+    {
+        std::cerr << "[main catch ...] " << std::endl;
+        qWarning() << "[main catch ...]";
+        return 1;
+    }
 }

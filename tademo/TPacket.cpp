@@ -245,7 +245,7 @@ namespace TADemo
         case SubPacketCode::PAD_ENCRYPT_06: len = 1;    break;
         case SubPacketCode::UNK_07: len = 1;    break;
         case SubPacketCode::LOADING_STARTED_08:  len = 1;    break;
-        case SubPacketCode::UNIT_BUILDSTARTED_09: len = 23;    break;
+        case SubPacketCode::UNIT_BUILD_STARTED_09: len = 23;    break;
         case SubPacketCode::UNK_0A: len = 7;     break;
         case SubPacketCode::UNIT_TAKE_DAMAGE_0B: len = 9;     break;
         case SubPacketCode::UNIT_KILLED_0C: len = 11;    break;

@@ -19,8 +19,8 @@ void GameEventsSignalQt::onPlayerStatus(const PlayerData &player, const std::set
     }
 
     emit playerStatus(
-        player.dplayid, QString::fromStdString(player.name), player.slotNumber, quint8(player.side), player.is_AI,
-        player.is_dead, player.armyNumber, player.teamNumber, mutualAllies);
+        player.dplayid, QString::fromStdString(player.name), player.slotNumber, quint8(player.side), 
+        player.isWatcher, player.isAI, player.isDead, player.armyNumber, player.teamNumber, mutualAllies);
 }
 
 void GameEventsSignalQt::onClearSlot(const PlayerData &player)

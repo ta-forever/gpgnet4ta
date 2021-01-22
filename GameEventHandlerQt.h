@@ -8,7 +8,7 @@ class GameEventHandlerQt: public QObject
 {
 public:
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName) = 0;
-    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 teamNumber, QStringList mutualAllies) = 0;
+    virtual void onPlayerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isWatcher, bool isAI, bool isDead, quint8 armyNumber, quint8 teamNumber, QStringList mutualAllies) = 0;
     virtual void onClearSlot(quint32 dplayId, QString name, quint8 slot) = 0;
     virtual void onGameStarted(quint32 tick, bool teamsFrozen) = 0;
     virtual void onGameEnded(QList<QVariantMap> results) = 0;
@@ -29,7 +29,7 @@ public:
 
 signals:
     void gameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName);
-    void playerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isAI, bool isDead, quint8 armyNumber, quint8 teamNumber, QStringList mutualAllies);
+    void playerStatus(quint32 dplayId, QString name, quint8 slot, quint8 side, bool isWatcher, bool isAI, bool isDead, quint8 armyNumber, quint8 teamNumber, QStringList mutualAllies);
     void clearSlot(quint32 dplayId, QString name, quint8 slot);
     void gameStarted(quint32 tick, bool teamsFrozen);
     void gameEnded(QList<QVariantMap> results);

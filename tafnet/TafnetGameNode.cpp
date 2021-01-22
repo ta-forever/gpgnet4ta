@@ -7,6 +7,7 @@
 #include "tademo/TAPacketParser.h"
 #include "tademo/DPlayPacket.h"
 
+#include <algorithm>
 #include <sstream>
 #include <QtCore/quuid.h>
 
@@ -115,22 +116,39 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         updateGameSenderPorts(data, len);
     }
 
-    if (channelCode == GameReceiver::CHANNEL_UDP && unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId))
+    if (channelCode == GameReceiver::CHANNEL_UDP)
     {
-        // split/reassemble with ack/resend to ensure delivery to remote TafnetNode, but still delivered to game's UDP port
-        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_PROTECTED, data, len);
+        bool protect = unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId);
         if (m_packetParser)
         {
-            m_packetParser->parseGameData(data, len);
-        }
-    }
+            static const std::set<TADemo::SubPacketCode> protectedSubpaks({
+                TADemo::SubPacketCode::CHAT_05,
+                TADemo::SubPacketCode::LOADING_STARTED_08,
+                TADemo::SubPacketCode::GIVE_UNIT_14,
+                TADemo::SubPacketCode::HOST_MIGRATION_18,
+                TADemo::SubPacketCode::REJECT_1B,
+                TADemo::SubPacketCode::SPEED_19,
+                TADemo::SubPacketCode::ALLY_23,
+                TADemo::SubPacketCode::TEAM_24
+            });
 
-    else if (channelCode == GameReceiver::CHANNEL_UDP)
-    {
-        m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_DATA, data, len);
-        if (m_packetParser)
+            std::set<TADemo::SubPacketCode> parsedSubpaks = m_packetParser->parseGameData(data, len);
+            std::vector<TADemo::SubPacketCode> parsedProtectedSubpaks;
+            std::set_intersection(
+                parsedSubpaks.begin(), parsedSubpaks.end(),
+                protectedSubpaks.begin(), protectedSubpaks.end(),
+                std::back_inserter(parsedProtectedSubpaks));
+            protect |= parsedProtectedSubpaks.size() > 0u;
+        }
+
+        if (protect)
         {
-            m_packetParser->parseGameData(data, len);
+            // split/reassemble with ack/resend to ensure delivery to remote TafnetNode, but still delivered to game's UDP port
+            m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_PROTECTED, data, len);
+        }
+        else
+        {
+            m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_UDP_DATA, data, len);
         }
     }
 

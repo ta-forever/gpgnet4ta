@@ -20,32 +20,20 @@
 #define WATCHDOG(name,timeout)
 #endif
 
-Player::Player() :
-side(TADemo::Side::UNKNOWN)
+Player::Player()
 { }
 
-PlayerData::PlayerData() :
-is_AI(false),
-is_dead(false),
-tick(0u),
-armyNumber(0),
-teamNumber(0)
+PlayerData::PlayerData()
 { }
 
-PlayerData::PlayerData(const Player &player) :
-Player(player),
-is_AI(false),
-is_dead(false),
-tick(0u),
-dplayid(0u),
-armyNumber(0),
-teamNumber(0)
+PlayerData::PlayerData(const Player &player):
+Player(player)
 { }
 
 std::ostream & PlayerData::print(std::ostream &s) const
 {
     s << "'" << name << "': id=" << std::hex << dplayid
-        << ", slot=" << slotNumber << ", side=" << int(side) << ", is_ai=" << is_AI << ", is_dead=" << is_dead << ", tick=" << tick << ", nrAllies=" << allies.size();
+        << ", slot=" << slotNumber << ", side=" << int(side) << ", isAI=" << isAI << ", isDead=" << isDead << ", tick=" << tick << ", nrAllies=" << allies.size();
     return s;
 }
 
@@ -128,7 +116,7 @@ std::set<std::string> GameMonitor2::getPlayerNames(bool queryIsPlayer, bool quer
     std::set<std::string> playerNames;
     for (const auto& player : m_players)
     {
-        if (player.second.side != TADemo::Side::WATCH && queryIsPlayer || player.second.side == TADemo::Side::WATCH && queryIsWatcher)
+        if (!player.second.isWatcher && queryIsPlayer || player.second.isWatcher && queryIsWatcher)
         {
             playerNames.insert(player.second.name);
         }
@@ -244,7 +232,7 @@ void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
 
 void GameMonitor2::onStatus(
     std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
-    unsigned playerSlotNumber, TADemo::Side playerSide, bool isAI, bool cheats)
+    unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats)
 {
     WATCHDOG("GameMonitor2::onStatus", 100);
     if (m_players.count(sourceDplayId) == 0)
@@ -255,23 +243,16 @@ void GameMonitor2::onStatus(
     if (!m_gameStarted)
     {
         auto &player = m_players[sourceDplayId];
-        player.is_AI = isAI;
+        player.isAI = isAI;
         player.slotNumber = playerSlotNumber;
-        if (player.side != playerSide)
+        if (player.side < 0 || player.isWatcher != isWatcher)
         {
-            if (player.side == TADemo::Side::UNKNOWN)
-            {
-                // first time we've seen this player. team/army numbers have probably changed for all players
-                player.side = playerSide;
-                notifyPlayerStatuses();
-            }
-            else
-            {
-                // user just changed Side no need to re-notify all players
-                player.side = playerSide;
-                if (m_gameEventHandler) m_gameEventHandler->onPlayerStatus(player, getMutualAllyNames(player.dplayid, m_players));
-            }
+            player.side = playerSide;
+            player.isWatcher = isWatcher;
+            updatePlayerArmies();
+            notifyPlayerStatuses();
         }
+
         if (sourceDplayId == m_hostDplayId && !mapName.empty() && maxUnits > 0)
         {
             if (m_mapName != mapName)
@@ -329,7 +310,7 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         m_players[sourceDplayId].print(ss);
         LOG_INFO(ss.str().c_str());
 
-        m_players[sourceDplayId].is_dead = true;
+        m_players[sourceDplayId].isDead = true;
 
         int winningTeamNumber;;
         if (checkEndGameCondition(winningTeamNumber))
@@ -388,7 +369,7 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
     }
     else
     {
-        m_players[rejectedDplayId].is_dead = true;
+        m_players[rejectedDplayId].isDead = true;
 
         int winningTeamNumber;
         if (checkEndGameCondition(winningTeamNumber))
@@ -468,7 +449,7 @@ std::set<std::uint32_t> GameMonitor2::getActivePlayers() const
     std::set<std::uint32_t> activePlayers;
     for (const auto & player : m_players)
     {
-        if (!player.second.is_dead && player.second.side != TADemo::Side::WATCH)
+        if (!player.second.isDead && !player.second.isWatcher)
         {
             activePlayers.insert(player.second.dplayid);
         }
@@ -609,7 +590,7 @@ void GameMonitor2::updatePlayerArmies()
     int armyCount = 0;  // assign army number by consecutive sortedPlayer
     for (PlayerData* sortedPlayer : sortedPlayers)
     {
-        if (sortedPlayer->side == TADemo::Side::WATCH || sortedPlayer->is_dead)
+        if (sortedPlayer->isWatcher || sortedPlayer->isDead)
         {
             continue;
         }
@@ -622,8 +603,8 @@ void GameMonitor2::updatePlayerArmies()
             for (std::uint32_t allynumber : mutualAllies)
             {
                 if (m_players.at(allynumber).teamNumber == 0 &&   // this is arbitrary - ie how to deal with someone who's allies aren't allied?
-                    m_players.at(allynumber).side != TADemo::Side::WATCH &&
-                    !m_players.at(allynumber).is_dead)
+                    !m_players.at(allynumber).isWatcher &&
+                    !m_players.at(allynumber).isDead)
                 {
                     m_players.at(allynumber).teamNumber = teamCount;
                 }
@@ -642,7 +623,7 @@ void GameMonitor2::notifyPlayerStatuses()
     std::vector<bool> isSlotUsed(10, false);
     for (const auto &p : m_players)
     {
-        if (p.second.side != TADemo::Side::UNKNOWN)
+        if (p.second.side >= 0)
         {
             m_gameEventHandler->onPlayerStatus(p.second, getMutualAllyNames(p.first, m_players));
             // NB UNKNOWN side means the slot number is invalid too
@@ -763,7 +744,7 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
     {
         int nArmy = player.second.armyNumber;
         int nTeam = player.second.teamNumber;
-        if (nArmy == 0 || nTeam == 0 || player.second.side == TADemo::Side::WATCH)
+        if (nArmy == 0 || nTeam == 0 || player.second.isWatcher)
         {
             // either updatePlayerArmies hasn't been called (a bug), or player is a watcher (is normal)
             continue;
@@ -816,8 +797,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -860,9 +841,9 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::WATCH, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, true, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -893,9 +874,9 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::WATCH, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, true, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -926,9 +907,9 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::WATCH, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, true, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -959,9 +940,9 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::WATCH, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, true, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -992,9 +973,9 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::WATCH, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, true, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -1026,8 +1007,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -1064,8 +1045,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -1096,8 +1077,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 101);
         gm.onGameTick(2, 101);
         TESTASSERT(gm.isGameStarted());
@@ -1118,8 +1099,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 50);
         gm.onGameTick(2, 50);
         TESTASSERT(!gm.isGameStarted());
@@ -1143,8 +1124,8 @@ void GameMonitor2::test()
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onGameTick(1, 50);
         gm.onGameTick(2, 50);
         TESTASSERT(!gm.isGameStarted());
@@ -1168,10 +1149,10 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 4, "player4", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::ARM, false, false);
-        gm.onStatus(4, "Canal Crossing", 1500, 4, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         gm.onGameTick(3, 10);
@@ -1239,10 +1220,10 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 4, "player4", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Canal Crossing", 1500, 3, TADemo::Side::ARM, false, false);
-        gm.onStatus(4, "Canal Crossing", 1500, 4, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         gm.onGameTick(3, 10);
@@ -1291,10 +1272,10 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "AI:player1 1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 4, "AI:player1 2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Comet Catcher", 1500, 3, TADemo::Side::ARM, false, false);
-        gm.onStatus(4, "Canal Crossing", 1500, 4, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Comet Catcher", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
         gm.onChat(1, "<player1>  allied with player2");
         gm.onChat(2, "<player2>  allied with player1");
         gm.onGameTick(1, 10);
@@ -1329,10 +1310,10 @@ void GameMonitor2::test()
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 3, "AI:player2 1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 4, "AI:player2 2", NULL, NULL);
-        gm.onStatus(1, "Comet Catcher", 1500, 1, TADemo::Side::ARM, false, false);
-        gm.onStatus(2, "Canal Crossing", 1500, 2, TADemo::Side::ARM, false, false);
-        gm.onStatus(3, "Comet Catcher", 1500, 3, TADemo::Side::ARM, false, false);
-        gm.onStatus(4, "Canal Crossing", 1500, 4, TADemo::Side::ARM, false, false);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Comet Catcher", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
         gm.onChat(1, "<player1>  allied with player2");
         gm.onChat(2, "<player2>  allied with player1");
         gm.onGameTick(1, 10);

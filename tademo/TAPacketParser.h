@@ -21,10 +21,12 @@ namespace TADemo
         // and echoing resulting GameEventData multiple times
         DuplicateDetection m_taDuplicateDetection;
 
+        std::set<SubPacketCode> m_parsedSubPacketCodes;
+
     public:
         TAPacketParser(TaPacketHandler *packetHandler);
 
-        virtual void parseGameData(const char *data, int len);
+        virtual std::set<SubPacketCode> parseGameData(const char *data, int len);
 
     private:
         virtual void parseDplayPacket(const DPHeader *header, const char *data, int len);

@@ -17,10 +17,11 @@ TAPacketParser::TAPacketParser(TaPacketHandler *packetHandler) :
 m_packetHandler(packetHandler)
 { }
 
-void TAPacketParser::parseGameData(const char *data, int len)
+std::set<SubPacketCode> TAPacketParser::parseGameData(const char *data, int len)
 {
     Watchdog wd("TAPacketParser::parseGameData", 100);
     const DPHeader *header = NULL;
+    m_parsedSubPacketCodes.clear();
     for (const char *ptr = data; ptr < data + len; ptr += header->size())
     {
         header = (const DPHeader*)ptr;
@@ -29,7 +30,7 @@ void TAPacketParser::parseGameData(const char *data, int len)
             std::uint32_t id1 = *(std::uint32_t*)data;
             std::uint32_t id2 = *(std::uint32_t*)(data + 4);
             parseTaPacket(id1, id2, data+8, len-8, "no dplay header");
-            return;
+            return m_parsedSubPacketCodes;
         }
 
         if (std::strncmp(header->actionstring, "play", 4) == 0)
@@ -41,6 +42,7 @@ void TAPacketParser::parseGameData(const char *data, int len)
             parseTaPacket(*(std::uint32_t*)header->actionstring, 0, ptr + sizeof(DPHeader), header->size() - sizeof(DPHeader), "with dplay header");
         }
     }
+    return m_parsedSubPacketCodes;
 }
 
 void TAPacketParser::parseDplayPacket(const DPHeader *header, const char *data, int len)
@@ -215,6 +217,7 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
         if (checksum[0] != checksum[1])
         {
             qWarning() << "[TAPacketParser::parseTaPacket] checksum mismatch! context=" << QString::fromStdString(context);
+            return;
         }
     }
 
@@ -247,6 +250,7 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
             continue;
         }
 
+        m_parsedSubPacketCodes.insert(SubPacketCode(s[0]));
         switch (SubPacketCode(s[0]))
         {
         case SubPacketCode::PLAYER_INFO_20:
@@ -255,14 +259,23 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
                 std::uint16_t maxUnits = *(std::uint16_t*)(&s[0xa6]);
                 bool isAI = s[0x95] == 2;
                 bool isWatcher = (s[0x9c] & 0x40) != 0;
-                unsigned armOrCore = s[0x96];
+                std::int8_t side = s[0x96];
                 bool cheats = (s[0x9d] & 0x20) != 0;
                 unsigned playerSlotNumber = s[0x97];
-                Side playerSide = isWatcher ? Side::WATCH : Side(armOrCore);
                 if (playerSlotNumber < 10)
                 {
-                    m_packetHandler->onStatus(sourceDplayId, mapName, maxUnits, playerSlotNumber, playerSide, isAI, cheats);
+                    m_packetHandler->onStatus(sourceDplayId, mapName, maxUnits, playerSlotNumber, side, isWatcher, isAI, cheats);
                 }
+            }
+            break;
+
+        case SubPacketCode::ALLY_23:
+        case SubPacketCode::TEAM_24:
+            {
+                // @todo use these messages instead of CHAT_05 to work out alliances
+                //std::ostringstream ss;
+                //HexDump(s.data(), s.size(), ss);
+                //qInfo() << ss.str().c_str();
             }
             break;
 
