@@ -389,7 +389,7 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
         return;
     }
 
-    if (!m_gameLaunched && tick > m_gameStartsAfterTickCount/20)
+    if (!m_gameLaunched)
     {
         m_gameLaunched = true;
         if (m_gameEventHandler) m_gameEventHandler->onGameStarted(tick, false);

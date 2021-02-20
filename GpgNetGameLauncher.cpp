@@ -65,7 +65,7 @@ void GpgNetGameLauncher::pollJdplayStillActive()
     }
 }
 
-void GpgNetGameLauncher::onHostGame(QString mapName)
+void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
 {
     try
     {
@@ -88,8 +88,10 @@ void GpgNetGameLauncher::onHostGame(QString mapName)
             onLaunchGame();
         }
 
-        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
+        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Team", 1);
         m_gpgNetSend.gameOption("Slots", m_playerLimit);
+        qInfo() << "GameOption MapDetails" << mapDetails;
+        m_gpgNetSend.gameOption("MapDetails", mapDetails);
         m_isHost = true;
     }
     catch (std::exception &e)
@@ -128,7 +130,7 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int player
             onLaunchGame();
         }
 
-        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Color", 1);
+        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Team", 1);
     }
     catch (std::exception &e)
     {
@@ -221,6 +223,7 @@ void GpgNetGameLauncher::onLaunchGame()
     m_pollStillActiveTimer.start(3000);
 
     m_gpgNetSend.gameState("Lobby", "Battleroom");
+    emit gameLaunched();
     // from here on, game state is not driven by GpgNetGameLauncher but instead is inferred by GameMonitor
 }
 

@@ -38,15 +38,16 @@ public:
         JDPlay &jdplay, gpgnet::GpgNetSend &gpgNetSend);
 
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
-    void onHostGame(QString mapName);
+    void onHostGame(QString mapName, QString mapDetails);
     void onJoinGame(QString host, QString playerName, int playerId);
 
     void onExtendedMessage(QString msg);
     void onLaunchGame();
 
 signals:
-    void gameTerminated();
+    void gameLaunched();
     void gameFailedToLaunch();
+    void gameTerminated();
 
 public slots:
     void pollJdplayStillActive();

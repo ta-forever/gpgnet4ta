@@ -5,6 +5,7 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qdir.h>
 #include <QtCore/quuid.h>
+#include <QtCore/qtemporaryfile.h>
 
 #define MINIUPNP_STATICLIB
 #include <miniupnpc/miniupnpc.h>
@@ -165,6 +166,7 @@ class ForwardGameEventsToGpgNet : public GameEventHandlerQt
 {
     gpgnet::GpgNetClient &m_gpgNetClient;
     bool m_isHost;
+    std::function<QString(QString)> getMapDetails;
 
     // TA constructs AI's name by prepending with "AI:" and appending with a sequence number
     // but unfortunately character count is limited so the sequence number might be dropped
@@ -183,8 +185,9 @@ class ForwardGameEventsToGpgNet : public GameEventHandlerQt
     }
 
 public:
-    ForwardGameEventsToGpgNet(gpgnet::GpgNetClient &gpgNetClient) :
-        m_gpgNetClient(gpgNetClient)
+    ForwardGameEventsToGpgNet(gpgnet::GpgNetClient& gpgNetClient, std::function<QString(QString)> getMapDetails) :
+        m_gpgNetClient(gpgNetClient),
+        getMapDetails(getMapDetails)
     { }
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
@@ -196,7 +199,7 @@ public:
             m_isHost = hostName == localName;
             if (m_isHost)
             {
-                m_gpgNetClient.gameOption("MapName", mapName);
+                m_gpgNetClient.gameOption("MapDetails", getMapDetails(mapName));
             }
         }
         catch (std::exception &e)
@@ -226,6 +229,7 @@ public:
                 {
                     m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
                     m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
+                    m_gpgNetClient.aiOption(aiName, "Color", slot);
                     m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
                     m_gpgNetClient.aiOption(aiName, "Faction", side);
                 }
@@ -238,6 +242,7 @@ public:
                 {
                     m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
                     m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
+                    m_gpgNetClient.playerOption(gpgnetId, "Color", slot);
                     m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
                     m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
                 }
@@ -433,6 +438,11 @@ public:
             const int aiCount = getAiCount();
             const int watcherCount = getWatcherCount();
             const int humanPlayerCount = occupancyCount - aiCount - watcherCount;
+
+            if (m_irc && m_irc->isActive()) {
+                m_irc->quit(m_irc->realName());
+                m_irc->close();
+            }
 
             if (!teamsFrozen && aiCount == 0)
             {
@@ -709,6 +719,40 @@ void RunAs(QString cmd, QStringList args)
     CloseHandle(ShExecInfo.hProcess);
 }
 
+QString quote(QString text)
+{
+    return '"' + text + '"';
+}
+
+QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName)
+{
+    qInfo() << "[getMapDetails]" << gamePath << maptoolExePath << _mapName;
+    QStringList args = { quote(maptoolExePath), "--gamepath", quote(gamePath), "--mapname", quote(_mapName+'$'), "--hash" };
+    QString command = args.join(' ');
+
+    QString tempFileName;
+    {
+        QTemporaryFile tmpFileName;
+        if (!tmpFileName.open()) {
+            return "";
+        }
+        tempFileName = tmpFileName.fileName();
+    }
+    command += " > " + tempFileName;
+    std::system(quote(command).toStdString().c_str());
+
+    QFile resultFile(tempFileName);
+    resultFile.open(QIODevice::ReadOnly);
+
+    QTextStream resultStream(&resultFile);
+    QString result = resultStream.readLine();
+    qInfo() << "[getMapDetails]" << result;
+
+    resultFile.close();
+    resultFile.remove();
+    return result;
+}
+
 int doMain(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
@@ -721,8 +765,8 @@ int doMain(int argc, char* argv[])
     const char* DEFAULT_DPLAY_REGISTERED_GAME_MOD = "TACC";
 
     QCoreApplication app(argc, argv);
-    QCoreApplication::setApplicationName("GpgPlay");
-    QCoreApplication::setApplicationVersion("0.10.4");
+    QCoreApplication::setApplicationName("GPGNet4TA");
+    QCoreApplication::setApplicationVersion("0.11");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
@@ -937,8 +981,6 @@ int doMain(int argc, char* argv[])
         ircForward->setNickName(user);
         ircForward->setRealName(user);
         ircForward->setPort(port);
-        ircForward->join(ircChannel);
-        ircForward->open();
     }
 
     if (parser.isSet("gpgnet"))
@@ -978,7 +1020,7 @@ int doMain(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &launcher, &GpgNetGameLauncher::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, [&launcher, &parser](QString mapName) {
-            launcher.onHostGame(mapName);
+            launcher.onHostGame(mapName, getMapDetails(parser.value("gamepath"), "maptool.exe", mapName));
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, int playerId) {
@@ -1006,7 +1048,9 @@ int doMain(int argc, char* argv[])
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)
         // This information is passed on to the GpgNetClient for consumption by the TAF server
         qInfo() << "[main] connecting game status events to gpgnet";
-        ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient);
+        ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient, [&parser](QString mapName) {
+            return getMapDetails(parser.value("gamepath"), "maptool.exe", mapName);
+        });
         lobby.connectGameEvents(gameEventsToGpgNet);
 
         qInfo() << "[main] connecting game status events to HandleGameStatus";
@@ -1031,6 +1075,12 @@ int doMain(int argc, char* argv[])
                 {
                     qInfo() << "[main::privateMessageReceived] unknown exception";
                 }
+            });
+
+            QObject::connect(&launcher, &GpgNetGameLauncher::gameLaunched, ircForward.get(), [ircForward, ircChannel]()
+            {
+                ircForward->join(ircChannel);
+                ircForward->open();
             });
         }
 

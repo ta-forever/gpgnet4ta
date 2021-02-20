@@ -351,11 +351,11 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
         {
             if (isPrivate)
             {
-                message = "PM:<" + nick + "> " + chat;
+                message = "!<" + nick + "> " + chat;
             }
             else
             {
-                message = "TAF:<" + nick + "> " + chat;
+                message = "*<" + nick + "> " + chat;
             }
         }
 
