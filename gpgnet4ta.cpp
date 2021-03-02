@@ -738,7 +738,7 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
         }
         tempFileName = tmpFileName.fileName();
     }
-    command += " > " + tempFileName;
+    command += " > " + quote(tempFileName);
     std::system(quote(command).toStdString().c_str());
 
     QFile resultFile(tempFileName);
