@@ -103,7 +103,9 @@ JDPlay::~JDPlay(){
 		fflush(stdout);
 	}
 
-	deInitialize();
+        if (isInitialized) {
+            deInitialize();
+        }
 
 	if(debug){
 		cout << "-- ~JDPlay()" << endl;
@@ -112,7 +114,7 @@ JDPlay::~JDPlay(){
 }
 
 
-bool JDPlay::initialize(const char* gameGUID, char* hostIP, bool isHost, int maxPlayers){
+bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers){
 
 	if(debug){
 		cout << "++ initialize(" << gameGUID << ", " << hostIP << ", " << isHost << ")" << endl;
@@ -234,7 +236,7 @@ bool JDPlay::initialize(const char* gameGUID, char* hostIP, bool isHost, int max
 
 	address[1].guidDataType = DPAID_INet;
 	address[1].dwDataSize   = static_cast<DWORD>(strlen(hostIP)+1);
-	address[1].lpData       = hostIP;
+	address[1].lpData       = const_cast<char*>(hostIP);
 
 	// get size to create address
 	// this method will return DPERR_BUFFERTOOSMALL, that is not an error

@@ -5,14 +5,14 @@
 
 GpgNetGameLauncher::GpgNetGameLauncher(
     QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
-    JDPlay &jdplay, gpgnet::GpgNetSend &gpgNetSend) :
+    LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend) :
     m_iniTemplate(iniTemplate),
     m_iniTarget(iniTarget),
     m_guid(guid),
     m_playerLimit(playerLimit),
     m_lockOptions(lockOptions),
     m_maxUnits(maxUnits),
-    m_jdplay(jdplay),
+    m_launchClient(launchClient),
     m_gpgNetSend(gpgNetSend)
 {
     m_gpgNetSend.gameState("Idle", "Idle");
@@ -28,7 +28,7 @@ void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString play
         qInfo() << "[GpgNetGameLauncher::handleCreateLobby] playername=" << playerName << "playerId=" << playerId;
         m_thisPlayerName = playerName;
         m_thisPlayerId = playerId;
-        m_jdplay.updatePlayerName(playerName.toStdString().c_str());
+        m_launchClient.setPlayerName(playerName);
         m_gpgNetSend.gameState("Lobby", "Staging");
     }
     catch (std::exception &e)
@@ -46,10 +46,9 @@ void GpgNetGameLauncher::pollJdplayStillActive()
     try
     {
         TADemo::Watchdog wd("GpgNetGameLauncher::pollJdplayStillActive", 100);
-        if (!m_jdplay.pollStillActive())
+        if (!m_launchClient.isRunning())
         {
             qInfo() << "[GpgNetGameLauncher::pollJdplayStillActive] game stopped running. exit (or crash?)";
-            m_jdplay.releaseDirectPlay();
             m_pollStillActiveTimer.stop();
             m_gpgNetSend.gameEnded();
             emit gameTerminated();
@@ -74,13 +73,10 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
         QString sessionName = m_thisPlayerName + "'s Game";
 
         createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, mapName, m_playerLimit, m_lockOptions, m_maxUnits);
-        if (!m_jdplay.initialize(m_guid.toStdString().c_str(), "127.0.0.1", true, 10))
-        {
-            qWarning() << "[GpgNetGameLauncher::handleHostGame] unable to initialise dplay";
-            emit gameFailedToLaunch();
-            return;
-        }
-
+        m_launchClient.setGameGuid(m_guid);
+        m_launchClient.setAddress("127.0.0.1");
+        m_launchClient.setIsHost(true);
+ 
         m_readyToLaunch = true;
         if (m_autoLaunch)
         {
@@ -109,19 +105,15 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int player
     try
     {
         TADemo::Watchdog wd("GpgNetGameLauncher::onJoinGame", 1000);
-        qInfo() << "[GpgNetGameLauncher::handleJoinGame] playername=" << playerName << "playerId=" << playerId;
-        const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
+        qInfo() << "[GpgNetGameLauncher::onJoinGame] playername=" << playerName << "playerId=" << playerId << "guid" << m_guid;
 
+        const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
         char hostip[257] = { 0 };
         std::strncpy(hostip, hostOn47624, 256);
 
-        qInfo() << "[GpgNetGameLauncher::handleJoinGame] jdplay.initialize(join):" << m_guid << hostip;
-        if (!m_jdplay.initialize(m_guid.toStdString().c_str(), hostip, false, m_playerLimit))
-        {
-            qWarning() << "[GpgNetGameLauncher::handleJoinGame] unable to initialise dplay";
-            emit gameFailedToLaunch();
-            return;
-        }
+        m_launchClient.setGameGuid(m_guid);
+        m_launchClient.setAddress(hostip);
+        m_launchClient.setIsHost(false);
 
         m_readyToLaunch = true;
         if (m_autoLaunch)
@@ -146,7 +138,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
 {
     try
     {
-        TADemo::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 100);
+        TADemo::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 3000);
         qInfo() << "[GpgNetGameLauncher::onExtendedMessage]" << msg;
         if (msg == "/launch")
         {
@@ -154,7 +146,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
         }
         else if (msg == "/quit")
         {
-            if (!m_jdplay.pollStillActive() || ++m_quitCount == 2)
+            if (!m_launchClient.isRunning() || ++m_quitCount == 2)
             {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] terminating with m_quitCount=" << m_quitCount;
                 qApp->quit();
@@ -201,24 +193,24 @@ void GpgNetGameLauncher::onLaunchGame()
 {
     if (m_alreadyLaunched)
     {
-        qInfo() << "[GpgNetGameLauncher::doLaunchGame] jdplay already launched. ignoring";
+        qInfo() << "[GpgNetGameLauncher::onLaunchGame] game already launched. ignoring";
         return;
     }
 
     if (!m_readyToLaunch)
     {
-        qInfo() << "[GpgNetGameLauncher::doLaunchGame] jdplay not ready to launch. deferring";
+        qInfo() << "[GpgNetGameLauncher::onLaunchGame] game not ready to launch. deferring";
         m_autoLaunch = true;
         return;
     }
 
-    qInfo() << "[GpgNetGameLauncher::doLaunchGame] jdplay.launch()";
-    if (!m_jdplay.launch(true))
+    qInfo() << "[GpgNetGameLauncher::onLaunchGame] m_launchClient.launch()";
+    if (!m_launchClient.launch())
     {
         qWarning() << "[GpgNetGameLauncher::doLaunchGame] unable to launch game";
-        emit gameFailedToLaunch();
         return;
     }
+
     m_alreadyLaunched = true;
     m_pollStillActiveTimer.start(3000);
 
@@ -240,8 +232,8 @@ void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFi
     QString txt = in.readAll();
     txt.replace("{session}", session);
     txt.replace("{mission}", mission);
-    txt.replace("{playerlimit}", QString::number(max(2, min(playerLimit, 10))));
-    txt.replace("{maxunits}", QString::number(max(20, min(maxUnits, 1500))));
+    txt.replace("{playerlimit}", QString::number(std::max(2, std::min(playerLimit, 10))));
+    txt.replace("{maxunits}", QString::number(std::max(20, std::min(maxUnits, 1500))));
     txt.replace("{lockoptions}", lockOptions ? "1" : "0");
 
     qInfo() << "[GpgNetGameLauncher::createTAInitFile] saving ta ini:" << iniFilename;

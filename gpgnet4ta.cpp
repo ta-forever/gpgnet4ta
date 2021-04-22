@@ -23,8 +23,10 @@
 
 #include "ConsoleReader.h"
 #include "GpgNetGameLauncher.h"
+#include "LaunchServer.h"
 #include "IrcForward.h"
 #include "TaLobby.h"
+#include "MessageBoxThread.h"
 
 using namespace gpgnet;
 
@@ -86,6 +88,32 @@ QString GetDplayLobbableAppPath(QString appGuid, QString defaultPath)
     }
     return defaultPath;
 }
+
+
+QMap<QString, QString> GetDplayLobbableApp(QString appGuid)
+{
+    QMap<QString, QString> result;
+
+    QString registryPath = QString(R"(%1\%2)").arg(
+        R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
+    QSettings registry(registryPath, QSettings::NativeFormat);
+    QStringList applications = registry.childGroups();
+    Q_FOREACH(QString appName, applications)
+    {
+        QString nthGuid = registry.value(appName + "/Guid").toString();
+        if (QString::compare(appGuid, nthGuid) == 0)
+        {
+            result["Guid"] = nthGuid;
+            result["Path"] = registry.value(appName + "/Path", QVariant("<no Path>")).toString();
+            result["File"] = registry.value(appName + "/File", QVariant("<no File>")).toString();
+            result["CommandLine"] = registry.value(appName + "/CommandLine", QVariant("<no CommandLine>")).toString();
+            result["CurrentDirectory"] = registry.value(appName + "/CurrentDirectory", QVariant("<no CurrentDirectory>")).toString();
+            return result;
+        }
+    }
+    return result;
+}
+
 
 class UPNPPortMapping
 {
@@ -695,7 +723,7 @@ void SplitUserHostPortChannel(QString url, QString &user, QString &host, quint16
 }
 
 
-void RunAs(QString cmd, QStringList args)
+void RunAs(QString cmd, QStringList args, QString verb = "runas")
 {
     cmd = '"' + cmd + '"';
     std::transform(args.begin(), args.end(), args.begin(), [](QString arg) -> QString { return '"' + arg + '"'; });
@@ -703,12 +731,13 @@ void RunAs(QString cmd, QStringList args)
 
     std::string _cmd = cmd.toStdString();
     std::string _args = joinedArgs.toStdString();
+    std::string _verb = verb.toStdString();
 
     SHELLEXECUTEINFO ShExecInfo = { 0 };
     ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
     ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
     ShExecInfo.hwnd = NULL;
-    ShExecInfo.lpVerb = "runas";
+    ShExecInfo.lpVerb = _verb.c_str();
     ShExecInfo.lpFile = _cmd.c_str();
     ShExecInfo.lpParameters = _args.c_str();
     ShExecInfo.lpDirectory = NULL;
@@ -753,6 +782,28 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
     return result;
 }
 
+void UnableToLaunchMsgBox(MessageBoxThread& msgbox, QString guid)
+{
+    QMap<QString, QString> appSettings = GetDplayLobbableApp(guid);
+    QString err;
+    if (appSettings.contains("Path") && appSettings.contains("File"))
+    {
+        err = "Unable to launch game at path \"" + appSettings["Path"] + "\\" + appSettings["File"] + "\"\n";
+        err +=
+            "- Please check path is correct\n"
+            "  Correct the path in TAF Settings menu if not\n"
+            "- Please check you can launch game outside of TAF\n"
+            "- Try enable 'Run TA as Admin' in TAF Settings menu\n"
+            "  (and restart TAF)";
+    }
+    else
+    {
+        err = "Unable to launch game.  There is no DirectPlay registry entry for game with guid=\"" + guid + "\"\n";
+    }
+    QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
+}
+
+
 int doMain(int argc, char* argv[])
 {
     const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
@@ -767,6 +818,7 @@ int doMain(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GPGNet4TA");
     QCoreApplication::setApplicationVersion("0.11");
+    //app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("GPGNet facade for Direct Play games");
@@ -796,6 +848,10 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("registerdplay", "Register the dplay lobbyable app with --gamepath, --gameexe, --gameargs. (requires run as admin)."));
     parser.addOption(QCommandLineOption("uac", "run as admin."));
     parser.addOption(QCommandLineOption("upnp", "Attempt to set up a port forward using UPNP."));
+    parser.addOption(QCommandLineOption("launch", "Launch DirectPlay game with given GUID", "launch"));
+    parser.addOption(QCommandLineOption("playername", "Launch DirectPlay game with given player name", "playername", "BILLYIDOL"));
+    parser.addOption(QCommandLineOption("launchserver", "Start a DirectPlay launch server. listens on a tcp port for instructions to actually launch game"));
+    parser.addOption(QCommandLineOption("launchserverport", "Specifies port for LaunchServer to connect to (--gpgnet4ta) or to listen on (--launchserver)", "launchserverport", "48684"));
     parser.process(app);
 
     if (parser.isSet("uac"))
@@ -804,7 +860,7 @@ int doMain(int argc, char* argv[])
         for (const char *arg : {
             "autolaunch", "gpgnet", "mean", "deviation", "country", "numgames", "players",
             "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
-            "logfile", "loglevel", "irc", "proactiveresend", "cmdfile" })
+            "logfile", "loglevel", "irc", "proactiveresend", "cmdfile", "launch", "playername", "launchserver", "launchserverport" })
         {
             if (parser.isSet(arg))
             {
@@ -827,6 +883,57 @@ int doMain(int argc, char* argv[])
     Logger::Initialise(parser.value("logfile").toStdString(), Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(Logger::Log);
 
+    if (parser.isSet("launchserver"))
+    {
+        LaunchServer launchServer(QHostAddress("127.0.0.1"), parser.value("launchserverport").toInt());
+        MessageBoxThread msgbox;
+        QObject::connect(&launchServer, &LaunchServer::quit, &app, &QCoreApplication::quit);
+        QObject::connect(&launchServer, &LaunchServer::gameFailedToLaunch, [&msgbox](QString guid) {
+            UnableToLaunchMsgBox(msgbox, guid);
+        });
+        return app.exec();
+    }
+
+    if (parser.isSet("launch"))
+    {
+        std::string dplayGuid = parser.value("launch").toStdString();
+        std::string playerName = parser.value("playername").toStdString();
+        const bool createAsHost = !parser.isSet("joingame");
+        std::string ipaddr = parser.value("joingame").toStdString();
+        qInfo() << "launch guid:" << dplayGuid.c_str();
+        qInfo() << "playername:" << playerName.c_str();
+        qInfo() << "ipaddr:" << ipaddr.c_str();
+
+        JDPlay jdplay(playerName.c_str(), 3, false);
+        bool ret = jdplay.initialize(dplayGuid.c_str(), ipaddr.c_str(), createAsHost, 10);
+        if (!createAsHost)
+        {
+            //jdplay.searchOnce();
+        }
+
+        if (!ret)
+        {
+            qInfo() << "unable to initialise jdplay";
+            return 1;
+        }
+        ret = jdplay.launch(true);
+        if (!ret)
+        {
+            qInfo() << "unable to launch jdplay";
+            return 1;
+        }
+
+        QTimer stopTimer;
+        QObject::connect(&stopTimer, &QTimer::timeout, &app, [&jdplay, &app]() {
+            if (!jdplay.pollStillActive())
+            {
+                app.quit();
+            }
+        });
+        stopTimer.start(1000);
+        return app.exec();
+    }
+
     QString dplayGuid = QUuid::createUuidV5(QUuid(DEFAULT_DPLAY_REGISTERED_GAME_GUID), parser.value("gamemod").toUpper()).toString();
     QString dplayAppName = "Total Annihilation Forever (" + parser.value("gamemod").toUpper() + ")";
     QString dplayGameArgs;
@@ -848,7 +955,7 @@ int doMain(int argc, char* argv[])
             NULL,
             err.toStdString().c_str(),
             "Unable to launch game",
-            MB_OK | MB_ICONERROR
+            MB_OK | MB_ICONERROR | MB_SYSTEMMODAL
         );
         return 1;
     }
@@ -878,7 +985,7 @@ int doMain(int argc, char* argv[])
                 NULL,
                 err.toStdString().c_str(),
                 "DirectPlay Registration failed",
-                MB_ABORTRETRYIGNORE | MB_ICONERROR
+                MB_ABORTRETRYIGNORE | MB_ICONERROR | MB_SYSTEMMODAL
             );
 
             if (result == IDABORT)
@@ -907,7 +1014,7 @@ int doMain(int argc, char* argv[])
                 NULL,
                 err.toStdString().c_str(),
                 "UPNP Port Forward failed",
-                MB_ABORTRETRYIGNORE | MB_ICONERROR
+                MB_ABORTRETRYIGNORE | MB_ICONERROR | MB_SYSTEMMODAL
             );
 
             if (result == IDABORT)
@@ -937,33 +1044,7 @@ int doMain(int argc, char* argv[])
             std::uint32_t playerId = QHostAddress(playerName).toIPv4Address() & 0xff;
             lobby.onConnectToPeer(peer, playerName, playerId);
         }
-
-        const bool createAsHost = !parser.isSet("joingame");
-        JDPlay jdplay(playerName.toStdString().c_str(), 3, false);
-        bool ret = jdplay.initialize(dplayGuid.toStdString().c_str(), createAsHost ? "0.0.0.0" : "127.0.0.1", createAsHost, 10);
-
-        if (!ret)
-        {
-            qInfo() << "unable to initialise jdplay";
-            return 1;
-        }
-        ret = jdplay.launch(true);
-        if (!ret)
-        {
-            qInfo() << "unable to launch jdplay";
-            return 1;
-        }
-
-        QTimer stopTimer;
-        QObject::connect(&stopTimer, &QTimer::timeout, &app, [&jdplay, &app]() {
-            if (!jdplay.pollStillActive())
-            {
-                app.quit();
-            }
-        });
-        stopTimer.start(1000);
-
-        app.exec();
+        return app.exec();
     }
 
     std::shared_ptr<IrcForward> ircForward;
@@ -995,7 +1076,8 @@ int doMain(int argc, char* argv[])
         // We don't use enumeration because it causes our ice adapter proxy stuff to go haywire.
         // Instead we have blind faith that gpgnet/ice adapter know what they're doing
         // And we snoop network traffic to work out everything else (see TaLobby).
-        JDPlay jdplay("BILLYIDOL", 3, false);
+        //JDPlay jdplay("BILLYIDOL", 3, false);
+        LaunchClient launchClient(QHostAddress("127.0.0.1"), parser.value("launchserverport").toInt());
 
         // GpgNetGameLauncher interprets instructions from GpgNetClient to launch TA as a host or as a joiner
         GpgNetGameLauncher launcher(
@@ -1005,7 +1087,7 @@ int doMain(int argc, char* argv[])
             parser.value("players").toInt(),
             parser.isSet("lockoptions"),
             1000,
-            jdplay,
+            launchClient,
             gpgNetClient);
 
         // TaLobby is a conglomerate of objects that handles a man-in-the-middle relay of TA network traffic
@@ -1028,21 +1110,6 @@ int doMain(int argc, char* argv[])
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
-        QObject::connect(&launcher, &GpgNetGameLauncher::gameFailedToLaunch, [&app, &parser]() {
-            QString err = QString("Unable to launch ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\"\n";
-            err +=
-                "- Please check path is correct\n"
-                "  Correct the path in TAF Settings menu if not\n"
-                "- Please check you can launch game outside of TAF\n"
-                "- Try enable 'Run TA as Admin' in TAF Settings menu";
-            MessageBox(
-                NULL,
-                err.toStdString().c_str(),
-                "Unable to launch game",
-                MB_OK | MB_ICONERROR
-            );
-            app.quit();
-        });
 
         // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)

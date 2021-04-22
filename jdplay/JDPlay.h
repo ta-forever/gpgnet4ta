@@ -66,7 +66,7 @@ public:
     ~JDPlay();
 
     void updatePlayerName(const char* playerName);
-    bool initialize(const char* gameGUID, char* hostIP, bool isHost, int maxPlayers);
+    bool initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers);
     bool searchOnce();
     bool launch(bool startGame);
     bool pollStillActive();

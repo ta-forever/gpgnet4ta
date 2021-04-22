@@ -77,10 +77,16 @@ add_executable(gpgnet4ta
     gpgnet4ta.cpp
     GpgNetGameLauncher.h
     GpgNetGameLauncher.cpp
+    LaunchServer.h
+    LaunchServer.cpp
+    LaunchClient.h
+    LaunchClient.cpp
     IrcForward.h
     IrcForward.cpp
     ConsoleReader.h
     ConsoleReader.cpp
+    MessageBoxThread.h
+    MessageBoxThread.cpp
     )
 
 target_include_directories(gpgnet4ta 
