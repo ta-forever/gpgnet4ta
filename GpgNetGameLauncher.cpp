@@ -144,6 +144,21 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
         {
             onLaunchGame();
         }
+        else if (msg.startsWith("/map ") && msg.size()>5)
+        {
+            if (!m_isHost) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set map.  ignoring";
+            }
+            else if (m_alreadyLaunched) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
+            }
+            else
+            {
+                QString mapDetails = msg.mid(5);
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting new map:" << mapDetails;
+                m_gpgNetSend.gameOption("MapDetails", mapDetails);
+            }
+        }
         else if (msg == "/quit")
         {
             if (!m_launchClient.isRunning() || ++m_quitCount == 2)
