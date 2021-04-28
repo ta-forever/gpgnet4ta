@@ -70,9 +70,8 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
     {
         TADemo::Watchdog wd("GpgNetGameLauncher::onHostGame", 1000);
         qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
-        QString sessionName = m_thisPlayerName + "'s Game";
 
-        createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, mapName, m_playerLimit, m_lockOptions, m_maxUnits);
+        m_mapName = mapName;
         m_launchClient.setGameGuid(m_guid);
         m_launchClient.setAddress("127.0.0.1");
         m_launchClient.setIsHost(true);
@@ -155,7 +154,8 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
             else
             {
                 QString mapDetails = msg.mid(5);
-                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting new map:" << mapDetails;
+                m_mapName = mapDetails.split(QChar(0x1f))[0];
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting new map '" << m_mapName << "'. details:" << mapDetails;
                 m_gpgNetSend.gameOption("MapDetails", mapDetails);
             }
         }
@@ -218,6 +218,9 @@ void GpgNetGameLauncher::onLaunchGame()
         m_autoLaunch = true;
         return;
     }
+
+    QString sessionName = m_thisPlayerName + "'s Game";
+    createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits);
 
     qInfo() << "[GpgNetGameLauncher::onLaunchGame] m_launchClient.launch()";
     if (!m_launchClient.launch())

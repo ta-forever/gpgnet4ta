@@ -23,6 +23,7 @@ class GpgNetGameLauncher: public QObject
     gpgnet::GpgNetSend &m_gpgNetSend;
 
     QString m_thisPlayerName;
+    QString m_mapName;
     int m_thisPlayerId;
     QTimer m_pollStillActiveTimer;
     bool m_readyToLaunch = false;
