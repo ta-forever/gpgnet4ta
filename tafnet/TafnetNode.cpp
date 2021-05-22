@@ -1,7 +1,9 @@
 #include "TafnetNode.h"
-#include "TADemo/Watchdog.h"
+#include "tademo/Watchdog.h"
 
 #include <QtNetwork/qtcpsocket.h>
+
+#include <cstring>
 
 #ifdef _DEBUG
 #include <tademo/HexDump.h>
@@ -303,11 +305,12 @@ void TafnetNode::onReadyRead()
             const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)datas.data();
             const TafnetBufferedHeader* tafBufferedHeader = (TafnetBufferedHeader*)datas.data();
 
-            std::uint32_t peerPlayerId = tafheader->senderId;
+            std::uint32_t peerPlayerId = 0;//tafheader->senderId;
 
-            // Would prefer to use m_peerPlayerIds to lookup sender's playerId
+            // we prefer to use m_peerPlayerIds to lookup sender's playerId
             // but for some reason readDatagram doesn't set senderAddress and senderPort when run on linux using wine ...
-            if (false) {
+            // seems ok for native linux tho
+            if (true) {
                 auto it = m_peerPlayerIds.find(senderHostAndPort);
                 if (it == m_peerPlayerIds.end())
                 {
@@ -528,7 +531,7 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     {
         buf.resize(sizeof(TafnetBufferedHeader) + len);
         TafnetBufferedHeader* header = (TafnetBufferedHeader*)buf.data();
-        header->senderId = this->getPlayerId();
+        //header->senderId = this->getPlayerId();
         header->action = action;
         header->seq = seq;
         std::memcpy(header+1, data, len);
@@ -537,7 +540,7 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     {
         buf.resize(sizeof(TafnetMessageHeader) + len);
         TafnetMessageHeader* header = (TafnetMessageHeader*)buf.data();
-        header->senderId = this->getPlayerId();
+        //header->senderId = this->getPlayerId();
         header->action = action;
         std::memcpy(header+1, data, len);
     }

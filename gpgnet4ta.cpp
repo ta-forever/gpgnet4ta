@@ -2,6 +2,7 @@
 #include <QtCore/qcommandlineparser.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qtemporaryfile.h>
+#include <QtCore/qprocess.h>
 
 #include <iostream>
 #include <sstream>
@@ -19,6 +20,14 @@
 #include "MessageBoxThread.h"
 
 using namespace gpgnet;
+
+#ifdef _WIN32
+const char *MAP_TOOL_EXE = "maptool.exe";
+#endif
+
+#ifdef linux
+const char *MAP_TOOL_EXE = "maptool";
+#endif
 
 class ForwardGameEventsToGpgNet : public GameEventHandlerQt
 {
@@ -423,7 +432,7 @@ private:
         }
         if (toGame)
         {
-            m_taLobby.echoToGame("", false, QString::fromStdString(chat));
+            m_taLobby.echoToGame(false, "", QString::fromStdString(chat));
         }
     }
 
@@ -486,29 +495,22 @@ QString quote(QString text)
 QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName)
 {
     qInfo() << "[getMapDetails]" << gamePath << maptoolExePath << _mapName;
-    QStringList args = { quote(maptoolExePath), "--gamepath", quote(gamePath), "--mapname", quote(_mapName+'$'), "--hash" };
-    QString command = args.join(' ');
+    QStringList args = { "--gamepath", gamePath, "--mapname", _mapName+'$', "--hash" };
 
-    QString tempFileName;
+    qInfo() << "[getMapDetails] exe:" << maptoolExePath << ", args:" << args;
+    QProcess process;
+    process.start(maptoolExePath, args);
+    process.waitForFinished(3000);
+
+    QString stderr = process.readAllStandardError();
+    if (!stderr.isEmpty())
     {
-        QTemporaryFile tmpFileName;
-        if (!tmpFileName.open()) {
-            return "";
-        }
-        tempFileName = tmpFileName.fileName();
+      qWarning() << stderr;
     }
-    command += " > " + quote(tempFileName);
-    std::system(quote(command).toStdString().c_str());
 
-    QFile resultFile(tempFileName);
-    resultFile.open(QIODevice::ReadOnly);
-
-    QTextStream resultStream(&resultFile);
-    QString result = resultStream.readLine();
+    QString result = process.readAllStandardOutput();
     qInfo() << "[getMapDetails]" << result;
 
-    resultFile.close();
-    resultFile.remove();
     return result;
 }
 
@@ -516,7 +518,7 @@ int doMain(int argc, char* argv[])
 {
     const char* DEFAULT_DPLAY_REGISTERED_GAME_GUID = "{1336f32e-d116-4633-b853-4fee1ec91ea5}";
     const char* DEFAULT_DPLAY_REGISTERED_GAME_PATH = "c:\\cavedog\\totala";
-    const char *DEFAULT_GAME_INI_TEMPLATE = "TAForever.ini.template";
+    const char *DEFAULT_GAME_INI_TEMPLATE = "taforever.ini.template";
     const char* DEFAULT_GAME_INI = "TAForever.ini";
     const char* DEFAULT_DPLAY_REGISTERED_GAME_MOD = "TACC";
 
@@ -590,7 +592,7 @@ int doMain(int argc, char* argv[])
         // GpgNetGameLauncher interprets instructions from GpgNetClient to launch TA as a host or as a joiner
         GpgNetGameLauncher launcher(
             DEFAULT_GAME_INI_TEMPLATE,
-            gamePath + "\\" + DEFAULT_GAME_INI,
+            gamePath + "/" + DEFAULT_GAME_INI,
             dplayGuid,
             parser.value("players").toInt(),
             parser.isSet("lockoptions"),
@@ -610,7 +612,7 @@ int doMain(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::disconnectFromPeer, &lobby, &TaLobby::onDisconnectFromPeer);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &launcher, &GpgNetGameLauncher::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, [&launcher, &parser](QString mapName) {
-            launcher.onHostGame(mapName, getMapDetails(parser.value("gamepath"), "maptool.exe", mapName));
+            launcher.onHostGame(mapName, getMapDetails(parser.value("gamepath"), MAP_TOOL_EXE, mapName));
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, int playerId) {
@@ -624,7 +626,7 @@ int doMain(int argc, char* argv[])
         // This information is passed on to the GpgNetClient for consumption by the TAF server
         qInfo() << "[main] connecting game status events to gpgnet";
         ForwardGameEventsToGpgNet gameEventsToGpgNet(gpgNetClient, [&parser](QString mapName) {
-            return getMapDetails(parser.value("gamepath"), "maptool.exe", mapName);
+            return getMapDetails(parser.value("gamepath"), MAP_TOOL_EXE, mapName);
         });
         lobby.connectGameEvents(gameEventsToGpgNet);
 

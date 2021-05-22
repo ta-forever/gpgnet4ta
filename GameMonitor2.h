@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iomanip>
 #include <map>
 #include <set>
 #include <vector>

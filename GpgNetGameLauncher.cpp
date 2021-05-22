@@ -2,6 +2,7 @@
 #include "tademo/Watchdog.h"
 #include <QtCore/qcoreapplication.h>
 #include "QtCore/qthread.h"
+#include <cstring>
 
 GpgNetGameLauncher::GpgNetGameLauncher(
     QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
@@ -243,6 +244,7 @@ void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFi
     QFile tmplt(tmplateFilename);
     if (!tmplt.open(QFile::ReadOnly | QFile::Text))
     {
+        qWarning() << "GpgNetGameLauncher::createTAInitFile] unable to open template file";
         return;
     }
 

@@ -10,6 +10,8 @@
 #define _NSWFL_CRC32_H_
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#include <cstddef>
+
 namespace NSWFL {
 	namespace Hashing {
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -22,15 +24,10 @@ namespace NSWFL {
 
 			void Initialize(void);
 
-			bool FileCRC(const char *sFileName, unsigned int *iOutCRC);
-			bool FileCRC(const char *sFileName, unsigned int *iOutCRC, size_t iBufferSize);
-			unsigned int FileCRC(const char *sFileName);
-			unsigned int FileCRC(const char *sFileName, size_t iBufferSize);
-
 			unsigned int FullCRC(const unsigned char *sData, size_t iDataLength);
-			void FullCRC(const unsigned char *sData, size_t iLength, unsigned int *iOutCRC);
+			void FullCRC(const unsigned char *sData, size_t iLength, unsigned int *iOutCRC) const;
 
-			void PartialCRC(unsigned int *iCRC, const unsigned char *sData, size_t iDataLength);
+			void PartialCRC(unsigned int *iCRC, const unsigned char *sData, size_t iDataLength) const;
 
 		private:
 			unsigned int Reflect(unsigned int iReflect, const char cChar);

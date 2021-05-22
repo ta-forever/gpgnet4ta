@@ -1,7 +1,7 @@
 #include "TafnetGameNode.h"
 #include "TafnetGameNode.h"
 #include "GameAddressTranslater.h"
-#include "TADemo/Watchdog.h"
+#include "tademo/Watchdog.h"
 #include "tademo/HexDump.h"
 #include "tademo/TAPacketParser.h"
 #include "tademo/DPlayPacket.h"

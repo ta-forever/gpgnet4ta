@@ -7,7 +7,7 @@
 
 
 #ifdef QT_CORE_LIB
-#include "QtCore/qDebug.h"
+#include "QtCore/qdebug.h"
 #include "tademo/Watchdog.h"
 #define LOG_WARNING(x) qWarning() << x
 #define LOG_INFO(x) qInfo() << x

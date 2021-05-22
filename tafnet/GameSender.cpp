@@ -1,5 +1,5 @@
 #include "GameSender.h"
-#include "TADemo/Watchdog.h"
+#include "tademo/Watchdog.h"
 #include <tademo/HexDump.h>
 #include <sstream>
 

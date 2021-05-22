@@ -1,7 +1,7 @@
 #include "GameAddressTranslater.h"
 #include "GameReceiver.h"
 #include "GameSender.h"
-#include "TADemo/Watchdog.h"
+#include "tademo/Watchdog.h"
 
 #include <QtNetwork/qtcpsocket.h>
 

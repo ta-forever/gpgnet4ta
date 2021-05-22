@@ -1,5 +1,5 @@
 #include "GpgNetSend.h"
-#include <QtCore/qDebug.h>
+#include <QtCore/qdebug.h>
 
 namespace gpgnet
 {

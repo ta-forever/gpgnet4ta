@@ -67,13 +67,13 @@ namespace tafnet
 #pragma pack(push, 1)   // no padding
     struct TafnetMessageHeader
     {
-        std::uint32_t senderId;
+      //std::uint32_t senderId;
         std::uint8_t action;
     };
 
     struct TafnetBufferedHeader
     {
-        std::uint32_t senderId;
+      //std::uint32_t senderId;
         std::uint8_t action;
         std::uint32_t seq;
     };

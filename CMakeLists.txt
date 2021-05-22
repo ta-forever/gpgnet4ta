@@ -11,23 +11,25 @@ find_package(Qt5 COMPONENTS Core Network REQUIRED)
 #    )
 #endif()
 
+if (WIN32)
 set(DIRECTX_SDK_DIR "" CACHE PATH "Path to Microsoft DirectX SDK (April 2007)")
 set(DIRECT_PLAY_INCLUDE_DIR "${DIRECTX_SDK_DIR}/Include")
 set(DIRECT_PLAY_LIB_DIR "${DIRECTX_SDK_DIR}/Lib/x86")
 set(DIRECT_PLAY_LIBS "dplayx;dxguid")
-
-set(MINIUPNP_DIR "" CACHE PATH "Path to MiniUPnp binaries http://miniupnp.free.fr/files/")
-set(MINIUPNP_INCLUDE_DIR "${MINIUPNP_DIR}/include")
-set(MINIUPNP_LIB_DIR "${MINIUPNP_DIR}/lib")
-set(MINIUPNP_LIBS_STATIC "debug;libminiupnpcd;optimized;libminiupnpc")
 
 set(LIBCOMMUNI_DIR "" CACHE PATH "Path to libcommuni binaries https://github.com/communi/libcommuni")
 set(LIBCOMMUNI_INCLUDE_DIR "${LIBCOMMUNI_DIR}/include/IrcCore;${LIBCOMMUNI_DIR}/include/IrcModel;${LIBCOMMUNI_DIR}/include/IrcUtil")
 set(LIBCOMMUNI_LIB_DIR "${LIBCOMMUNI_DIR}/lib")
 set(LIBCOMMUNI_LIBS_STATIC "debug;communid;optimized;communi")
 
+else()
+set(LIBCOMMUNI_DIR "" CACHE PATH "Path to libcommuni binaries https://github.com/communi/libcommuni")
+set(LIBCOMMUNI_INCLUDE_DIR "${LIBCOMMUNI_DIR}/include/IrcCore;${LIBCOMMUNI_DIR}/include/IrcModel;${LIBCOMMUNI_DIR}/include/IrcUtil")
+set(LIBCOMMUNI_LIB_DIR "${LIBCOMMUNI_DIR}/lib")
+set(LIBCOMMUNI_LIBS_STATIC "IrcCore;IrcModel;IrcUtil")
+  
+endif()
 
-add_subdirectory(jdplay)
 add_subdirectory(tademo)
 add_subdirectory(gpgnet)
 add_subdirectory(tafnet)
@@ -35,6 +37,8 @@ add_subdirectory(tafnet)
 # -------------- TALAUNCHER -------------
 
 if (WIN32)
+
+    add_subdirectory(jdplay)
 
     set(CMAKE_AUTOMOC ON)
 
@@ -61,6 +65,8 @@ if (WIN32)
         #iphlpapi
         ${DIRECT_PLAY_LIBS}
         )
+
+    install(TARGETS talauncher)
 
 ENDIF()
 
@@ -114,7 +120,4 @@ add_custom_command(
         $<TARGET_FILE:Qt5::Network>
         $<TARGET_FILE_DIR:gpgnet4ta>)
 
-
-# ----------------------
-
-install(TARGETS gpgnet4ta talauncher)
+install(TARGETS gpgnet4ta)

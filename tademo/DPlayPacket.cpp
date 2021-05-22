@@ -1,4 +1,5 @@
 #include "DPlayPacket.h"
+#include <cstring>
 #include <sstream>
 
 using namespace TADemo;

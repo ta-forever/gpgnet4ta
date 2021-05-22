@@ -12,6 +12,7 @@
 
 #include "nswfl_crc32.h"
 #include <memory>
+#include <cstring>
 
 #ifdef _USE_GLOBAL_MEMPOOL
 extern NSWFL::Memory::MemoryPool *pMem; //pMem must be defined and initalized elsewhere.
@@ -101,7 +102,7 @@ namespace NSWFL {
 			Note: For Example usage example, see FileCRC().
 		*/
 
-		void CRC32::PartialCRC(unsigned int *iCRC, const unsigned char *sData, size_t iDataLength)
+		void CRC32::PartialCRC(unsigned int *iCRC, const unsigned char *sData, size_t iDataLength) const
 		{
 			while (iDataLength--)
 			{
@@ -117,13 +118,13 @@ namespace NSWFL {
 			Returns the calculated CRC32 (through iOutCRC) for the given string.
 		*/
 
-		void CRC32::FullCRC(const unsigned char *sData, size_t iDataLength, unsigned int *iOutCRC)
+		void CRC32::FullCRC(const unsigned char *sData, size_t iDataLength, unsigned int *iOutCRC) const
 		{
-			((unsigned int)*iOutCRC) = 0xffffffff; //Initilaize the CRC.
+			*iOutCRC = 0xffffffff; //Initilaize the CRC.
 
 			this->PartialCRC(iOutCRC, sData, iDataLength);
 
-			((unsigned int)*iOutCRC) ^= 0xffffffff; //Finalize the CRC.
+			*iOutCRC ^= 0xffffffff; //Finalize the CRC.
 		}
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,98 +139,6 @@ namespace NSWFL {
 			this->PartialCRC(&iCRC, sData, iDataLength);
 
 			return(iCRC ^ 0xffffffff); //Finalize the CRC and return.
-		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/*
-			Calculates the CRC32 of a file using the a user defined buffer.
-
-			Note: The buffer size DOES NOT affect the resulting CRC,
-					it has been provided for performance purposes only.
-		*/
-
-		bool CRC32::FileCRC(const char *sFileName, unsigned int *iOutCRC, size_t iBufferSize)
-		{
-			((unsigned int)*iOutCRC) = 0xffffffff; //Initilaize the CRC.
-
-			FILE *fSource = NULL;
-			unsigned char *sBuf = NULL;
-			size_t iBytesRead = 0;
-
-			if ((fopen_s(&fSource, sFileName, "rb")) != 0)
-			{
-				return false; //Failed to open file for read access.
-			}
-
-#ifdef _USE_GLOBAL_MEMPOOL
-			if (!(sBuf = (unsigned char *)pMem->Allocate(iBufferSize, 1))) //Allocate memory for file buffering.
-#else
-			if (!(sBuf = (unsigned char *)malloc(iBufferSize))) //Allocate memory for file buffering.
-#endif
-			{
-				fclose(fSource);
-				return false; //Out of memory.
-			}
-
-			while ((iBytesRead = fread(sBuf, sizeof(char), iBufferSize, fSource)))
-			{
-				this->PartialCRC(iOutCRC, sBuf, iBytesRead);
-			}
-
-#ifdef _USE_GLOBAL_MEMPOOL
-			pMem->Free(sBuf);
-#else
-			free(sBuf);
-#endif
-
-			fclose(fSource);
-
-			((unsigned int)*iOutCRC) ^= 0xffffffff; //Finalize the CRC.
-
-			return true;
-		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/*
-			Calculates the CRC32 of a file using the a default buffer size of 1MB.
-		*/
-
-		unsigned int CRC32::FileCRC(const char *sFileName)
-		{
-			unsigned int iCRC;
-			if (this->FileCRC(sFileName, &iCRC, 1048576))
-			{
-				return iCRC;
-			}
-			else return 0xffffffff; //While we return this as an error code, it is infact a valid CRC!
-		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/*
-			Calculates the CRC32 of a file using the a default buffer size of 1MB.
-
-			Note: The buffer size DOES NOT affect the resulting CRC,
-					it has been provided for performance purposes only.
-		*/
-
-		unsigned int CRC32::FileCRC(const char *sFileName, size_t iBufferSize)
-		{
-			unsigned int iCRC;
-			if (this->FileCRC(sFileName, &iCRC, iBufferSize))
-			{
-				return iCRC;
-			}
-			else return 0xffffffff; //While we return this as an error code, it is infact a valid CRC!
-		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/*
-			Calculates the CRC32 of a file using the a default buffer size of 1MB.
-		*/
-
-		bool CRC32::FileCRC(const char *sFileName, unsigned int *iOutCRC)
-		{
-			return this->FileCRC(sFileName, iOutCRC, 1048576);
 		}
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

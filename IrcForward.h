@@ -10,9 +10,9 @@
 #pragma once
 
 #define IRC_STATIC
-#include <IrcConnection.h>
-#include <IrcBufferModel.h>
-#include <IrcCommandParser.h>
+#include <ircconnection.h>
+#include <ircbuffermodel.h>
+#include <irccommandparser.h>
 
 class IrcForward : public IrcConnection
 {

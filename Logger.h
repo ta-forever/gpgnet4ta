@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include <QtCore/qmessagelogcontext>
+#include <QtCore/qdebug.h>
 
 class Logger
 {

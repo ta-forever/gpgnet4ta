@@ -2,6 +2,7 @@
 #include "DPlayPacket.h"
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 

@@ -1,3 +1,6 @@
+
+#include <algorithm>
+#include <cstring>
 #include <ctype.h>
 #include <iostream>
 #include <iomanip>
