@@ -825,7 +825,6 @@ int doMain(int argc, char* argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption(QCommandLineOption("autolaunch", "Normally gpgnet4ta sets up the connections then waits for a /launch command before it launches TA. This option causes TA to launch straight away."));
-    parser.addOption(QCommandLineOption("cmdfile", "gpgnet4ta will follow this file to find /quit and /launch commands.", "stdin"));
     parser.addOption(QCommandLineOption("country", "Player country code.", "code"));
     parser.addOption(QCommandLineOption("connecttopeer", "When test launching, list of peers (excluding the host) to connect to.", "connecttopeer"));
     parser.addOption(QCommandLineOption("createlobby", "Test launch a game.  if no 'joingame' option given, test launch as host"));
@@ -852,6 +851,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("playername", "Launch DirectPlay game with given player name", "playername", "BILLYIDOL"));
     parser.addOption(QCommandLineOption("launchserver", "Start a DirectPlay launch server. listens on a tcp port for instructions to actually launch game"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port for LaunchServer to connect to (--gpgnet4ta) or to listen on (--launchserver)", "launchserverport", "48684"));
+    parser.addOption(QCommandLineOption("consoleport", "Specifies port that ConsoleReader will listen on. consoleport receives less-privileged commands than --launchserver does", "48685"));
     parser.process(app);
 
     if (parser.isSet("uac"))
@@ -859,8 +859,8 @@ int doMain(int argc, char* argv[])
         QStringList args;
         for (const char *arg : {
             "autolaunch", "gpgnet", "mean", "deviation", "country", "numgames", "players",
-            "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer",
-            "logfile", "loglevel", "irc", "proactiveresend", "cmdfile", "launch", "playername", "launchserver", "launchserverport" })
+            "gamepath", "gameexe", "gameargs", "gamemod", "lobbybindaddress", "joingame", "connecttopeer", "consoleport",
+            "logfile", "loglevel", "irc", "proactiveresend", "launch", "playername", "launchserver", "launchserverport" })
         {
             if (parser.isSet(arg))
             {
@@ -1151,16 +1151,8 @@ int doMain(int argc, char* argv[])
             });
         }
 
-        std::shared_ptr<std::istream> ifstream;
-        std::istream *istream = &std::cin; // NB stdin doesn't work properly with ConsoleReader :(
-        if (parser.isSet("cmdfile"))
-        {
-            ifstream.reset(new std::ifstream(parser.value("cmdfile").toStdString()));
-            istream = ifstream.get();
-        }
-        ConsoleReader consoleReader(*istream);
+        ConsoleReader consoleReader(QHostAddress("127.0.0.1"), parser.value("consoleport").toInt());
         QObject::connect(&consoleReader, &ConsoleReader::textReceived, &launcher, &GpgNetGameLauncher::onExtendedMessage);
-        consoleReader.start();
         app.exec();
     }
     return 0;

@@ -1,20 +1,24 @@
 #pragma once
 
-#include <QtCore/qthread.h>
-#include <istream>
+#include <QtNetwork/qtcpserver.h>
+#include <QtNetwork/qtcpsocket.h>
 
-class ConsoleReader : public QThread
+class ConsoleReader : public QObject
 {
     Q_OBJECT
 
-    std::istream &m_is;
+    QTcpServer m_tcpServer;
+    QList<QTcpSocket*> m_tcpSockets;
+    bool m_loggedAConnection;
 
 public:
-    explicit ConsoleReader(std::istream &is, QObject *parent = 0);
+    explicit ConsoleReader(QHostAddress addr, quint16 port);
 
 signals:
     void textReceived(QString message);
 
 private:
-    void run();
+    void onNewConnection();
+    void onReadyReadTcp();
+    void onSocketStateChanged(QAbstractSocket::SocketState socketState);
 };

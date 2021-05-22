@@ -1,43 +1,88 @@
 #include "ConsoleReader.h"
-#include <QtCore/qcoreapplication.h>
 #include <QtCore/qdebug.h>
-#include <sstream>
 
-ConsoleReader::ConsoleReader(std::istream &is, QObject *parent) :
-QThread(parent),
-m_is(is)
-{ }
-
-void ConsoleReader::run()
+ConsoleReader::ConsoleReader(QHostAddress addr, quint16 port) :
+    m_loggedAConnection(false)
 {
-    char buffer[16384];
-    qInfo() << "[ConsoleReader::run] thread started";
-    for (;;)
+    qInfo() << "[ConsoleReader::ConsoleReader] starting server on addr" << addr << "port" << port;
+    m_tcpServer.listen(addr, port);
+    if (!m_tcpServer.isListening())
     {
-        m_is.clear();
-        m_is.read(buffer, sizeof(buffer));
-        std::size_t bytesRead = m_is.gcount();
-        if (bytesRead == 0)
+        qWarning() << "[ConsoleReader::ConsoleReader] server is not listening!";
+    }
+    QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &ConsoleReader::onNewConnection);
+}
+
+void ConsoleReader::onNewConnection()
+{
+    try
+    {
+        QTcpSocket* socket = m_tcpServer.nextPendingConnection();
+        if (!m_loggedAConnection)
         {
-            msleep(300);
-            continue;
+            qInfo() << "accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
         }
+        QObject::connect(socket, &QTcpSocket::readyRead, this, &ConsoleReader::onReadyReadTcp);
+        QObject::connect(socket, &QTcpSocket::stateChanged, this, &ConsoleReader::onSocketStateChanged);
+        m_tcpSockets.push_back(socket);
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[ConsoleReader::onNewConnection] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[ConsoleReader::onNewConnection] general exception:";
+    }
+}
 
-        buffer[bytesRead] = 0;
-
-        std::istringstream ss(buffer);
-        while (!ss.eof())
+void ConsoleReader::onSocketStateChanged(QAbstractSocket::SocketState socketState)
+{
+    try
+    {
+        if (socketState == QAbstractSocket::UnconnectedState)
         {
-            std::string line;
-            std::getline(ss, line);
-            if (line.empty())
+            QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+            if (!m_loggedAConnection)
             {
-                continue;
+                qInfo() << "[ConsoleReader::onSocketStateChanged] peer disconnected" << sender->peerAddress() << "port" << sender->peerPort();
+                m_loggedAConnection = true;
             }
-
-            QString qline = QString::fromStdString(line);
-            qInfo() << "[ConsoleReader::run] received" << qline;
-            emit textReceived(qline);
+            m_tcpSockets.removeOne(sender);
+            sender->deleteLater();
         }
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[ConsoleReader::onSocketStateChanged] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[ConsoleReader::onSocketStateChanged] general exception:";
+    }
+}
+
+void ConsoleReader::onReadyReadTcp()
+{
+    try
+    {
+        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+        QByteArray datas = sender->readAll();
+        if (datas.size() == 0)
+        {
+            return;
+        }
+
+        QString qline(datas);
+        qInfo() << "[ConsoleReader::run] received" << qline;
+        emit textReceived(qline);
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[LaunchServer::onReadyReadTcp] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[LaunchServer::onReadyReadTcp] general exception:";
     }
 }
