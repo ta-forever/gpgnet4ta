@@ -502,10 +502,10 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
     process.start(maptoolExePath, args);
     process.waitForFinished(3000);
 
-    QString stderr = process.readAllStandardError();
-    if (!stderr.isEmpty())
+    QString err = process.readAllStandardError();
+    if (!err.isEmpty())
     {
-      qWarning() << stderr;
+      qWarning() << err;
     }
 
     QString result = process.readAllStandardOutput();
