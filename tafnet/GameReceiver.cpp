@@ -29,11 +29,19 @@ GameReceiver::GameReceiver(QHostAddress bindAddress, quint16 tcpPort, quint16 ud
 
 void GameReceiver::bindEnumerationPort(quint16 port)
 {
+    qInfo() << "[GameReceiver::bindEnumerationPort] tcp enumeration server binding to" << m_bindAddress << ":" << port;
     if (port > 0)
     {
         m_enumServer.listen(m_bindAddress, port);
         m_enumPort = m_enumServer.serverPort();
-        qInfo() << "[GameReceiver::bindEnumerationPort] tcp enumeration server binding to" << m_enumServer.serverAddress().toString() << ":" << m_enumServer.serverPort();
+        if (m_enumServer.isListening())
+        {
+            qInfo() << "[GameReceiver::bindEnumerationPort] tcp enumeration server is bound to" << m_enumServer.serverAddress().toString() << ":" << m_enumServer.serverPort();
+        }
+        else
+        {
+            qCritical() << "[GameReceiver::bindEnumerationPort] unable to bind!";
+        }
     }
     else
     {

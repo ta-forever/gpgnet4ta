@@ -300,16 +300,22 @@ void TafnetNode::onReadyRead()
             }
 #endif
 
-            auto it = m_peerPlayerIds.find(senderHostAndPort);
-            if (it == m_peerPlayerIds.end())
-            {
-                qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
-                continue;
-            }
-            std::uint32_t peerPlayerId = it->second;
-
             const TafnetMessageHeader* tafheader = (TafnetMessageHeader*)datas.data();
             const TafnetBufferedHeader* tafBufferedHeader = (TafnetBufferedHeader*)datas.data();
+
+            std::uint32_t peerPlayerId = tafheader->senderId;
+
+            // Would prefer to use m_peerPlayerIds to lookup sender's playerId
+            // but for some reason readDatagram doesn't set senderAddress and senderPort when run on linux using wine ...
+            if (false) {
+                auto it = m_peerPlayerIds.find(senderHostAndPort);
+                if (it == m_peerPlayerIds.end())
+                {
+                    qInfo() << "[TafnetNode::onReadyRead] playerId" << m_playerId << "ERROR unexpected message from" << senderAddress.toString() << ":" << senderPort;
+                    continue;
+                }
+                peerPlayerId = it->second;
+            }
 
             DataBuffer &tcpReceiveBuffer = m_receiveBuffer[peerPlayerId];
             DataBuffer &tcpSendBuffer = m_sendBuffer[peerPlayerId];
@@ -522,6 +528,7 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     {
         buf.resize(sizeof(TafnetBufferedHeader) + len);
         TafnetBufferedHeader* header = (TafnetBufferedHeader*)buf.data();
+        header->senderId = this->getPlayerId();
         header->action = action;
         header->seq = seq;
         std::memcpy(header+1, data, len);
@@ -530,6 +537,7 @@ void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, s
     {
         buf.resize(sizeof(TafnetMessageHeader) + len);
         TafnetMessageHeader* header = (TafnetMessageHeader*)buf.data();
+        header->senderId = this->getPlayerId();
         header->action = action;
         std::memcpy(header+1, data, len);
     }
