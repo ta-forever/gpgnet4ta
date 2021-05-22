@@ -33,7 +33,4 @@ private:
     void timerEvent(QTimerEvent* event);
     void launchGame(QString gameGuid, QString playerName, QString gameAddress, bool asHost);
     void notifyClients(QString msg);
-
-    void hexdump(const char* data, std::size_t sz);
-
 };

@@ -32,36 +32,37 @@ add_subdirectory(tademo)
 add_subdirectory(gpgnet)
 add_subdirectory(tafnet)
 
-# -------------- TADUMPER -------------
+# -------------- TALAUNCHER -------------
 
-add_executable(tadumper
-    tadumper.cpp
-    GameMonitor2.h
-    GameMonitor2.cpp)
+if (WIN32)
 
-target_link_libraries(tadumper
-    tademo)
+    set(CMAKE_AUTOMOC ON)
 
+    add_executable(talauncher
+        TaLauncher.cpp
+        LaunchServer.h
+        LaunchServer.cpp
+        Logger.h
+        Logger.cpp
+        MessageBoxThread.h
+        MessageBoxThread.cpp
+        )
 
-# -------------- TAPROXYTEST -------------
+    target_link_directories(talauncher
+        PUBLIC
+        ${DIRECT_PLAY_LIB_DIR} 
+        )
 
-add_executable(taproxytest
-    GameMonitor2.h
-    GameMonitor2.cpp
-    taproxytest.cpp)
+    target_link_libraries(talauncher
+        jdplay
+        Qt5::Core
+        Qt5::Network
+        ws2_32
+        #iphlpapi
+        ${DIRECT_PLAY_LIBS}
+        )
 
-target_link_directories(taproxytest
-    PUBLIC
-    ${MINIUPNP_INCLUDE_DIR})
-
-target_link_libraries(taproxytest
-    tademo
-    tafnet
-    Qt5::Core
-    Qt5::Network
-    ws2_32
-    iphlpapi
-    ${MINIUPNP_LIBS_STATIC})
+ENDIF()
 
 # -------------- GPGNET4TA -------------
 
@@ -77,49 +78,35 @@ add_executable(gpgnet4ta
     gpgnet4ta.cpp
     GpgNetGameLauncher.h
     GpgNetGameLauncher.cpp
-    LaunchServer.h
-    LaunchServer.cpp
     LaunchClient.h
     LaunchClient.cpp
+    Logger.h
+    Logger.cpp
     IrcForward.h
     IrcForward.cpp
     ConsoleReader.h
     ConsoleReader.cpp
-    MessageBoxThread.h
-    MessageBoxThread.cpp
     )
 
 target_include_directories(gpgnet4ta 
     PUBLIC
-    ${MINIUPNP_INCLUDE_DIR}
     ${LIBCOMMUNI_INCLUDE_DIR}
     )
 
 target_link_directories(gpgnet4ta
     PUBLIC
-    ${DIRECT_PLAY_LIB_DIR} 
-    ${MINIUPNP_LIB_DIR}
     ${LIBCOMMUNI_LIB_DIR}
     )
 
 target_link_libraries(gpgnet4ta
-    jdplay
     tademo
     tafnet
     gpgnet
     Qt5::Core
     Qt5::Network
-    ws2_32
-    iphlpapi
-    ${DIRECT_PLAY_LIBS}
-    ${MINIUPNP_LIBS_STATIC}
     ${LIBCOMMUNI_LIBS_STATIC}
     )
 
-#add_custom_command(
-#    TARGET gpgnet4ta POST_BUILD
-#    COMMAND "${Qt5_DIR}/../../../bin/windeployqt.exe"
-#    ARGS "$<TARGET_FILE:gpgnet4ta>")
 add_custom_command(
     TARGET gpgnet4ta POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -130,4 +117,4 @@ add_custom_command(
 
 # ----------------------
 
-install(TARGETS gpgnet4ta tadumper)
+install(TARGETS gpgnet4ta talauncher)

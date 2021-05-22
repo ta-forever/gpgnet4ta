@@ -72,14 +72,6 @@ void LaunchServer::onSocketStateChanged(QAbstractSocket::SocketState socketState
     }
 }
 
-void LaunchServer::hexdump(const char* data, std::size_t sz)
-{
-    std::ostringstream ss;
-    TADemo::HexDump(data, sz, ss);
-    std::string s = ss.str();
-    qInfo() << s.c_str();
-}
-
 void LaunchServer::onReadyReadTcp()
 {
     try

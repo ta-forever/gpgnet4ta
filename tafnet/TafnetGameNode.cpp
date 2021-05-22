@@ -1,7 +1,6 @@
 #include "TafnetGameNode.h"
 #include "TafnetGameNode.h"
 #include "GameAddressTranslater.h"
-#include "GetUpnpPortMap.h"
 #include "TADemo/Watchdog.h"
 #include "tademo/HexDump.h"
 #include "tademo/TAPacketParser.h"
@@ -300,13 +299,14 @@ void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
         m_gameTcpPort = header->address.port();
         m_gameUdpPort = header->address.port() + 50;
 
-        if (m_gameTcpPort < 2300 || m_gameUdpPort >= 2400)
+        const bool ENABLE_QUERY_UPNP = false;
+        if (ENABLE_QUERY_UPNP && (m_gameTcpPort < 2300 || m_gameUdpPort >= 2400))
         {
             // game is trying to use upnp ...
             qInfo() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "Game is trying to use upnp.external tcp port is" << m_gameTcpPort;
             try
             {
-                std::uint16_t internalPort = GetUpnpPortMap(m_gameTcpPort, "TCP");
+                std::uint16_t internalPort = 0;// GetUpnpPortMap(m_gameTcpPort, "TCP");
                 qInfo() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "IGD reports corresponding internal TCP port is" << internalPort;
                 m_gameTcpPort = internalPort;
                 m_gameUdpPort = internalPort + 50;
