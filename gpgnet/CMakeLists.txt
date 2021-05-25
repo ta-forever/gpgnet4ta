@@ -1,8 +1,8 @@
 set(CMAKE_AUTOMOC ON)
 
-add_library(gpgnet
-	GpgNetParse.h
-	GpgNetParse.cpp
+add_library(gpgnet STATIC
+    GpgNetParse.h
+    GpgNetParse.cpp
     GpgNetSend.h
     GpgNetSend.cpp
     GpgNetClient.h
@@ -10,6 +10,7 @@ add_library(gpgnet
 
 target_link_libraries(gpgnet
     Qt5::Core
+    Qt5::Network
     tademo)
 
 target_include_directories(gpgnet 
