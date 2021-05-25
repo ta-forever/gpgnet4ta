@@ -1,0 +1,38 @@
+language: cpp
+matrix:
+  include:
+    - name: Windows 32-bit
+      env: PATH=/usr/lib/mxe/usr/bin:$PATH
+      addons:
+        apt:
+	  sources:
+	    - sourceline: 'deb http://pkg.mxe.cc/repos/apt xenial main'
+	      key_url: 'https://keyserver.ubuntu.com/pks/lookup?search=0xC6BF758A33A3A276&op=get'
+	  packages:
+	    - zip
+	    - mxe-i686-w64-mingw32.shared-cc
+	    - mxe-i686-w64-mingw32.shared-qt5
+      script:
+        - mkdir -p build && cd build
+        - i686-w64-mingw32.shared-cmake -DCMAKE_CXX_FLAGS=-s -DCMAKE_C_FLAGS=-s .
+	- make && make install && zip gpgnet4ta-win-x86.zip bin
+	
+      deploy:
+        provider: releases
+	draft: true
+	api_key: '$GITHUB_API_KEY'
+	file:
+	  - gpgnet4ta-win-x86.zip
+	on: [ push ]
+
+    - name: Ubuntu 20.04
+      addons:
+        apt:
+	  packages:
+      script:
+        - mkdir -p build && cd build
+        - docker pull ubuntu:20.04
+	- docker run -v $PWD:/root/src ubuntu:20.04
+	  bash -c 'apt update && apt install -y
+	  cmake
+	  qt5-dev && cd /root/src && cmake . && make && make install && tar -zcf gpgnet4ta-ubuntu-2004.tar.gz bin'
