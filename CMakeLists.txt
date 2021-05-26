@@ -104,31 +104,3 @@ target_link_libraries(gpgnet4ta
     )
  
 install(TARGETS gpgnet4ta)
-
-if (WIN32)
-  set(MXE_PATH /usr/lib/mxe)
-  add_custom_command(
-    TARGET gpgnet4ta POST_BUILD
-    COMMAND mkdir -p bin
-    COMMAND ${MXE_PATH}/tools/copydlldeps.sh
-        --infile gpgnet4ta.exe
-        --destdir bin
-        --recursivesrcdir ${MXE_PATH}/usr/i686-w64-mingw32.shared/
-        --srcdir ${CMAKE_SOURCE_DIR}/
-        --copy
-        --enforcedir ${MXE_PATH}/usr/i686-w64-mingw32.shared/qt5/plugins/platforms/
-        --objdump ${MXE_PATH}/usr/bin/i686-w64-mingw32.shared-objdump)
-
-  add_custom_command(
-    TARGET talauncher POST_BUILD
-    COMMAND mkdir -p bin
-    COMMAND ${MXE_PATH}/tools/copydlldeps.sh
-        --infile talauncher.exe
-        --destdir bin
-        --recursivesrcdir ${MXE_PATH}/usr/i686-w64-mingw32.shared/
-        --srcdir ${CMAKE_SOURCE_DIR}/
-        --copy
-        --enforcedir ${MXE_PATH}/usr/i686-w64-mingw32.shared/qt5/plugins/platforms/
-        --objdump ${MXE_PATH}/usr/bin/i686-w64-mingw32.shared-objdump)
-
-endif()
