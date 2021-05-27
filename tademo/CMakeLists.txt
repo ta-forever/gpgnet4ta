@@ -1,6 +1,6 @@
 set(CMAKE_AUTOMOC ON)
 
-add_library(tademo
+add_library(tademo STATIC
     TPacket.h
     TPacket.cpp
     DPlayPacket.h

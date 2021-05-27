@@ -3,7 +3,7 @@
 #include <QtCore/qlogging.h>
 #include <QtCore/qdebug.h>
 
-#include <Windows.h>
+#include <windows.h>
 
 MessageBoxThread::MessageBoxThread()
 {

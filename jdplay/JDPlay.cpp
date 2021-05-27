@@ -31,7 +31,37 @@
 #include "JDPlay.h"
 #include <iostream>
 #include <windowsx.h>	//GlobalAllocPtr
-#include <atlbase.h>	//STRING TO GUID
+
+inline BSTR _ConvertStringToBSTR(const char* pSrc)
+{
+    if(!pSrc) return NULL;
+
+    DWORD cwch;
+
+    BSTR wsOut(NULL);
+
+    if(cwch = ::MultiByteToWideChar(CP_ACP, 0, pSrc,
+         -1, NULL, 0))//get size minus NULL terminator
+    {
+                cwch--;
+            wsOut = ::SysAllocStringLen(NULL, cwch);
+
+        if(wsOut)
+        {
+            if(!::MultiByteToWideChar(CP_ACP,
+                     0, pSrc, -1, wsOut, cwch))
+            {
+                if(ERROR_INSUFFICIENT_BUFFER == ::GetLastError())
+                    return wsOut;
+                ::SysFreeString(wsOut);//must clean up
+                wsOut = NULL;
+            }
+        }
+
+    };
+
+    return wsOut;
+};
 
 using namespace std;
 
@@ -130,9 +160,9 @@ bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, i
 	// create GUID Object **************************************************************************
 	GUID gameID;
 	
-	USES_CONVERSION;
-	LPOLESTR lpoleguid = A2OLE(gameGUID);
+	LPOLESTR lpoleguid = _ConvertStringToBSTR(gameGUID);
 	hr = CLSIDFromString(lpoleguid, &gameID);
+	::SysFreeString(lpoleguid);
 
 	if(hr != S_OK){
 		if(debug){
@@ -491,7 +521,7 @@ bool JDPlay::launch(bool startGame){
 
 bool JDPlay::pollStillActive()
 {
-    DWORD exitCode = NULL;
+    DWORD exitCode = 0u;
     GetExitCodeProcess(processHandle, &exitCode);
     return exitCode == STILL_ACTIVE;
 }

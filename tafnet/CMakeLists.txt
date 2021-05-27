@@ -1,6 +1,6 @@
 set(CMAKE_AUTOMOC ON)
 
-add_library(tafnet
+add_library(tafnet STATIC
     TafnetNode.h
     TafnetNode.cpp
     TafnetGameNode.h
@@ -14,7 +14,10 @@ add_library(tafnet
     )
 
 target_link_libraries(tafnet
-    Qt5::Core)
+    Qt5::Core
+    Qt5::Network
+    tademo
+    )
 
 target_include_directories(tafnet 
     PUBLIC
