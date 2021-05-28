@@ -44,24 +44,36 @@ if (WIN32)
 ENDIF()
 
 # -------------- libcommuni submodule --------
+set(ENABLE_IRC ON CACHE BOOL "Enable IRC integration using libcommuni https://github.com/communi/libcommuni")
 set(LIBCOMMUNI_DIR "${CMAKE_BINARY_DIR}/libcommuni" CACHE PATH "Path to libcommuni binaries https://github.com/communi/libcommuni")
-file(MAKE_DIRECTORY ${LIBCOMMUNI_DIR})
 
-get_target_property (QT_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
-add_custom_target(libcommuni ALL
-  COMMAND ${QT_QMAKE_EXECUTABLE} ${CMAKE_SOURCE_DIR}/libcommuni WORKING_DIRECTORY ${LIBCOMMUNI_DIR}
-  COMMAND make WORKING_DIRECTORY ${LIBCOMMUNI_DIR}
-  )
+if (ENABLE_IRC)
+    file(MAKE_DIRECTORY ${LIBCOMMUNI_DIR})
 
-set(LIBCOMMUNI_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/libcommuni/include/IrcCore;${CMAKE_SOURCE_DIR}/libcommuni/include/IrcModel;${CMAKE_SOURCE_DIR}/libcommuni/include/IrcUtil")
-set(LIBCOMMUNI_LIB_DIR "${LIBCOMMUNI_DIR}/lib")
-set(LIBCOMMUNI_LIBS_STATIC "IrcCore;IrcModel;IrcUtil")
+    get_target_property (QT_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+    add_custom_target(libcommuni ALL
+      COMMAND ${QT_QMAKE_EXECUTABLE} ${CMAKE_SOURCE_DIR}/libcommuni WORKING_DIRECTORY ${LIBCOMMUNI_DIR}
+      COMMAND make WORKING_DIRECTORY ${LIBCOMMUNI_DIR}
+      )
+
+    set(LIBCOMMUNI_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/libcommuni/include/IrcCore;${CMAKE_SOURCE_DIR}/libcommuni/include/IrcModel;${CMAKE_SOURCE_DIR}/libcommuni/include/IrcUtil")
+    set(LIBCOMMUNI_LIB_DIR "${LIBCOMMUNI_DIR}/lib")
+    set(LIBCOMMUNI_LIBS_STATIC "IrcCore;IrcModel;IrcUtil")
+
+    add_definitions(-D_ENABLE_IRC)
+endif()
 
 # -------------- GPGNET4TA -------------
 
 add_subdirectory(tademo)
 add_subdirectory(gpgnet)
 add_subdirectory(tafnet)
+
+if (ENABLE_IRC)
+  set(IRC_SOURCES IrcForward.h;IrcForward.cpp)
+else()
+  set(IRC_SOURCES IrcForwardMock.h;IrcForwardMock.cpp)
+endif()
 
 set(CMAKE_AUTOMOC ON)
 add_executable(gpgnet4ta
@@ -78,10 +90,9 @@ add_executable(gpgnet4ta
     LaunchClient.cpp
     Logger.h
     Logger.cpp
-    IrcForward.h
-    IrcForward.cpp
     ConsoleReader.h
     ConsoleReader.cpp
+    ${IRC_SOURCES}
     )
 
 target_include_directories(gpgnet4ta 

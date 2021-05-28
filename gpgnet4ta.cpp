@@ -15,9 +15,14 @@
 #include "Logger.h"
 #include "ConsoleReader.h"
 #include "GpgNetGameLauncher.h"
-#include "IrcForward.h"
 #include "TaLobby.h"
 #include "MessageBoxThread.h"
+
+#ifdef _ENABLE_IRC
+#include "IrcForward.h"
+#else
+#include "IrcForwardMock.h"
+#endif
 
 using namespace gpgnet;
 
