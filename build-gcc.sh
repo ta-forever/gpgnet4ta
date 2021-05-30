@@ -14,3 +14,4 @@ cmake \
 make && make install || exit
 
 cp libcommuni/lib/* bin/
+cp $SOURCE_DIR/taforever.ini.template bin/

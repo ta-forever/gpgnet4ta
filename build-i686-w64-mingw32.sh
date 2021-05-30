@@ -27,3 +27,4 @@ for exe in bin/*.exe; do
 done
 
 cp libcommuni/bin/* bin/
+cp $SOURCE_DIR/taforever.ini.template bin/
