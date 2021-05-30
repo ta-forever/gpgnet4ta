@@ -17,6 +17,7 @@ namespace TADemo
     public:
 
         WatchdogThread();
+        ~WatchdogThread();
 
         virtual void startTimer(QString name, int millis);
         virtual void killTimer(QString name);

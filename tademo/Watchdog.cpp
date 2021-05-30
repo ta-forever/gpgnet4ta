@@ -11,6 +11,12 @@ WatchdogThread::WatchdogThread()
     this->moveToThread(this);
 }
 
+WatchdogThread::~WatchdogThread()
+{
+    this->quit();
+    this->wait(300);
+}
+
 void WatchdogThread::startTimer(QString name, int millis)
 {
     QMetaObject::invokeMethod(this, "sl_startTimer", Qt::QueuedConnection, QGenericArgument("QString", &name), QGenericArgument("int", &millis));
