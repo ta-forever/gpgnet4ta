@@ -11,6 +11,11 @@ MessageBoxThread::MessageBoxThread()
     m_thread.start();
 }
 
+MessageBoxThread::~MessageBoxThread()
+{
+    m_thread.quit();
+    m_thread.wait(300);
+}
 
 void MessageBoxThread::onMessage(QString title, QString content, unsigned int flags)
 {

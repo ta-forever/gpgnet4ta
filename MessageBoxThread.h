@@ -20,6 +20,7 @@ class MessageBoxThread : public QObject
 
 public:
     MessageBoxThread();
+    ~MessageBoxThread();
 
 public slots:
 
