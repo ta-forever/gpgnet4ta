@@ -14,6 +14,7 @@ class GpgNetGameLauncher: public QObject
     Q_OBJECT
 
     const QString m_iniTemplate;
+    const QString m_gamePath;
     const QString m_iniTarget;
     const QString m_guid;
     const int m_playerLimit;
@@ -35,7 +36,7 @@ class GpgNetGameLauncher: public QObject
 
 public:
     GpgNetGameLauncher(
-        QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
+        QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
         LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend);
 
     void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
@@ -55,4 +56,5 @@ public slots:
 
 private:
     static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits);
+    static void copyOnlineDll(QString gamePath);
 };

@@ -1,13 +1,15 @@
 #include "GpgNetGameLauncher.h"
 #include "tademo/Watchdog.h"
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qfileinfo.h>
 #include "QtCore/qthread.h"
 #include <cstring>
 
 GpgNetGameLauncher::GpgNetGameLauncher(
-    QString iniTemplate, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
+    QString iniTemplate, QString gamePath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
     LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend) :
     m_iniTemplate(iniTemplate),
+    m_gamePath(gamePath),
     m_iniTarget(iniTarget),
     m_guid(guid),
     m_playerLimit(playerLimit),
@@ -222,6 +224,7 @@ void GpgNetGameLauncher::onLaunchGame()
 
     QString sessionName = m_thisPlayerName + "'s Game";
     createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits);
+    copyOnlineDll(m_gamePath + "/online.dll");
 
     qInfo() << "[GpgNetGameLauncher::onLaunchGame] m_launchClient.launch()";
     if (!m_launchClient.launch())
@@ -265,4 +268,16 @@ void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFi
 
     QTextStream out(&ini);
     ini.write(txt.toUtf8());
+}
+
+void GpgNetGameLauncher::copyOnlineDll(QString target)
+{
+    QFileInfo fileInfo(target);
+    if (!fileInfo.exists()) {
+      qInfo() << "[GpgNetGameLauncher::copyOnlineDll] copying online.dll to" << target;
+      QFile::copy("online.dll", target);
+    }
+    if (!fileInfo.exists()) {
+      qWarning() << "[GpgNetGameLauncher::copyOnlineDll] copy online.dll failed!";
+    }
 }

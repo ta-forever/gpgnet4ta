@@ -597,6 +597,7 @@ int doMain(int argc, char* argv[])
         // GpgNetGameLauncher interprets instructions from GpgNetClient to launch TA as a host or as a joiner
         GpgNetGameLauncher launcher(
             DEFAULT_GAME_INI_TEMPLATE,
+            gamePath,
             gamePath + "/" + DEFAULT_GAME_INI,
             dplayGuid,
             parser.value("players").toInt(),
