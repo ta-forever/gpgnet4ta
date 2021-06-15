@@ -12,7 +12,9 @@ namespace gpgnet
     {
         int protocol;
         int localPort;
-        QString playerName;
+        QString _playerName;
+        QString playerAlias;
+        QString playerRealName;
         int playerId;
         int natTraversal;
 
@@ -32,42 +34,28 @@ namespace gpgnet
 
     struct JoinGameCommand
     {
-        QString _remoteHost;
+        QString remoteHost;
         QString _remotePlayerName;
+        QString remotePlayerAlias;
+        QString remotePlayerRealName;
         int remotePlayerId;
 
         JoinGameCommand();
         JoinGameCommand(QVariantList qvl);
         void Set(QVariantList command);
-
-        // _remotePlayerName might be in the format player@address1;address2. remotePlayerName() makes sure we get just a player name
-        QString remotePlayerName() const;
-
-        // the remote host actually in _remoteHost field
-        QString remoteHost() const;
-
-        // the host list after the @ in _remotePlayerName if there is one.  otherwise just _remoteHost
-        QStringList remoteHostCandidateList() const;
     };
 
     struct ConnectToPeerCommand
     {
-        QString _host;
+        QString host;
         QString _playerName;
+        QString playerAlias;
+        QString playerRealName;
         int playerId;
 
         ConnectToPeerCommand();
         ConnectToPeerCommand(QVariantList qvl);
         void Set(QVariantList command);
-
-        // _remotePlayerName might be in the format player@address1;address2. remotePlayerName() makes sure we get just a player name
-        QString playerName() const;
-
-        // the remote host actually in _remoteHost field
-        QString host() const;
-
-        // the host list after the @ in _remotePlayerName if there is one.  otherwise just _remoteHost
-        QStringList hostCandidateList() const;
     };
 
     struct DisconnectFromPeerCommand

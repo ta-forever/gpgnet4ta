@@ -52,7 +52,8 @@ struct GameResult
     {
         int army;
         int slot;
-        std::string name;
+        std::string alias;
+        std::string realName;
         int team;
         int score;
     };
@@ -67,7 +68,7 @@ struct GameResult
     {
         for (const auto& result : results)
         {
-            os << std::dec << "army" << result.army << "(" << result.name << "/slot" << result.slot << "/team" << result.team << "): sore=" << result.score << std::endl;
+            os << std::dec << "army" << result.army << "(" << result.alias << "/slot" << result.slot << "/team" << result.team << "): sore=" << result.score << std::endl;
         }
         os << "endGameTick=" << endGameTick << std::endl;
     }
@@ -108,6 +109,7 @@ class GameMonitor2 : public TADemo::TaPacketHandler
     std::uint16_t m_maxUnits;
     std::map<std::uint32_t, PlayerData> m_players;      // keyed by PlayerData::dplayid
     std::map<std::uint32_t, PlayerData> m_frozenPlayers;// m_players (in particular the teams and alliances) as is was at time of game start
+    std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
 
     GameEventHandler *m_gameEventHandler;
@@ -121,6 +123,7 @@ public:
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
     virtual void setHostPlayerName(const std::string &playerName);
     virtual void setLocalPlayerName(const std::string& playerName);
+    virtual void setPlayerRealName(const std::string &playerName, const std::string &realName);
     virtual std::string getHostPlayerName();
     virtual std::string getLocalPlayerName();
     virtual std::uint32_t getHostDplayId();

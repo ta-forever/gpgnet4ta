@@ -37,9 +37,9 @@ public:
     quint32 getLocalPlayerDplayId();
 
 public slots:
-    void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
-    void onJoinGame(QString host, QString playerName, int playerId);
-    void onConnectToPeer(QString host, QString playerName, int playerId);
+    void onCreateLobby(int protocol, int localPort, QString playerAlias, QString playerRealName, int playerId, int natTraversal);
+    void onJoinGame(QString host, QString playerAlias, QString playerRealName, int playerId);
+    void onConnectToPeer(QString host, QString playerAlias, QString playerRealName, int playerId);
     void onDisconnectFromPeer(int playerId);
 
 public slots:

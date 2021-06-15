@@ -59,7 +59,7 @@ quint32 TaLobby::getLocalPlayerDplayId()
     }
 }
 
-void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
+void TaLobby::onCreateLobby(int protocol, int localPort, QString playerAlias, QString playerRealName, int playerId, int natTraversal)
 {
     try
     {
@@ -69,9 +69,11 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
             return;
         }
 
-        m_tafnetIdsByPlayerName[playerName] = playerId;
-        m_gameMonitor->setHostPlayerName(playerName.toStdString()); // assume we're host until call to onJoinGame() indicates otherwise
-        m_gameMonitor->setLocalPlayerName(playerName.toStdString()); // this won't change
+        m_tafnetIdsByPlayerName[playerAlias] = playerId;
+        m_gameMonitor->setHostPlayerName(playerAlias.toStdString()); // assume we're host until call to onJoinGame() indicates otherwise
+        m_gameMonitor->setLocalPlayerName(playerAlias.toStdString()); // this won't change
+        m_gameMonitor->setPlayerRealName(playerAlias.toStdString(), playerRealName.toStdString());
+
         m_proxy.reset(new tafnet::TafnetNode(
             playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
         m_game.reset(new tafnet::TafnetGameNode(
@@ -91,7 +93,7 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerName, int
     }
 }
 
-void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
+void TaLobby::onJoinGame(QString _host, QString playerAlias, QString playerRealName, int playerId)
 {
     try
     {
@@ -101,11 +103,12 @@ void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
             return;
         }
 
-        m_tafnetIdsByPlayerName[playerName] = playerId;
+        m_tafnetIdsByPlayerName[playerAlias] = playerId;
         QHostAddress host("127.0.0.1");
         quint16 port = 6112;
         SplitHostAndPort(_host, host, port);
-        m_gameMonitor->setHostPlayerName(playerName.toStdString());
+        m_gameMonitor->setHostPlayerName(playerAlias.toStdString());
+        m_gameMonitor->setPlayerRealName(playerAlias.toStdString(), playerRealName.toStdString());
         m_proxy->joinGame(host, port, playerId);
         m_game->registerRemotePlayer(playerId, 47624);
     }
@@ -119,7 +122,7 @@ void TaLobby::onJoinGame(QString _host, QString playerName, int playerId)
     }
 }
 
-void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
+void TaLobby::onConnectToPeer(QString _host, QString playerAlias, QString playerRealName, int playerId)
 {
     try
     {
@@ -129,7 +132,8 @@ void TaLobby::onConnectToPeer(QString _host, QString playerName, int playerId)
             return;
         }
 
-        m_tafnetIdsByPlayerName[playerName] = playerId;
+        m_tafnetIdsByPlayerName[playerAlias] = playerId;
+        m_gameMonitor->setPlayerRealName(playerAlias.toStdString(), playerRealName.toStdString());
         QHostAddress host("127.0.0.1");
         quint16 port = 6112;
         SplitHostAndPort(_host, host, port);

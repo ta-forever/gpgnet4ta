@@ -54,9 +54,9 @@ void GpgNetClient::onReadyRead()
             {
                 CreateLobbyCommand clc;
                 clc.Set(serverCommand);
-                m_gpgnetPlayerIds[clc.playerName] = clc.playerId;
+                m_gpgnetPlayerIds[clc.playerAlias] = clc.playerId;
                 emit createLobby(
-                    clc.protocol, clc.localPort, clc.playerName,
+                    clc.protocol, clc.localPort, clc.playerAlias, clc.playerRealName,
                     clc.playerId, clc.natTraversal);
             }
             else if (cmd == "HostGame")
@@ -68,16 +68,16 @@ void GpgNetClient::onReadyRead()
             else if (cmd == "JoinGame")
             {
                 JoinGameCommand jgc(serverCommand);
-                m_gpgnetPlayerIds[jgc.remotePlayerName()] = jgc.remotePlayerId;
-                qInfo() << "[GpgNetClient::onReadyRead] join game: playername=" << jgc.remotePlayerName() << "playerId=" << jgc.remotePlayerId;
-                emit joinGame(jgc.remoteHost(), jgc.remotePlayerName(), jgc.remotePlayerId);
+                m_gpgnetPlayerIds[jgc.remotePlayerAlias] = jgc.remotePlayerId;
+                qInfo() << "[GpgNetClient::onReadyRead] join game: playername=" << jgc.remotePlayerAlias << "playerId=" << jgc.remotePlayerId;
+                emit joinGame(jgc.remoteHost, jgc.remotePlayerAlias, jgc.remotePlayerRealName, jgc.remotePlayerId);
             }
             else if (cmd == "ConnectToPeer")
             {
                 ConnectToPeerCommand ctp(serverCommand);
-                m_gpgnetPlayerIds[ctp.playerName()] = ctp.playerId;
-                qInfo() << "[GpgNetClient::onReadyRead] connect to peer: playername=" << ctp.playerName() << "playerId=" << ctp.playerId;
-                emit connectToPeer(ctp.host(), ctp.playerName(), ctp.playerId);
+                m_gpgnetPlayerIds[ctp.playerAlias] = ctp.playerId;
+                qInfo() << "[GpgNetClient::onReadyRead] connect to peer: playername=" << ctp.playerAlias << "playerId=" << ctp.playerId;
+                emit connectToPeer(ctp.host, ctp.playerAlias, ctp.playerRealName, ctp.playerId);
             }
             else if (cmd == "DisconnectFromPeer")
             {

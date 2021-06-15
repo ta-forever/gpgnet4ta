@@ -23,7 +23,7 @@ GpgNetGameLauncher::GpgNetGameLauncher(
     QObject::connect(&m_quitCountResetTimer, &QTimer::timeout, this, &GpgNetGameLauncher::onResetQuitCount);
 }
 
-void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal)
+void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString playerName, QString, int playerId, int natTraversal)
 {
     try
     {
@@ -102,7 +102,7 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
     }
 }
 
-void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, int playerId)
+void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, QString, int playerId)
 {
     try
     {

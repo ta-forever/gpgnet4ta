@@ -60,6 +60,11 @@ void GameMonitor2::setLocalPlayerName(const std::string& playerName)
     m_localPlayerName = playerName;
 }
 
+void GameMonitor2::setPlayerRealName(const std::string &playerName, const std::string &realName)
+{
+    m_playerRealNames[playerName] = realName;
+}
+
 std::string GameMonitor2::getHostPlayerName()
 {
     return m_hostPlayerName;
@@ -753,7 +758,8 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
         GameResult::ArmyResult res;
         res.army = nArmy;
         res.slot = player.second.slotNumber;
-        res.name = player.second.name;
+        res.alias = player.second.name;
+        res.realName = m_playerRealNames[player.second.name];
         res.team = nTeam;
         if (winningTeamNumber > 0)
         {
