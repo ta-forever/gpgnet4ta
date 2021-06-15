@@ -13,6 +13,15 @@ ConsoleReader::ConsoleReader(QHostAddress addr, quint16 port) :
     QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &ConsoleReader::onNewConnection);
 }
 
+ConsoleReader::~ConsoleReader()
+{
+    m_tcpServer.close();
+    for (QTcpSocket *s: m_tcpSockets)
+    {
+      s->close();
+    }
+}
+
 void ConsoleReader::onNewConnection()
 {
     try
