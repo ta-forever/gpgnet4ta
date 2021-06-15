@@ -12,6 +12,7 @@
 
 using namespace tafnet;
 
+static const uint32_t TICKS_TO_PROTECT_UDP = 300u;  // 10 sec
 
 GameSender* TafnetGameNode::getGameSender(std::uint32_t remoteTafnetId)
 {
@@ -118,7 +119,9 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     if (channelCode == GameReceiver::CHANNEL_UDP)
     {
         bool protect = unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId);
-        if (m_packetParser)
+        protect |= m_packetParser && m_packetParser->getProgressTicks() < TICKS_TO_PROTECT_UDP;
+
+        if (m_packetParser && !protect)
         {
             static const std::set<TADemo::SubPacketCode> protectedSubpaks({
                 TADemo::SubPacketCode::CHAT_05,
