@@ -4,9 +4,13 @@
 #include <QtCore/qthread.h>
 
 Logger::Logger(const std::string& filename, Verbosity verbosity) :
-    m_logfile(filename, std::iostream::out),
+    m_logfile(filename, std::iostream::out | std::iostream::app),
     m_verbosity(verbosity)
-{ }
+{
+    QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+    m_logfile << std::endl;
+    m_logfile << datetime.toStdString() << " -------------- BEGIN LOG --------------" << std::endl;
+}
 
 void Logger::Initialise(const std::string& filename, Verbosity level)
 {
