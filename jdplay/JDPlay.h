@@ -69,7 +69,7 @@ public:
     bool initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers);
     bool searchOnce();
     bool launch(bool startGame);
-    bool pollStillActive();
+    bool pollStillActive(DWORD &exitCode);
     void pollSessionStatus(LPDIRECTPLAY3A dplay = NULL);
     void printSessionDesc();
     bool isHost();

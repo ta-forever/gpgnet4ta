@@ -141,6 +141,16 @@ void UnableToLaunchMsgBox(MessageBoxThread& msgbox, QString guid)
     QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
 }
 
+void GameExitedWithErrorMsgBox(MessageBoxThread& msgbox, quint32 exitCode)
+{
+    QString err = QString("Game exited with error code 0x%1 (%2)\n").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
+    switch (exitCode) {
+    case 0xffffffff: 
+        err += "Check that TotalA.exe isn't already running. If it is, please shut it down and rejoin the game in TAF (blue \"join\" button) to try again.";
+        break;
+    };
+    QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
+}
 
 int handleRegisterDplay(const QCoreApplication &app, const QCommandLineParser& parser)
 {
@@ -272,6 +282,9 @@ int doMain(int argc, char* argv[])
     QObject::connect(&launchServer, &LaunchServer::quit, &app, &QCoreApplication::quit);
     QObject::connect(&launchServer, &LaunchServer::gameFailedToLaunch, [&msgbox](QString guid) {
         UnableToLaunchMsgBox(msgbox, guid);
+    });
+    QObject::connect(&launchServer, &LaunchServer::gameExitedWithError, [&msgbox](quint32 exitCode) {
+        GameExitedWithErrorMsgBox(msgbox, exitCode);
     });
     return app.exec();
 }

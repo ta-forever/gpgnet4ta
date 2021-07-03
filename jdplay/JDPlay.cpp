@@ -519,9 +519,8 @@ bool JDPlay::launch(bool startGame){
     return true;
 }
 
-bool JDPlay::pollStillActive()
+bool JDPlay::pollStillActive(DWORD& exitCode)
 {
-    DWORD exitCode = 0u;
     GetExitCodeProcess(processHandle, &exitCode);
     return exitCode == STILL_ACTIVE;
 }

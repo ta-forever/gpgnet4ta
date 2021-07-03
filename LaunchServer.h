@@ -21,6 +21,7 @@ class LaunchServer : public QObject
 signals:
     void quit();
     void gameFailedToLaunch(QString gameGuid);
+    void gameExitedWithError(quint32 exitCode);
 
 public:
     LaunchServer(QHostAddress addr, quint16 port);

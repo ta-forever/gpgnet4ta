@@ -141,7 +141,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
         emit gameFailedToLaunch(_guid);
         return;
     }
-    if (!m_jdPlay->launch(true))
+    else if (!m_jdPlay->launch(true))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to launch!";
         m_jdPlay.reset();
@@ -149,17 +149,29 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
         emit gameFailedToLaunch(_guid);
         return;
     }
-    notifyClients("RUNNING");
+    else {
+        qInfo() << "[LaunchServer::launchGame] success";
+        notifyClients("RUNNING");
+    }
 }
 
 void LaunchServer::timerEvent(QTimerEvent* event)
 {
     try
     {
-        if (m_jdPlay && !m_jdPlay->pollStillActive())
+        DWORD exitCode;
+        if (m_jdPlay && !m_jdPlay->pollStillActive(exitCode))
         {
-            qInfo() << "[LaunchServer::timerEvent] jdlay not active. informing clients";
-            notifyClients("IDLE");
+            qInfo() << QString("[LaunchServer::timerEvent] process exited with code 0x%1 (%2)").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
+            if (exitCode == 0)
+            {
+                notifyClients("IDLE");
+            }
+            else
+            {
+                notifyClients(QString("FAIL %1").arg(exitCode, 0, 16, QChar('0')));
+                emit gameExitedWithError(exitCode);
+            }
             m_jdPlay.reset();
         }
 

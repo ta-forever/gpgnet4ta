@@ -113,17 +113,17 @@ void LaunchClient::onReadyReadTcp()
     }
 
     QByteArray data = m_tcpSocket.readAll();
-    QString response = QString::fromUtf8(data);
+    QStringList response = QString::fromUtf8(data).split(" ");
     qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
-    if (response == "IDLE")
+    if (response[0] == "IDLE")
     {
         m_state = State::IDLE;
     }
-    else if (response == "RUNNING")
+    else if (response[0] == "RUNNING")
     {
         m_state = State::RUNNING;
     }
-    else if (response == "FAIL")
+    else if (response[0] == "FAIL")
     {
         m_state = State::FAIL;
     }
