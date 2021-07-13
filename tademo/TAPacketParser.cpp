@@ -15,7 +15,8 @@
 using namespace TADemo;
 
 TAPacketParser::TAPacketParser(TaPacketHandler *packetHandler) :
-m_packetHandler(packetHandler)
+    m_packetHandler(packetHandler),
+    m_progressTicks(0u)
 { }
 
 std::set<SubPacketCode> TAPacketParser::parseGameData(const char *data, int len)
@@ -44,6 +45,11 @@ std::set<SubPacketCode> TAPacketParser::parseGameData(const char *data, int len)
         }
     }
     return m_parsedSubPacketCodes;
+}
+
+std::uint32_t TAPacketParser::getProgressTicks()
+{
+    return m_progressTicks;
 }
 
 void TAPacketParser::parseDplayPacket(const DPHeader *header, const char *data, int len)
@@ -305,6 +311,7 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
             {
                 std::uint32_t tick = *(std::uint32_t*)(&s[3]);
                 m_packetHandler->onGameTick(sourceDplayId, tick);
+                m_progressTicks = std::max(tick, m_progressTicks);
             }
             break;
         };

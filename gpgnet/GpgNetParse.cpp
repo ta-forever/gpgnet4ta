@@ -6,10 +6,27 @@
 namespace gpgnet
 {
 
+    static void SplitAliasAndRealName(QString aliasAndReal, QString &alias, QString &real)
+    {
+        QStringList parts = aliasAndReal.split("/");
+        if (parts.size() > 1)
+        {
+            alias = parts[0];
+            real = parts[1];
+        }
+        else
+        {
+            alias = parts[0];
+            real = "";
+        }
+    }
+
     CreateLobbyCommand::CreateLobbyCommand() :
         protocol(0),
         localPort(47625),
-        playerName("BILLYIDOL"),
+        _playerName("BILLYIDOL"),
+        playerAlias("BILLYIDOL"),
+        playerRealName("BILLYIDOL"),
         playerId(1955),
         natTraversal(1)
     { }
@@ -28,7 +45,8 @@ namespace gpgnet
         }
         protocol = command[1].toInt();
         localPort = command[2].toInt();
-        playerName = command[3].toString();
+        _playerName = command[3].toString();
+        SplitAliasAndRealName(_playerName, playerAlias, playerRealName);
         playerId = command[4].toInt();
         natTraversal = command[5].toInt();
     }
@@ -53,8 +71,10 @@ namespace gpgnet
     }
 
     JoinGameCommand::JoinGameCommand() :
-        _remoteHost("127.0.0.1"),
+        remoteHost("127.0.0.1"),
         _remotePlayerName("ACDC"),
+        remotePlayerAlias("ACDC"),
+        remotePlayerRealName("ACDC"),
         remotePlayerId(0)
     { }
 
@@ -70,39 +90,17 @@ namespace gpgnet
         {
             throw std::runtime_error("Unexpected command");
         }
-        _remoteHost = command[1].toString();
+        remoteHost = command[1].toString();
         _remotePlayerName = command[2].toString();
         remotePlayerId = command[3].toInt();
+        SplitAliasAndRealName(_remotePlayerName, remotePlayerAlias, remotePlayerRealName);
     }
-
-    QString JoinGameCommand::remotePlayerName() const
-    {
-        return _remotePlayerName.split("@")[0];
-    }
-
-    QString JoinGameCommand::remoteHost() const
-    {
-        return _remoteHost;
-    }
-
-    QStringList JoinGameCommand::remoteHostCandidateList() const
-    {
-        QStringList candidates = _remotePlayerName.split("@");
-        if (candidates.size() == 1)
-        {
-            candidates[0] = remoteHost();
-        }
-        else if (candidates.size() > 1)
-        {
-            candidates = candidates[1].split(';');
-        }
-        return candidates;
-    }
-        
 
     ConnectToPeerCommand::ConnectToPeerCommand() :
-        _host("127.0.0.1"),
+        host("127.0.0.1"),
         _playerName("ACDC"),
+        playerAlias("ACDC"),
+        playerRealName("ACDC"),
         playerId(0)
     { }
 
@@ -118,36 +116,10 @@ namespace gpgnet
         {
             throw std::runtime_error("Unexpected command");
         }
-        _host = command[1].toString();
+        host = command[1].toString();
         _playerName = command[2].toString();
         playerId = command[3].toInt();
-    }
-
-    // _remotePlayerName might be in the format player@address1;address2. remotePlayerName() makes sure we get just a player name
-    QString ConnectToPeerCommand::playerName() const
-    {
-        return _playerName.split("@")[0];
-    }
-
-    // the remote host actually in _remoteHost field
-    QString ConnectToPeerCommand::host() const
-    {
-        return _host;
-    }
-
-    // the host list after the @ in _remotePlayerName if there is one.  otherwise just _remoteHost
-    QStringList ConnectToPeerCommand::hostCandidateList() const
-    {
-        QStringList candidates = _playerName.split("@");
-        if (candidates.size() == 1)
-        {
-            candidates[0] = host();
-        }
-        else if (candidates.size() > 1)
-        {
-            candidates = candidates[1].split(';');
-        }
-        return candidates;
+        SplitAliasAndRealName(_playerName, playerAlias, playerRealName);
     }
 
     DisconnectFromPeerCommand::DisconnectFromPeerCommand():

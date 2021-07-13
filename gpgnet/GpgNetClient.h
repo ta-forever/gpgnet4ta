@@ -21,15 +21,16 @@ namespace gpgnet
         quint32 lookupPlayerId(QString playerName);
 
     signals:
-        void createLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
+        void createLobby(int protocol, int localPort, QString playerAlias, QString realName, int playerId, int natTraversal);
         void hostGame(QString mapName);
-        void joinGame(QString host, QString playerName, int playerId);
-        void connectToPeer(QString host, QString playerName, int playerId);
+        void joinGame(QString host, QString playerAlias, QString realName, int playerId);
+        void connectToPeer(QString host, QString playerAlias, QString realName, int playerId);
         void disconnectFromPeer(int playerId);
 
     private:
         void onReadyRead();
         void onSocketStateChanged(QAbstractSocket::SocketState socketState);
+
     };
 
 }

@@ -20,6 +20,8 @@ static const std::uint16_t GAME_UDP_PORT_BEGIN = 2350;
 static const std::uint16_t GAME_UDP_PORT_VALID_END = 2400;  // anything beyond this range will be assumed to indicate dplay is attempting to use upnp
 static const std::uint16_t GAME_UDP_PORT_PROBE_END = 2360;  // if dplay is trying to use upnp, we'll probe up to this port to find the local port being used by TA
 
+static const uint32_t TICKS_TO_PROTECT_UDP = 300u;  // 10 sec
+
 GameSender* TafnetGameNode::getGameSender(std::uint32_t remoteTafnetId)
 {
     std::shared_ptr<GameSender>& gameSender = m_gameSenders[remoteTafnetId];
@@ -138,7 +140,9 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
     if (channelCode == GameReceiver::CHANNEL_UDP)
     {
         bool protect = unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId);
-        if (m_packetParser)
+        protect |= m_packetParser && m_packetParser->getProgressTicks() < TICKS_TO_PROTECT_UDP;
+
+        if (m_packetParser && !protect)
         {
             static const std::set<TADemo::SubPacketCode> protectedSubpaks({
                 TADemo::SubPacketCode::CHAT_05,

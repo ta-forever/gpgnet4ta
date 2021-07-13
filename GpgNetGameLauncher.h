@@ -39,9 +39,9 @@ public:
         QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
         LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend);
 
-    void onCreateLobby(int protocol, int localPort, QString playerName, int playerId, int natTraversal);
+    void onCreateLobby(int protocol, int localPort, QString playerName, QString, int playerId, int natTraversal);
     void onHostGame(QString mapName, QString mapDetails);
-    void onJoinGame(QString host, QString playerName, int playerId);
+    void onJoinGame(QString host, QString playerName, QString, int playerId);
 
     void onExtendedMessage(QString msg);
     void onLaunchGame();

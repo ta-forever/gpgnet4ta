@@ -22,11 +22,13 @@ namespace TADemo
         DuplicateDetection m_taDuplicateDetection;
 
         std::set<SubPacketCode> m_parsedSubPacketCodes;
+        std::uint32_t m_progressTicks;
 
     public:
         TAPacketParser(TaPacketHandler *packetHandler);
 
         virtual std::set<SubPacketCode> parseGameData(const char *data, int len);
+        virtual std::uint32_t getProgressTicks();
 
     private:
         virtual void parseDplayPacket(const DPHeader *header, const char *data, int len);

@@ -13,6 +13,7 @@ class ConsoleReader : public QObject
 
 public:
     explicit ConsoleReader(QHostAddress addr, quint16 port);
+    ~ConsoleReader();
 
 signals:
     void textReceived(QString message);

@@ -355,7 +355,8 @@ public:
             for (const QVariantMap &result : results)
             {
                 std::ostringstream ss;
-                std::string name = result.value("name").toString().toStdString();
+                std::string alias = result.value("alias").toString().toStdString();
+                std::string realName = result.value("realName").toString().toStdString();
                 int slot = result.value("slot").toInt();
                 int team = result.value("team").toInt();
                 int score = result.value("score").toInt();
@@ -367,7 +368,14 @@ public:
                 else
                     outcome = "DEFEAT";
 
-                ss << name << ": " << outcome;
+                if (realName.empty() || realName == alias)
+                {
+                    ss << alias << ": " << outcome;
+                }
+                else
+                {
+                    ss << alias << " (aka " << realName << "): " << outcome;
+                }
                 doSend(ss.str(), true, true);
             }
         }
@@ -621,8 +629,8 @@ int doMain(int argc, char* argv[])
             launcher.onHostGame(mapName, getMapDetails(parser.value("gamepath"), MAP_TOOL_EXE, mapName));
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
-        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, int playerId) {
-            launcher.onJoinGame(host, playerName, playerId);
+        QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, QString, int playerId) {
+            launcher.onJoinGame(host, playerName, playerName, playerId);
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);

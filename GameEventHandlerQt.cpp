@@ -45,7 +45,8 @@ void GameEventsSignalQt::onGameEnded(const GameResult &result)
         qr.insert("slot", QVariant(r.slot));
         qr.insert("army", QVariant(r.army));
         qr.insert("team", QVariant(r.team));
-        qr.insert("name", QVariant(QString::fromStdString(r.name)));
+        qr.insert("alias", QVariant(QString::fromStdString(r.alias)));
+        qr.insert("realName", QVariant(QString::fromStdString(r.realName)));
         qr.insert("score", QVariant(r.score));
         qresults.push_back(qr);
     }
