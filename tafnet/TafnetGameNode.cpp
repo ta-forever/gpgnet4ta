@@ -12,6 +12,13 @@
 
 using namespace tafnet;
 
+static const std::uint16_t GAME_TCP_PORT_BEGIN = 2300;
+static const std::uint16_t GAME_TCP_PORT_VALID_END = 2400;  // anything beyond this range will be assumed to indicate dplay is trying to use upnp
+static const std::uint16_t GAME_TCP_PORT_PROBE_END = 2310;  // if dplay is trying to use upnp, we'll probe up to this port to find the local port being used by TA
+
+static const std::uint16_t GAME_UDP_PORT_BEGIN = 2350;
+static const std::uint16_t GAME_UDP_PORT_VALID_END = 2400;  // anything beyond this range will be assumed to indicate dplay is attempting to use upnp
+static const std::uint16_t GAME_UDP_PORT_PROBE_END = 2360;  // if dplay is trying to use upnp, we'll probe up to this port to find the local port being used by TA
 
 GameSender* TafnetGameNode::getGameSender(std::uint32_t remoteTafnetId)
 {
@@ -21,6 +28,7 @@ GameSender* TafnetGameNode::getGameSender(std::uint32_t remoteTafnetId)
         gameSender.reset(m_gameSenderFactory());
         gameSender->setTcpPort(m_gameTcpPort);
         gameSender->setUdpPort(m_gameUdpPort);
+        gameSender->setGameAddress(m_gameAddress);
     }
     return gameSender.get();
 }
@@ -69,6 +77,14 @@ void TafnetGameNode::translateMessageFromLocalGame(char* data, int len, std::uin
         auto itPlayerId = m_remotePlayerIds.find(address.port());
         if (itPlayerId == m_remotePlayerIds.end())
         {
+            // NB we haven't validated that this SPA genuinely belongs to local player. we only know that its not in our list of remotes ...
+            // But if its actually an unlisted remote, there are bigger problems preventing this game from proceeding anyway
+            qInfo() << "[TafnetGameNode::translateMessageFromLocalGame] (on local player SPA translate)"
+                << "this.playerid:" << this->m_tafnetNode->getPlayerId()
+                << "address:" << QHostAddress(address.address()).toString()
+                << "index:" << index
+                << "port:" << address.port();
+            updateGameSenderPortsFromSpaPacket(index == 0 ? address.port() : 0, index == 1 ? address.port() : 0);
             address.address(this->m_tafnetNode->getPlayerId());
         }
         else
@@ -106,13 +122,17 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
 
     if (len == 0)
     {
-        qWarning() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "encountered empty data() on port" << receivingSocket->localPort();
+        static bool logged = false;
+        if (!logged) {
+            qInfo() << "[TafnetGameNode::handleGameData] playerId" << m_tafnetNode->getPlayerId() << "encountered empty data() on port. (this is expected when GameSender is spamming UDP)" << receivingSocket->localPort();
+            logged = true;
+        }
         return;
     }
 
-    if (m_gameTcpPort == 0 || m_gameUdpPort == 0)
+    if (m_gameTcpPort == 0)
     {
-        updateGameSenderPorts(data, len);
+        updateGameSenderPortsFromDplayHeader(data, len);
     }
 
     if (channelCode == GameReceiver::CHANNEL_UDP)
@@ -239,6 +259,16 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
     };
 }
 
+template<typename IteratorT>
+static QStringList numbersToQString(IteratorT begin, IteratorT end)
+{
+    QStringList stringList;
+    std::for_each(begin, end, [&stringList](typename IteratorT::value_type n) {
+        stringList.append(QString::number(n));
+    });
+    return stringList;
+}
+
 TafnetGameNode::TafnetGameNode(
     TafnetNode* tafnetNode,
     TADemo::TAPacketParser* gameMonitor,
@@ -248,12 +278,48 @@ TafnetGameNode::TafnetGameNode(
     m_packetParser(gameMonitor),
     m_gameTcpPort(0),
     m_gameUdpPort(0),
+    m_gameAddress(QHostAddress::SpecialAddress::LocalHost),
     m_gameSenderFactory(gameSenderFactory),
-    m_gameReceiverFactory(gameReceiverFactory)
+    m_gameReceiverFactory(gameReceiverFactory),
+    m_initialOccupiedTcpPorts(probeOccupiedTcpPorts(QHostAddress(QHostAddress::SpecialAddress::LocalHost), GAME_TCP_PORT_BEGIN, GAME_TCP_PORT_PROBE_END, 30)),
+    m_initialOccupiedUdpPorts(probeOccupiedUdpPorts(QHostAddress(QHostAddress::SpecialAddress::LocalHost), GAME_UDP_PORT_BEGIN, GAME_UDP_PORT_PROBE_END, 30))
 {
+    qInfo() << "[TafnetGameNode::TafnetGameNode] occupied TCP ports on localhost at time of construction:" 
+        << numbersToQString(m_initialOccupiedTcpPorts.begin(), m_initialOccupiedTcpPorts.end()).join(",");
+
+    qInfo() << "[TafnetGameNode::TafnetGameNode] occupied UDP ports on localhost at time of construction:"
+        << numbersToQString(m_initialOccupiedUdpPorts.begin(), m_initialOccupiedUdpPorts.end()).join(",");
+
     m_tafnetNode->setHandler([this](std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len) {
         this->handleTafnetMessage(action, peerPlayerId, data, len);
     });
+}
+
+std::set<std::uint16_t> TafnetGameNode::probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms)
+{
+    std::set<std::uint16_t> occupiedPorts;
+    for (quint16 port = begin; port < end; ++port) {
+        QTcpSocket probe;
+        probe.connectToHost(address, port);
+        if (probe.waitForConnected(timeoutms)) {
+            occupiedPorts.insert(port);
+        }
+    }
+    return occupiedPorts;
+}
+
+std::set<std::uint16_t> TafnetGameNode::probeOccupiedUdpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms)
+{
+    std::set<std::uint16_t> occupiedPorts;
+    for (quint16 port = begin; port < end; ++port) {
+        QUdpSocket probe;
+        // NB this isn't diagnostic as its possible to bind UDP port in shared mode.  Infact this is what TA does if not launched as admin ...
+        if (!probe.bind(address, port))
+        {
+            occupiedPorts.insert(port);
+        }
+    }
+    return occupiedPorts;
 }
 
 void TafnetGameNode::sendEnumRequest(QUuid gameGuid, std::uint32_t asPeerId)
@@ -290,54 +356,78 @@ void TafnetGameNode::unregisterRemotePlayer(std::uint32_t remotePlayerId)
     killGameReceiver(remotePlayerId);
 }
 
-void TafnetGameNode::updateGameSenderPorts(const char* data, int len)
+void TafnetGameNode::updateGameSenderPortsFromDplayHeader(const char* data, int len)
 {
-    TADemo::Watchdog wd2("TafnetGameNode::updateGameSenderPorts", 100);
+    TADemo::Watchdog wd2("TafnetGameNode::updateGameSenderPortsFromDplayHeader", 400);
     TADemo::DPHeader* header = (TADemo::DPHeader*)data;
     if (header->looksOk())
     {
         m_gameTcpPort = header->address.port();
-        m_gameUdpPort = header->address.port() + 50;
+        m_gameAddress = QHostAddress(QHostAddress::SpecialAddress::LocalHost);
 
-        const bool ENABLE_QUERY_UPNP = false;
-        if (ENABLE_QUERY_UPNP && (m_gameTcpPort < 2300 || m_gameUdpPort >= 2400))
+        std::set<std::uint16_t> occupiedTcpPorts = probeOccupiedTcpPorts(m_gameAddress, GAME_TCP_PORT_BEGIN, GAME_TCP_PORT_PROBE_END, 10);
+        qInfo() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] TCP port probe:" << m_gameAddress << numbersToQString(occupiedTcpPorts.begin(), occupiedTcpPorts.end()).join(",");
+
+        // UDP port probe is for logging purposes only since its pretty hit and miss
+        std::set<std::uint16_t> occupiedUdpPorts = probeOccupiedUdpPorts(m_gameAddress, GAME_UDP_PORT_BEGIN, GAME_UDP_PORT_PROBE_END, 10);
+        qInfo() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] UDP port probe:" << m_gameAddress << numbersToQString(occupiedUdpPorts.begin(), occupiedUdpPorts.end()).join(",");
+
+        if (m_gameTcpPort < GAME_TCP_PORT_BEGIN || m_gameTcpPort >= GAME_TCP_PORT_VALID_END)
         {
-            // game is trying to use upnp ...
-            qInfo() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "Game is trying to use upnp.external tcp port is" << m_gameTcpPort;
-            try
-            {
-                std::uint16_t internalPort = 0;// GetUpnpPortMap(m_gameTcpPort, "TCP");
-                qInfo() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "IGD reports corresponding internal TCP port is" << internalPort;
-                m_gameTcpPort = internalPort;
-                m_gameUdpPort = internalPort + 50;
-            }
-            catch (std::runtime_error &e)
-            {
-                qWarning() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "unable to get upnp port mappings : " << e.what();
+            for (std::uint16_t port : occupiedTcpPorts) {
+                if (m_initialOccupiedTcpPorts.count(port) == 0) {
+                    qInfo() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] TCP port probe:" << port << "seems likely belonging to game";
+                    m_gameTcpPort = port;
+                    break;
+                }
             }
         }
 
-        if (m_gameTcpPort < 2300 || m_gameUdpPort >= 2400)
-        {
-            qWarning() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "guessing the game ports ...";
-            m_gameTcpPort = 2300;
-            m_gameUdpPort = 2350;
+        if (m_gameTcpPort < GAME_TCP_PORT_BEGIN || m_gameTcpPort >= GAME_TCP_PORT_VALID_END) {
+            qWarning() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] playerId" << m_tafnetNode->getPlayerId() << "guessing game tcp port ...";
+            m_gameTcpPort = GAME_TCP_PORT_BEGIN;
         }
 
-        qInfo() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "game ports set to tcp : " << m_gameTcpPort << " udp : " << m_gameUdpPort;
+        //m_gameUdpPort = m_gameTcpPort+50;
+
+        qInfo() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] playerId" << m_tafnetNode->getPlayerId() << "game address set to" << QHostAddress(m_gameAddress).toString() << m_gameTcpPort << "tcp" << m_gameUdpPort << "udp";
         for (auto& pair : m_gameSenders)
         {
             pair.second->setTcpPort(m_gameTcpPort);
             pair.second->setUdpPort(m_gameUdpPort);
+            pair.second->setGameAddress(m_gameAddress);
         }
     }
     else
     {
-        qWarning() << "[TafnetGameNode::updateGameSenderPorts] playerId" << m_tafnetNode->getPlayerId() << "cannot set game ports due to unrecognised dplay msg header";
+        qWarning() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] playerId" << m_tafnetNode->getPlayerId() << "cannot set game ports due to unrecognised dplay msg header";
         std::ostringstream ss;
         ss << '\n';
         TADemo::HexDump(data, len, ss);
         qWarning() << ss.str().c_str();
+    }
+}
+
+void TafnetGameNode::updateGameSenderPortsFromSpaPacket(quint16 tcp, quint16 udp)
+{
+    if (tcp >= GAME_TCP_PORT_BEGIN && tcp < GAME_TCP_PORT_VALID_END && m_gameTcpPort == 0)
+    {
+        qInfo() << "[TafnetGameNode::updateGameSenderPortsFromSpaPacket] playerId" << m_tafnetNode->getPlayerId() << "game TCP port set to" << tcp;
+        m_gameTcpPort = tcp;
+        for (auto& pair : m_gameSenders)
+        {
+            pair.second->setTcpPort(tcp);
+        }
+    }
+
+    if (udp >= GAME_UDP_PORT_BEGIN && udp < GAME_UDP_PORT_VALID_END && m_gameUdpPort == 0)
+    {
+        qInfo() << "[TafnetGameNode::updateGameSenderPortsFromSpaPacket] playerId" << m_tafnetNode->getPlayerId() << "game UDP port set to" << udp;
+        m_gameUdpPort = udp;
+        for (auto& pair : m_gameSenders)
+        {
+            pair.second->setUdpPort(udp);
+        }
     }
 }
 

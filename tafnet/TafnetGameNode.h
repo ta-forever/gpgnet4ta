@@ -35,6 +35,10 @@ namespace tafnet
         // these only discovered once some data received from game
         std::uint16_t m_gameTcpPort;
         std::uint16_t m_gameUdpPort;
+        QHostAddress m_gameAddress;     // NB: upnp external address doesn't work
+        const std::set<std::uint16_t> m_initialOccupiedTcpPorts;
+        const std::set<std::uint16_t> m_initialOccupiedUdpPorts;
+        QByteArray m_firstTcpPacket;
 
         std::function<GameSender * ()> m_gameSenderFactory;
         std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> m_gameReceiverFactory;
@@ -63,6 +67,10 @@ namespace tafnet
         virtual void handleTafnetMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len);
         virtual void translateMessageFromRemoteGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
-        virtual void updateGameSenderPorts(const char *data, int len);
+        virtual void updateGameSenderPortsFromDplayHeader(const char *data, int len);
+        virtual void updateGameSenderPortsFromSpaPacket(quint16 tcp, quint16 udp);
+
+        static std::set<std::uint16_t> probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
+        static std::set<std::uint16_t> probeOccupiedUdpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
     };
 }
