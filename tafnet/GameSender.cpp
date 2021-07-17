@@ -31,28 +31,19 @@ void GameSender::setGameAddress(QHostAddress gameAddress)
     m_gameAddress = gameAddress;
 }
 
-void GameSender::enumSessions(char* data, int len)
+bool GameSender::enumSessions(const char* data, int len)
 {
-    TADemo::Watchdog wd("[GameSender::enumSessions]", 1000);
-    for (int n = 0; n < 10; ++n)
+    TADemo::Watchdog wd("[GameSender::enumSessions]", 100);
+    m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
+    if (!m_enumSocket.waitForConnected(30))
     {
-        qInfo() << "[GameSender::enumSessions] connecting" << m_gameAddress.toString() << ":" << m_enumPort;
-        m_enumSocket.connectToHost(m_gameAddress, m_enumPort);
-        if (m_enumSocket.waitForConnected(1000))
-        {
-            qInfo() << "[GameSender::enumSessions] connected ...";
-            break;
-        }
-    }
-    if (!m_enumSocket.waitForConnected(1000))
-    {
-        qWarning() << "[GameSender::enumSessions] unable to connect to enumeration socket!";
-        return;
+        return false;
     }
 
     m_enumSocket.write(data, len);
     m_enumSocket.flush();
     m_enumSocket.disconnectFromHost();
+    return true;
 }
 
 bool GameSender::openTcpSocket(int timeoutMillisecond)

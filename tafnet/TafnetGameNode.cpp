@@ -232,7 +232,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
 
     case Payload::ACTION_ENUM:
         GameAddressTranslater(gameReceiver->getBindAddress().toIPv4Address(), replyPorts)(data, len);
-        gameSender->enumSessions(data, len);
+        m_pendingEnumRequests[peerPlayerId] = QByteArray(data, len);
         break;
 
     case Payload::ACTION_TCP_OPEN:
@@ -297,6 +297,10 @@ TafnetGameNode::TafnetGameNode(
     m_tafnetNode->setHandler([this](std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len) {
         this->handleTafnetMessage(action, peerPlayerId, data, len);
     });
+
+    m_pendingEnumRequestsTimer.connect(&m_pendingEnumRequestsTimer, &QTimer::timeout, [this] { processPendingEnumRequests(); });
+    m_pendingEnumRequestsTimer.setInterval(1000);
+    m_pendingEnumRequestsTimer.start();
 }
 
 std::set<std::uint16_t> TafnetGameNode::probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms)
@@ -356,6 +360,7 @@ void TafnetGameNode::registerRemotePlayer(std::uint32_t remotePlayerId, std::uin
 void TafnetGameNode::unregisterRemotePlayer(std::uint32_t remotePlayerId)
 {
     qInfo() << "[TafnetGameNode::unregisterRemotePlayer] playerId" << m_tafnetNode->getPlayerId() << "unregistering peer" << remotePlayerId;
+    m_pendingEnumRequests.erase(remotePlayerId);
     killGameSender(remotePlayerId);
     killGameReceiver(remotePlayerId);
 }
@@ -464,5 +469,52 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
             + bs;
 
         sender->sendUdpData((char*)bs.data(), bs.size());
+    }
+}
+
+void TafnetGameNode::processPendingEnumRequests()
+{
+    TADemo::Watchdog wd("[TafnetGameNode::processPendingEnumRequests]", 100);
+    try
+    {
+        std::set<std::uint32_t> completed;
+
+        for (auto& pair : m_pendingEnumRequests)
+        {
+            std::uint32_t peerId = std::get<0>(pair);
+            const QByteArray& datas = std::get<1>(pair);
+            GameSender* gameSender = getGameSender(peerId);
+            bool ok = gameSender->enumSessions(datas.constData(), datas.size());
+            if (!ok)
+            {
+                qInfo() << "[TafnetGameNode::processPendingEnumRequests] enum port no connection ..." << m_pendingEnumRequests.size() << "enum requests in queue";
+                break;
+            }
+            else
+            {
+                qInfo() << "[TafnetGameNode::processPendingEnumRequests] enum port connected.  request delivered for peerId=" << peerId;
+                completed.insert(peerId);
+            }
+        }
+
+        for (std::uint32_t peerId : completed)
+        {
+            m_pendingEnumRequests.erase(peerId);
+        }
+
+        if (m_packetParser && m_packetParser->getProgressTicks() > 0u)
+        {
+            qInfo() << "[TafnetGameNode::processPendingEnumRequests] game ticks > 0.  terminating enumTickTimer with" << m_pendingEnumRequests.size() << "enum requests in queue";
+            m_pendingEnumRequestsTimer.stop();
+        }
+    }
+    catch (std::exception & e)
+    {
+        qCritical() << "[TafnetGameNode::processPendingEnumRequests] unexpected exception:" << e.what();
+
+    }
+    catch (...)
+    {
+        qCritical() << "[TafnetGameNode::processPendingEnumRequests] unknown exception";
     }
 }

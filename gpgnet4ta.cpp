@@ -537,7 +537,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GPGNet4TA");
-    QCoreApplication::setApplicationVersion("0.13");
+    QCoreApplication::setApplicationVersion("0.13.3");
     //app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;

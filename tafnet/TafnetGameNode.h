@@ -31,6 +31,8 @@ namespace tafnet
         std::map<std::uint32_t, std::shared_ptr<GameSender> > m_gameSenders;     // keyed by peer tafnet playerId
         std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer tafnet playerId
         std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // tafnet id keyed by gameReceiver's receive socket port (both tcp and udp)
+        std::map<std::uint32_t, QByteArray> m_pendingEnumRequests;               // keyed by peer tafnet playerId
+        QTimer m_pendingEnumRequestsTimer;
 
         // these only discovered once some data received from game
         std::uint16_t m_gameTcpPort;
@@ -69,6 +71,8 @@ namespace tafnet
         virtual void translateMessageFromLocalGame(char* data, int len, std::uint32_t replyAddress, const std::uint16_t replyPorts[]);
         virtual void updateGameSenderPortsFromDplayHeader(const char *data, int len);
         virtual void updateGameSenderPortsFromSpaPacket(quint16 tcp, quint16 udp);
+
+        virtual void processPendingEnumRequests();
 
         static std::set<std::uint16_t> probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
         static std::set<std::uint16_t> probeOccupiedUdpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
