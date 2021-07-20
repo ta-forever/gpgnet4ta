@@ -405,12 +405,13 @@ public:
 
                 doSend(msg.toStdString(), true, false);
 
-                m_quitRequested = msg == "/quit" ? ++m_quitRequested : 0;
+                m_quitRequested = msg == "/quit" ? 1+m_quitRequested : 0;
+                m_quitRequested = msg == "-harald" ? 2+m_quitRequested : 0;
                 if (m_quitRequested == 1)
                 {
                     doSend("Type /quit again to disconnect your game", false, true);
                 }
-                else if (m_quitRequested == 2)
+                else if (m_quitRequested >= 2)
                 {
                     doSend("ok your game is disconnected you can alt-f4", false, true);
                     qInfo() << "[HandleGameStatus::onChat] terminating with m_quitRequested=" << m_quitRequested;
