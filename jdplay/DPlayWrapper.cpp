@@ -4,11 +4,11 @@
 
 
 typedef HRESULT(WINAPI* TDirectPlayCreate) (LPGUID lpGUID, LPDIRECTPLAY* lplpDP, IUnknown* pUnk);
-typedef HRESULT(WINAPI* TDirectPlayEnumerate) (LPDPENUMDPCALLBACK, LPVOID);
+//typedef HRESULT(WINAPI* TDirectPlayEnumerate) (LPDPENUMDPCALLBACK, LPVOID);
 typedef HRESULT(WINAPI* TDirectPlayLobbyCreate) (LPGUID, LPDIRECTPLAYLOBBY*, IUnknown*, LPVOID, DWORD);
 
 static TDirectPlayCreate pDirectPlayCreate = 0;
-static TDirectPlayEnumerate pDirectPlayEnumerate = 0;
+//static TDirectPlayEnumerate pDirectPlayEnumerate = 0;
 static TDirectPlayLobbyCreate pDirectPlayLobbyCreate = 0;
 
 HMODULE DPlayWrapper::m_dll = 0;
@@ -28,10 +28,10 @@ DPlayWrapper::DPlayWrapper()
         }
 
         pDirectPlayCreate = (TDirectPlayCreate)GetProcAddress(m_dll, "DirectPlayCreate");
-        pDirectPlayEnumerate = (TDirectPlayEnumerate)GetProcAddress(m_dll, "DirectPlayEnumerate");
+        //pDirectPlayEnumerate = (TDirectPlayEnumerate)GetProcAddress(m_dll, "DirectPlayEnumerate");
         pDirectPlayLobbyCreate = (TDirectPlayLobbyCreate)GetProcAddress(m_dll, "DirectPlayLobbyCreateW");
 
-        if (!pDirectPlayCreate || !pDirectPlayEnumerate || !pDirectPlayLobbyCreate)
+        if (!pDirectPlayCreate || /*!pDirectPlayEnumerate || */!pDirectPlayLobbyCreate)
         {
             FreeLibrary(m_dll);
             m_dll = 0;

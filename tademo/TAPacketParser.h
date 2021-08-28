@@ -13,7 +13,7 @@ namespace TADemo
 
     class TAPacketParser
     {
-        TaPacketHandler *m_packetHandler;
+        std::vector<TaPacketHandler*> m_packetHandlers;
 
         // TA sends the same packets once to each player
         // The parser sees each copy
@@ -25,14 +25,15 @@ namespace TADemo
         std::uint32_t m_progressTicks;
 
     public:
-        TAPacketParser(TaPacketHandler *packetHandler);
+        TAPacketParser();
 
-        virtual std::set<SubPacketCode> parseGameData(const char *data, int len);
+        virtual void subscribe(TaPacketHandler* packetHandler);
+        virtual std::set<SubPacketCode> parseGameData(bool isLocalSource, const char *data, int len);
         virtual std::uint32_t getProgressTicks();
 
     private:
         virtual void parseDplayPacket(const DPHeader *header, const char *data, int len);
-        virtual void parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const char *data, int len, const std::string &context);
+        virtual void parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource, const char *data, int len, const std::string &context);
         virtual void parseDplaySuperEnumReply(const DPHeader *header, const char *data, int len);
         virtual void parseDplayCreateOrForwardPlayer(const DPHeader *header, const char *data, int len);
         virtual void parseDplayDeletePlayer(const DPHeader *header, const char *data, int len);

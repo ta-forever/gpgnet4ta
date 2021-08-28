@@ -1,6 +1,8 @@
 set(CMAKE_AUTOMOC ON)
 
 add_library(gpgnet STATIC
+    GpgNetServerMessages.h
+    GpgNetServerMessages.cpp
     GpgNetParse.h
     GpgNetParse.cpp
     GpgNetSend.h

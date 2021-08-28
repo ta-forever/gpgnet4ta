@@ -1,84 +1,60 @@
 #pragma once
 
-#include <cstdint>
-
+#include <QtCore/qdatastream.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qvariant.h>
-
+#include <QtCore/qvector.h>
 
 namespace gpgnet
 {
-    struct CreateLobbyCommand
-    {
-        int protocol;
-        int localPort;
-        QString _playerName;
-        QString playerAlias;
-        QString playerRealName;
-        int playerId;
-        int natTraversal;
-
-        CreateLobbyCommand();
-        CreateLobbyCommand(QVariantList command);
-        void Set(QVariantList command);
-    };
-
-    struct HostGameCommand
-    {
-        QString mapName;
-
-        HostGameCommand();
-        HostGameCommand(QVariantList qvl);
-        void Set(QVariantList command);
-    };
-
-    struct JoinGameCommand
-    {
-        QString remoteHost;
-        QString _remotePlayerName;
-        QString remotePlayerAlias;
-        QString remotePlayerRealName;
-        int remotePlayerId;
-
-        JoinGameCommand();
-        JoinGameCommand(QVariantList qvl);
-        void Set(QVariantList command);
-    };
-
-    struct ConnectToPeerCommand
-    {
-        QString host;
-        QString _playerName;
-        QString playerAlias;
-        QString playerRealName;
-        int playerId;
-
-        ConnectToPeerCommand();
-        ConnectToPeerCommand(QVariantList qvl);
-        void Set(QVariantList command);
-    };
-
-    struct DisconnectFromPeerCommand
-    {
-        int playerId;
-
-        DisconnectFromPeerCommand();
-        DisconnectFromPeerCommand(QVariantList qvl);
-        void Set(QVariantList command);
-    };
-
     class GpgNetParse
     {
-        QDataStream& m_is;
+        class RecordReader
+        {
+            QByteArray m_buffer;
+            int m_progress;
+        public:
+            RecordReader();
+            void setSize(int size);
+            virtual void reset();
+            virtual const QByteArray& get(QDataStream& is);
+        };
 
-        static std::uint8_t GetByte(QDataStream& is);
-        static std::uint32_t GetInt(QDataStream& is);
-        static QString GetString(QDataStream& is);
+        class ByteRecordReader : public RecordReader
+        {
+        public:
+            ByteRecordReader();
+            quint8 getByte(QDataStream& is);
+        };
+
+        class IntRecordReader : public RecordReader
+        {
+        public:
+            IntRecordReader();
+            quint32 getInt(QDataStream& is);
+        };
+
+        class ByteArrayRecordReader : public RecordReader
+        {
+        public:
+            virtual void reset();
+            virtual const QByteArray& get(QDataStream& is);
+
+        private:
+            IntRecordReader m_size;
+            RecordReader m_data;
+        };
 
     public:
-        GpgNetParse(QDataStream& is);
-        QVariantList GetCommand();
-        static QVariantList GetCommand(QDataStream& is);
-    };
+        class DataNotReady : public std::exception
+        { };
 
+        QVariantList GetCommand(QDataStream& is);
+        void reset();
+
+        ByteArrayRecordReader m_command;
+        IntRecordReader m_numArgs;
+        QVector<QSharedPointer<ByteRecordReader> > m_argTypes;
+        QVector<QSharedPointer<RecordReader> > m_args;
+    };
 }

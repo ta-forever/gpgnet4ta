@@ -32,6 +32,7 @@
 #include <iostream>
 #include <windowsx.h>	//GlobalAllocPtr
 #include <iomanip>
+#include <cstring>
 #include <sstream>
 #include "DPlayWrapper.h"
 

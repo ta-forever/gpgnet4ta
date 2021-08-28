@@ -235,6 +235,71 @@ void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
     }
 }
 
+void GameMonitor2::onTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource, const char* encrypted, int sizeEncrypted, const std::vector<TADemo::bytestring>& subpaks)
+{
+    for (const TADemo::bytestring& s : subpaks)
+    {
+        
+        switch (TADemo::SubPacketCode(s[0]))
+        {
+        case TADemo::SubPacketCode::PLAYER_INFO_20:
+        {
+            TADemo::TPlayerInfo playerInfo(s);
+            std::string mapName = playerInfo.getMapName(); // (const char*)(&s[1]);
+            std::uint16_t maxUnits = playerInfo.maxUnits; // *(std::uint16_t*)(&s[0xa6]);
+            bool isAI = playerInfo.isAI(); //  s[0x95] == 2;
+            bool isWatcher = playerInfo.isWatcher(); // (s[0x9c] & 0x40) != 0;
+            std::int8_t side = playerInfo.getSide(); // s[0x96];
+            bool cheats = playerInfo.isCheatsEnabled(); // (s[0x9d] & 0x20) != 0;
+            unsigned playerSlotNumber = playerInfo.getSlotNumber(); // s[0x97];
+            if (playerSlotNumber < 10)
+            {
+                onStatus(sourceDplayId, mapName, maxUnits, playerSlotNumber, side, isWatcher, isAI, cheats);
+            }
+        }
+        break;
+
+        case TADemo::SubPacketCode::ALLY_23:
+        case TADemo::SubPacketCode::TEAM_24:
+        {
+            // @todo use these messages instead of CHAT_05 to work out alliances
+            //std::ostringstream ss;
+            //HexDump(s.data(), s.size(), ss);
+            //qInfo() << ss.str().c_str();
+        }
+        break;
+
+        case TADemo::SubPacketCode::CHAT_05:
+        {
+            std::string chat = (const char*)(&s[1]);
+            onChat(sourceDplayId, chat);
+        }
+        break;
+
+        case TADemo::SubPacketCode::UNIT_KILLED_0C:
+        {
+            std::uint16_t unitId = *(std::uint16_t*)(&s[1]);
+            onUnitDied(sourceDplayId, unitId);
+        }
+        break;
+
+        case TADemo::SubPacketCode::REJECT_1B:
+        {
+            std::uint32_t rejectedDplayId = *(std::uint32_t*)(&s[1]);
+            onRejectOther(sourceDplayId, rejectedDplayId);
+        }
+        break;
+
+        case TADemo::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
+        {
+            std::uint32_t tick = *(std::uint32_t*)(&s[3]);
+            onGameTick(sourceDplayId, tick);
+        }
+        break;
+        };
+    }
+}
+
 void GameMonitor2::onStatus(
     std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
     unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats)

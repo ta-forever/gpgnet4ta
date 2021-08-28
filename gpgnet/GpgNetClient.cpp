@@ -1,5 +1,6 @@
 #include "GpgNetClient.h"
 #include "GpgNetParse.h"
+#include "GpgNetServerMessages.h"
 #include "tademo/Watchdog.h"
 
 using namespace gpgnet;
@@ -46,7 +47,7 @@ void GpgNetClient::onReadyRead()
         QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
         while (sender->bytesAvailable() > 0)
         {
-            QVariantList serverCommand = gpgnet::GpgNetParse::GetCommand(m_datastream);
+            QVariantList serverCommand = m_gpgNetParser.GetCommand(m_datastream);
             QString cmd = serverCommand[0].toString();
             qInfo() << "[GpgNetClient::onReadyRead] gpgnet command received:" << cmd;
 
@@ -87,6 +88,10 @@ void GpgNetClient::onReadyRead()
                 emit disconnectFromPeer(ctp.playerId);
             }
         }
+    }
+    catch (const gpgnet::GpgNetParse::DataNotReady &)
+    {
+        qInfo() << "[GpgNetClient::onReadyRead] waiting for more data";
     }
     catch (std::exception &e)
     {
@@ -132,5 +137,115 @@ void GpgNetClient::onSocketStateChanged(QAbstractSocket::SocketState socketState
     catch (...)
     {
         qWarning() << "[GpgNetClient::onSocketStateChanged] unknown exception";
+    }
+}
+
+void GpgNetClient::sendGameState(QString state, QString substate)
+{
+    // ICE adapter drops 2nd GameState argument. So here we just bung the substate into a GameOption beforehand
+    // ..... @todo work out how to build the ICE adapter so we can customise it for our own purposes
+    sendCommand("GameOption", 2);
+    sendArgument("SubState");
+    sendArgument(substate.toUtf8());
+    sendCommand("GameState", 1);
+    sendArgument(state.toUtf8());
+}
+
+void GpgNetClient::sendCreateLobby(int /* eg 0 */, int /* eg 0xb254 */, const char* playerName, int /* eg 0x9195 */, int /* eg 1 */)
+{
+    throw std::runtime_error("not implemented");
+}
+
+void GpgNetClient::sendHostGame(QString mapName)
+{
+    sendCommand("HostGame", 1);
+    sendArgument(mapName.toUtf8());
+}
+
+void GpgNetClient::sendJoinGame(QString hostAndPort, QString remotePlayerName, int remotePlayerId)
+{
+    sendCommand("JoinGame", 3);
+    sendArgument(remotePlayerName.toUtf8());
+    sendArgument(remotePlayerId);
+}
+
+void GpgNetClient::sendGameMods(int numMods)
+{
+    sendCommand("GameMods", 2);
+    sendArgument("activated");
+    sendArgument(numMods);
+}
+
+void GpgNetClient::sendGameMods(QStringList uids)
+{
+    sendCommand("GameMods", 2);
+    sendArgument("uids");
+    sendArgument(uids.join(' ').toUtf8());
+}
+
+void GpgNetClient::sendGameOption(QString key, QString value)
+{
+    sendCommand("GameOption", 2);
+    sendArgument(key.toUtf8());
+    sendArgument(value.toUtf8());
+}
+
+void GpgNetClient::sendGameOption(QString key, int value)
+{
+    sendCommand("GameOption", 2);
+    sendArgument(key.toUtf8());
+    sendArgument(value);
+}
+
+void GpgNetClient::sendPlayerOption(QString playerId, QString key, QString value)
+{
+    sendCommand("PlayerOption", 3);
+    sendArgument(playerId.toUtf8());
+    sendArgument(key.toUtf8());
+    sendArgument(value.toUtf8());
+}
+
+void GpgNetClient::sendPlayerOption(QString playerId, QString key, int value)
+{
+    sendCommand("PlayerOption", 3);
+    sendArgument(playerId.toUtf8());
+    sendArgument(key.toUtf8());
+    sendArgument(value);
+}
+
+void GpgNetClient::sendAiOption(QString name, QString key, int value)
+{
+    sendCommand("AIOption", 3);
+    sendArgument(name.toUtf8());
+    sendArgument(key.toUtf8());
+    sendArgument(value);
+}
+
+void GpgNetClient::sendClearSlot(int slot)
+{
+    sendCommand("ClearSlot", 1);
+    sendArgument(slot);
+}
+
+void GpgNetClient::sendGameEnded()
+{
+    sendCommand("GameEnded", 0);
+}
+
+void GpgNetClient::sendGameResult(int army, int score)
+{
+    sendCommand("GameResult", 2);
+    sendArgument(army);
+    if (score > 0)
+    {
+        sendArgument("VICTORY 1");
+    }
+    else if (score == 0)
+    {
+        sendArgument("DRAW 0");
+    }
+    else
+    {
+        sendArgument("DEFEAT -1");
     }
 }

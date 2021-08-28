@@ -7,7 +7,7 @@
 #include <QtCore/qtimer.h>
 
 #include "LaunchClient.h"
-#include "gpgnet/GpgNetSend.h"
+#include "gpgnet/GpgNetClient.h"
 
 class GpgNetGameLauncher: public QObject
 {
@@ -21,7 +21,7 @@ class GpgNetGameLauncher: public QObject
     const bool m_lockOptions;
     const int m_maxUnits;
     LaunchClient &m_launchClient;
-    gpgnet::GpgNetSend &m_gpgNetSend;
+    gpgnet::GpgNetClient &m_gpgNetClient;
 
     QString m_thisPlayerName;
     QString m_mapName;
@@ -37,7 +37,7 @@ class GpgNetGameLauncher: public QObject
 public:
     GpgNetGameLauncher(
         QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
-        LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend);
+        LaunchClient &launchClient, gpgnet::GpgNetClient &gpgNetClient);
 
     void onCreateLobby(int protocol, int localPort, QString playerName, QString, int playerId, int natTraversal);
     void onHostGame(QString mapName, QString mapDetails);

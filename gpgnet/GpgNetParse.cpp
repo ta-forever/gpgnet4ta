@@ -1,197 +1,149 @@
 #include "GpgNetParse.h"
 
-#include <QtCore/qdatastream.h>
 #include <QtCore/qsharedpointer.h>
+
+#include "Logger.h"
 
 namespace gpgnet
 {
-
-    static void SplitAliasAndRealName(QString aliasAndReal, QString &alias, QString &real)
-    {
-        QStringList parts = aliasAndReal.split("/");
-        if (parts.size() > 1)
-        {
-            alias = parts[0];
-            real = parts[1];
-        }
-        else
-        {
-            alias = parts[0];
-            real = "";
-        }
-    }
-
-    CreateLobbyCommand::CreateLobbyCommand() :
-        protocol(0),
-        localPort(47625),
-        _playerName("BILLYIDOL"),
-        playerAlias("BILLYIDOL"),
-        playerRealName("BILLYIDOL"),
-        playerId(1955),
-        natTraversal(1)
+    GpgNetParse::RecordReader::RecordReader():
+        m_progress(0)
     { }
 
-    CreateLobbyCommand::CreateLobbyCommand(QVariantList command)
+    void GpgNetParse::RecordReader::setSize(int size)
     {
-        Set(command);
+        m_buffer.resize(size);
     }
 
-    void CreateLobbyCommand::Set(QVariantList command)
+    void GpgNetParse::RecordReader::reset()
     {
-        QString cmd = command[0].toString();
-        if (cmd.compare("CreateLobby"))
+        m_progress = 0;
+    }
+
+    const QByteArray& GpgNetParse::RecordReader::get(QDataStream& is)
+    {
+        if (m_progress < m_buffer.size())
         {
-            throw std::runtime_error("Unexpected command");
+            int bytesRead = is.readRawData(m_buffer.data() + m_progress, m_buffer.size() - m_progress);
+            if (bytesRead >= 0)
+            {
+                m_progress += bytesRead;
+            }
         }
-        protocol = command[1].toInt();
-        localPort = command[2].toInt();
-        _playerName = command[3].toString();
-        SplitAliasAndRealName(_playerName, playerAlias, playerRealName);
-        playerId = command[4].toInt();
-        natTraversal = command[5].toInt();
-    }
 
-    HostGameCommand::HostGameCommand() :
-        mapName("SHERWOOD")
-    { }
-
-    HostGameCommand::HostGameCommand(QVariantList qvl)
-    {
-        Set(qvl);
-    }
-
-    void HostGameCommand::Set(QVariantList command)
-    {
-        QString cmd = command[0].toString();
-        if (cmd.compare("HostGame"))
+        if (m_progress == m_buffer.size())
         {
-            throw std::runtime_error("Unexpected command");
+            return m_buffer;
         }
-        mapName = command[1].toString();
+
+        throw DataNotReady();
     }
 
-    JoinGameCommand::JoinGameCommand() :
-        remoteHost("127.0.0.1"),
-        _remotePlayerName("ACDC"),
-        remotePlayerAlias("ACDC"),
-        remotePlayerRealName("ACDC"),
-        remotePlayerId(0)
-    { }
-
-    JoinGameCommand::JoinGameCommand(QVariantList qvl)
+    GpgNetParse::ByteRecordReader::ByteRecordReader()
     {
-        Set(qvl);
+        setSize(1);
     }
 
-    void JoinGameCommand::Set(QVariantList command)
+    quint8 GpgNetParse::ByteRecordReader::getByte(QDataStream& is)
     {
-        QString cmd = command[0].toString();
-        if (cmd.compare("JoinGame"))
-        {
-            throw std::runtime_error("Unexpected command");
-        }
-        remoteHost = command[1].toString();
-        _remotePlayerName = command[2].toString();
-        remotePlayerId = command[3].toInt();
-        SplitAliasAndRealName(_remotePlayerName, remotePlayerAlias, remotePlayerRealName);
+        return *(const quint8*)get(is).data();
     }
 
-    ConnectToPeerCommand::ConnectToPeerCommand() :
-        host("127.0.0.1"),
-        _playerName("ACDC"),
-        playerAlias("ACDC"),
-        playerRealName("ACDC"),
-        playerId(0)
-    { }
-
-    ConnectToPeerCommand::ConnectToPeerCommand(QVariantList qvl)
+    GpgNetParse::IntRecordReader::IntRecordReader()
     {
-        Set(qvl);
+        setSize(4);
     }
 
-    void ConnectToPeerCommand::Set(QVariantList command)
+    quint32 GpgNetParse::IntRecordReader::getInt(QDataStream& is)
     {
-        QString cmd = command[0].toString();
-        if (cmd.compare("ConnectToPeer"))
-        {
-            throw std::runtime_error("Unexpected command");
-        }
-        host = command[1].toString();
-        _playerName = command[2].toString();
-        playerId = command[3].toInt();
-        SplitAliasAndRealName(_playerName, playerAlias, playerRealName);
+        return *(const quint32*)get(is).data();
     }
 
-    DisconnectFromPeerCommand::DisconnectFromPeerCommand():
-        playerId(0)
-    { }
-
-    DisconnectFromPeerCommand::DisconnectFromPeerCommand(QVariantList qvl)
+    void GpgNetParse::ByteArrayRecordReader::reset()
     {
-        Set(qvl);
+        m_size.reset();
+        m_data.reset();
     }
 
-    void DisconnectFromPeerCommand::Set(QVariantList command)
+    const QByteArray& GpgNetParse::ByteArrayRecordReader::get(QDataStream& is)
     {
-        QString cmd = command[0].toString();
-        if (cmd.compare("DisconnectFromPeer"))
-        {
-            throw std::runtime_error("Unexpected command");
-        }
-        playerId = command[1].toInt();
-    }
-
-    std::uint8_t GpgNetParse::GetByte(QDataStream& is)
-    {
-        std::uint8_t byte;
-        is.readRawData((char*)&byte, 1);
-        return byte;
-    }
-
-    std::uint32_t GpgNetParse::GetInt(QDataStream& is)
-    {
-        std::uint32_t word;
-        is.readRawData((char*)&word, 4);
-        return word;
-    }
-
-    QString GpgNetParse::GetString(QDataStream& is)
-    {
-        std::uint32_t size = GetInt(is);
-        QSharedPointer<char> buffer(new char[1 + size]);
-        is.readRawData(buffer.data(), size);
-        buffer.data()[size] = 0;
-        return QString(buffer.data());
-    }
-
-    GpgNetParse::GpgNetParse(QDataStream& is) :
-        m_is(is)
-    { }
-
-    QVariantList GpgNetParse::GetCommand()
-    {
-        return GetCommand(m_is);
+        quint32 size = m_size.getInt(is);
+        m_data.setSize(size);
+        return m_data.get(is);
     }
 
     QVariantList GpgNetParse::GetCommand(QDataStream& is)
     {
         QVariantList commandAndArgs;
 
-        QString command = GetString(is);
-        std::uint32_t numArgs = GetInt(is);
+        const QByteArray& command = m_command.get(is);
         commandAndArgs.append(command);
 
-        for (unsigned n = 0; n < numArgs; ++n)
+        quint32 numArgs = m_numArgs.getInt(is);
+        for (unsigned nArg = 0u; nArg < numArgs; ++nArg)
         {
-            std::uint8_t argType = GetByte(is);
+            if (m_argTypes.size() == nArg)
+            {
+                m_argTypes.push_back(QSharedPointer<ByteRecordReader>(new ByteRecordReader()));
+            }
+            quint8 argType = m_argTypes[nArg]->getByte(is);
             if (argType == 0)
             {
-                std::uint32_t arg = GetInt(is);
+                if (m_args.size() == nArg)
+                {
+                    m_args.push_back(QSharedPointer<RecordReader>(new IntRecordReader()));
+                }
+                quint32 arg = *(const quint32*)m_args[nArg]->get(is).data();
                 commandAndArgs.append(arg);
             }
             else if (argType == 1)
             {
-                QString arg = GetString(is);
+                if (m_args.size() == nArg)
+                {
+                    m_args.push_back(QSharedPointer<RecordReader>(new ByteArrayRecordReader()));
+                }
+                const QByteArray& arg = m_args[nArg]->get(is);
+                commandAndArgs.append(arg);
+            }
+            else
+            {
+                throw std::runtime_error("unexpected argument type");
+            }
+
+        }
+
+        reset();
+        return commandAndArgs;
+    }
+
+    void GpgNetParse::reset()
+    {
+        m_command.reset();
+        m_numArgs.reset();
+        m_argTypes.clear();
+        m_args.clear();
+    }
+
+    /*
+    QVariantList GpgNetParse::GetCommand()
+    {
+        QVariantList commandAndArgs;
+
+        QByteArray command = GetByteArray(m_is);
+        quint32 numArgs = GetInt(m_is);
+        commandAndArgs.append(command);
+
+        for (unsigned n = 0; n < numArgs; ++n)
+        {
+            quint8 argType = GetByte(m_is);
+            if (argType == 0)
+            {
+                quint32 arg = GetInt(m_is);
+                commandAndArgs.append(arg);
+            }
+            else if (argType == 1)
+            {
+                QByteArray arg = GetByteArray(m_is);
                 commandAndArgs.append(arg);
             }
             else
@@ -201,4 +153,5 @@ namespace gpgnet
         }
         return commandAndArgs;
     }
+    */
 }

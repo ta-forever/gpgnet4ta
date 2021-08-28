@@ -143,6 +143,10 @@ public:
     virtual void onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint32_t dplayId, const std::string &name, TADemo::DPAddress *tcp, TADemo::DPAddress *udp);
     virtual void onDplayDeletePlayer(std::uint32_t dplayId);
 
+    virtual void onTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource,
+        const char* encrypted, int sizeEncrypted,
+        const std::vector<TADemo::bytestring>& subpaks);
+
     virtual void onStatus(
         std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
         unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats);

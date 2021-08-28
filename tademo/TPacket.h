@@ -90,6 +90,12 @@ namespace TADemo
         void setCheat(bool allowCheats);
         void setPermLos(bool permLos);
         bool isClickedIn();
+        bool isWatcher();
+        bool isCheatsEnabled();
+        bool isAI();
+        std::int8_t getSide();
+        std::uint8_t getSlotNumber();
+        std::string getMapName();
                                         //record        +typecode   +smartpak
         std::uint8_t fill1[139];        //0             //1         //8  
         std::uint16_t width;            //139           //140       //147
@@ -99,7 +105,7 @@ namespace TADemo
         std::uint8_t data2[7];          //148           //149       //156
         std::uint8_t clicked;           //155           //156       //163
         std::uint8_t fill2[9];          //156           //157       //164
-        std::uint16_t data5;            //165           //166       //173
+        std::uint16_t maxUnits;         //165           //166       //173
         std::uint8_t versionMajor;      //167           //168       //175
         std::uint8_t versionMinor;      //168           //169       //176
         std::uint8_t data3[17];         //169  7=182    //170       //177
@@ -176,9 +182,6 @@ namespace TADemo
         static std::vector<bytestring> slowUnsmartpak(const bytestring &c, bool hasTimestamp, bool hasChecksum);
         static std::vector<bytestring> unsmartpak(const bytestring &c, bool hasTimestamp, bool hasChecksum);
         static bytestring trivialSmartpak(const bytestring& subpacket, std::uint32_t tcpseq);
-        static bytestring smartpak(const std::vector<bytestring> &subpackets, std::size_t from, std::size_t to);
-        static void smartpak(const std::vector<bytestring> &unpaked, std::size_t maxCompressedSize, std::vector<bytestring> &resultsPakedAndCompressed, std::size_t from, std::size_t to);
-        static std::vector<bytestring> resmartpak(const bytestring &encrypted, std::size_t maxCompressedSize);
         static bytestring createChatSubpacket(const std::string& message);
         static bytestring createHostMigrationSubpacket(int playerNumber);
 
@@ -193,6 +196,14 @@ namespace TADemo
         static bool testUnpakability(bytestring s, int recurseDepth);
     };
 
+    /// @brief apply smartpak compression to type 0x2c (UNIT_STAT_AND_MOVE_2C) subpackets
+    class SmartPaker
+    {
+        bool m_first;
+    public:
+        SmartPaker();
+        bytestring operator() (const bytestring& subpak); 
+    };
 
     struct DPAddress;
     class TaPacketHandler
@@ -202,13 +213,7 @@ namespace TADemo
         virtual void onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint32_t dplayId, const std::string &name, DPAddress *tcp, DPAddress *udp) = 0;
         virtual void onDplayDeletePlayer(std::uint32_t dplayId) = 0;
 
-        virtual void onStatus(
-            std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits, 
-            unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats) = 0;
-        virtual void onChat(std::uint32_t sourceDplayId, const std::string &chat) = 0;
-        virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId) = 0;
-        virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId) = 0;
-        virtual void onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick) = 0;
+        virtual void onTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource, const char* encrypted, int sizeEncrypted, const std::vector<bytestring>& subpaks) = 0;
     };
 
 }

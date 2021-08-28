@@ -3,7 +3,7 @@
 
 #include <dplay.h>
 #include <dplobby.h>
-#include <Windows.h>
+#include <windows.h>
 
 class DPlayWrapper
 {

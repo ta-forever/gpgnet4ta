@@ -9,6 +9,9 @@ add_library(tademo STATIC
     TAPacketParser.cpp
     TADemoParser.h
     TADemoParser.cpp
+    TADemoRecords.h
+    TADemoWriter.h
+    TADemoWriter.cpp
     HexDump.h
     HexDump.cpp
     nswfl_crc32.h

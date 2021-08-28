@@ -16,8 +16,7 @@
 #include "tademo/HexDump.h"
 #include "jdplay/JDPlay.h"
 #include "Logger.h"
-
-#include <QtCore/qobject.h>
+#include "TaReplayClient.h"
 
 #ifdef min
 #undef min
@@ -90,8 +89,7 @@ class Replayer : public QObject, public TADemo::Parser
     };
 
     const std::uint32_t SY_UNIT_ID = 0x92549357;
-    const double WALL_TO_GAME_TICK_RATIO = 1.0; // wall clock 100ms, game clock 33ms
-    const int TIMING_SMOOTHING_FACTOR = 3;
+    const double WALL_TO_GAME_TICK_RATIO = 1.0; // wall clock 33ms, game clock 33ms
     const unsigned NUM_PAKS_TO_PRELOAD = 100u;
     const int UNITS_SYNC_PER_TICK = 100;
 
@@ -136,9 +134,8 @@ private:
     void onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
     void onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
 
-
-    void send(std::uint32_t fromId, std::uint32_t toId, TADemo::bytestring& subpak);
-    void sendUdp(std::uint32_t fromId, std::uint32_t toId, TADemo::bytestring& subpak);
+    void send(std::uint32_t fromId, std::uint32_t toId, const TADemo::bytestring& subpak);
+    void sendUdp(std::uint32_t fromId, std::uint32_t toId, const TADemo::bytestring& subpak);
     void say(std::uint32_t fromId, const std::string& text);
     void createSonar(std::uint32_t receivingDpId, unsigned number);
     std::shared_ptr<DemoPlayer> getDemoPlayerByOriginalDpId(std::uint32_t originalDpId);
@@ -164,9 +161,7 @@ Replayer::Replayer(std::istream *demoDataStream) :
     m_state(ReplayState::LOADING_DEMO_PLAYERS),
     m_isPaused(false),
     m_demoDataStream(demoDataStream)
-{ 
-    this->parse(demoDataStream, NUM_PAKS_TO_PRELOAD);
-}
+{ }
 
 Replayer::DemoPlayer::DemoPlayer(const TADemo::Player& player):
     TADemo::Player(player),
@@ -194,7 +189,7 @@ Replayer::UnitInfo::UnitInfo():
     inUse(false)
 { }
 
-void Replayer::send(std::uint32_t fromId, std::uint32_t toId, TADemo::bytestring& subpak)
+void Replayer::send(std::uint32_t fromId, std::uint32_t toId, const TADemo::bytestring& subpak)
 {
     TADemo::bytestring bs = TADemo::TPacket::trivialSmartpak(subpak, toId == 0 ? m_tcpSeq-- : 0xffffffff);
     //TADemo::HexDump(bs.data(), bs.size(), std::cout);
@@ -203,7 +198,7 @@ void Replayer::send(std::uint32_t fromId, std::uint32_t toId, TADemo::bytestring
     m_jdPlay->dpSend(fromId, toId, 1, (void*)bs.data(), bs.size());
 }
 
-void Replayer::sendUdp(std::uint32_t fromId, std::uint32_t toId, TADemo::bytestring& subpak)
+void Replayer::sendUdp(std::uint32_t fromId, std::uint32_t toId, const TADemo::bytestring& subpak)
 {
     TADemo::bytestring bs = TADemo::TPacket::trivialSmartpak(subpak, 0);
     //TADemo::HexDump(bs.data(), bs.size(), std::cout);
@@ -384,6 +379,10 @@ void Replayer::handle(const TADemo::Packet& packet, const std::vector<TADemo::by
 void Replayer::timerEvent(QTimerEvent* event)
 {
     ++m_wallClockTicks;
+    if (m_state != ReplayState::PLAY && m_state != ReplayState::DONE && m_pendingGamePackets.size() < 1u)
+    {
+        this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
+    }
 
     switch (m_state) {
     case ReplayState::LOADING_DEMO_PLAYERS:
@@ -1136,9 +1135,13 @@ bool Replayer::doPlay()
         {
             //std::cout << "sender=" << int(packet.sender) << '\n';
             //std::cout << "raw:\n";
-            //TADemo::HexDump(filteredMoves.data(), filteredMoves.size(), std::cout);
+            //TADemo::bytestring bs = TADemo::TPacket::trivialSmartpak(filteredMoves, 0xffffffff);
+            //TADemo::HexDump(bs.data(), bs.size(), std::cout);
+
             //std::cout << "compressed/encrypted:\n";
-            //TADemo::HexDump(filteredMoves.data(), filteredMoves.size(), std::cout);
+            //bs = TADemo::TPacket::compress(bs);
+            //TADemo::TPacket::encrypt(bs);
+            //TADemo::HexDump(bs.data(), bs.size(), std::cout);
             sendUdp(sender->dpId, 0, filteredMoves);
         }
     }
@@ -1270,15 +1273,35 @@ int doMain(int argc, char* argv[])
     parser.addVersionOption();
     parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", "c:\\temp\\tareplayer.log"));
     parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
-    parser.addOption(QCommandLineOption("demofile", "path to demo file to replay.", "demofile"));
+    parser.addOption(QCommandLineOption("demofile", "path to demo file", "demofile"));
+    parser.addOption(QCommandLineOption("addr", "Address of TA Replay Server", "addr"));
+    parser.addOption(QCommandLineOption("port", "Port of TA Replay Server", "port"));
+    parser.addOption(QCommandLineOption("gameid", "Game ID to request from Replay Server", "gameid"));
     parser.process(app);
 
     Logger::Initialise(parser.value("logfile").toStdString(), Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(Logger::Log);
 
-    std::ifstream demoFile(parser.value("demofile").toStdString().c_str());
-    Replayer replayer(&demoFile);
-    replayer.hostGame(DEFAULT_DPLAY_REGISTERED_GAME_GUID, "TAReplayer", "127.0.0.1");
+    std::shared_ptr<std::istream> demoStream;
+    std::shared_ptr<TaReplayClient> replayClient;
+    std::shared_ptr<Replayer> replayer;
+    if (parser.isSet("demofile"))
+    {
+        qInfo() << "Loading demo file:" << parser.value("demofile");
+        demoStream.reset(new std::ifstream(parser.value("demofile").toStdString().c_str(), std::ios::in | std::ios::binary));
+        replayer.reset(new Replayer(demoStream.get()));
+    }
+    else if (parser.isSet("addr") && parser.isSet("port") && parser.isSet("gameid"))
+    {
+        qInfo() << "connecting to replay server";
+        replayClient.reset(new TaReplayClient(QHostAddress(parser.value("addr")), parser.value("port").toInt(), parser.value("gameid").toInt(), 0));
+        replayer.reset(new Replayer(replayClient->getReplayStream()));
+    }
+    else
+    {
+        throw std::runtime_error("[doMain] missing 'demofile' or 'addr','port','gameid' arguments");
+    }
+    replayer->hostGame(DEFAULT_DPLAY_REGISTERED_GAME_GUID, "TAReplayer", "127.0.0.1");
 
     app.exec();
     return 0;

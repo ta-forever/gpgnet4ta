@@ -513,104 +513,36 @@ namespace TADemo
         return result;
     }
 
-    bytestring TPacket::smartpak(const std::vector<bytestring> &subpackets, std::size_t from, std::size_t to)
-    {
-        throw std::runtime_error("smartpak not working. please fix");
-        bytestring tosave;
-        bool firstpak = true;
-        std::uint32_t packnum = 0u;
-        for (std::size_t n=from; n<to; ++n)
-        {
-            const bytestring &sn = subpackets[n];
-            SubPacketCode code = SubPacketCode(sn[0]);
-            if (code == SubPacketCode::UNIT_STAT_AND_MOVE_2C)
-            {
-                std::uint32_t thisPacknum = *(std::uint32_t*)(&sn[3]);
-                if (firstpak || thisPacknum != packnum)
-                {
-                    firstpak = false;
-                    packnum = thisPacknum;
-                    tosave += std::uint8_t(SubPacketCode::SMARTPAK_TICK_START_FE);
-                    tosave += sn.substr(3, 4);
-                }
-                bytestring shorterTick = sn.substr(0, 3) + sn.substr(7);
-                shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_OTHER_FD);
-                if (shorterTick[1] == 0x0b && shorterTick[2] == 0x00)
-                {
-                    shorterTick.resize(1);
-                    shorterTick[0] = std::uint8_t(SubPacketCode::SMARTPAK_TICK_FF);
-                }
-                tosave += shorterTick;
-                ++packnum;
-            }
-            else
-            {
-                tosave += sn;
-            }
-        }
-        return tosave;
-    }
+    SmartPaker::SmartPaker() :
+        m_first(true)
+    { }
 
-    void TPacket::smartpak(const std::vector<bytestring> &unpaked, std::size_t maxCompressedSize, std::vector<bytestring> &resultsPakedAndCompressed, std::size_t from, std::size_t to)
+    bytestring SmartPaker::operator()(const bytestring& subpak)
     {
-        std::vector<bytestring> result;
-
-        if (to - from == 0)
+        if (subpak.size() < 7 || SubPacketCode(subpak[0]) != SubPacketCode::UNIT_STAT_AND_MOVE_2C)
         {
-            return;
+            return subpak;
         }
-        else if (to - from == 1)
+
+        bytestring result;
+        if (m_first)
         {
-            result.push_back(compress(smartpak(unpaked, from, to)));
-            return;
+            m_first = false;
+            result.push_back(std::uint8_t(SubPacketCode::SMARTPAK_TICK_START_FE));
+            result += subpak.substr(3, 4);
+        }
+
+        if (subpak[1] == 0x0b && subpak[2] == 0x00)
+        {
+            result.push_back(std::uint8_t(SubPacketCode::SMARTPAK_TICK_FF));
         }
         else
         {
-            std::size_t partition = from + (to - from) / 2;
-            bytestring left = compress(smartpak(unpaked, from, partition));
-            if (left.size() > maxCompressedSize)
-            {
-                smartpak(unpaked, maxCompressedSize, resultsPakedAndCompressed, from, partition);
-            }
-            else
-            {
-                resultsPakedAndCompressed.push_back(left);
-            }
-
-            bytestring right = compress(smartpak(unpaked, partition, to));
-            if (right.size() > maxCompressedSize)
-            {
-                smartpak(unpaked, maxCompressedSize, resultsPakedAndCompressed, partition, to);
-            }
-            else
-            {
-                resultsPakedAndCompressed.push_back(right);
-            }
+            result.push_back(std::uint8_t(SubPacketCode::SMARTPAK_TICK_OTHER_FD));
+            result += subpak.substr(1, 2);
+            result += subpak.substr(7);
         }
-    }
-
-    std::vector<bytestring> TPacket::resmartpak(const bytestring &encrypted, std::size_t maxCompressedSize)
-    {
-        std::vector<bytestring> results;
-        if (encrypted.size() < maxCompressedSize)
-        {
-            results.push_back(encrypted);
-        }
-        else
-        {
-            std::uint16_t checksum[2];
-            bytestring decrypted(encrypted);
-            decrypt(decrypted, 0u, checksum[0], checksum[1]);
-            bytestring decompressed = decompress(decrypted, 3);
-            std::vector<bytestring> unpaked = unsmartpak(decompressed, true, true);
-            smartpak(unpaked, maxCompressedSize, results, 0, unpaked.size());
-
-            for (auto &r : results)
-            {
-                encrypt(r);
-            }
-        }
-        return results;
+        return result;
     }
 
     bytestring TPacket::createChatSubpacket(const std::string& message)
@@ -698,7 +630,7 @@ namespace TADemo
         std::memcpy(data2, ptr + 148, sizeof(data2));
         clicked = ptr[155];
         std::memcpy(fill2, ptr + 156, sizeof(fill2));
-        data5 = toUint16(ptr + 165);
+        maxUnits = toUint16(ptr + 165);
         versionMajor = ptr[167];
         versionMinor = ptr[168];
         std::memcpy(data3, ptr + 169, sizeof(data3));
@@ -718,7 +650,7 @@ namespace TADemo
         result.append(data2, data2 + sizeof(data2));
         result.push_back(clicked);
         result.append(fill2, fill2 + sizeof(fill2));
-        serialise(result, data5);
+        serialise(result, maxUnits);
         result.push_back(versionMajor);
         result.push_back(versionMinor);
         result.append(data3, data3 + sizeof(data3));
@@ -787,6 +719,37 @@ namespace TADemo
         // offset 163 once smartpaked
         return (clicked & 0x20) != 0u;
     }
+
+    bool TPlayerInfo::isWatcher()
+    {
+        return (clicked & 0x40) != 0u;
+    }
+
+    bool TPlayerInfo::isCheatsEnabled()
+    {
+        return (fill2[0] & 0x20) != 0u;
+    }
+
+    bool TPlayerInfo::isAI()
+    {
+        return data2[0] == 2;
+    }
+
+    std::int8_t TPlayerInfo::getSide()
+    {
+        return data2[1];
+    }
+
+    std::uint8_t TPlayerInfo::getSlotNumber()
+    {
+        return data2[2];
+    }
+
+    std::string TPlayerInfo::getMapName()
+    {
+        return (const char*)fill1;
+    }
+
 
     TIdent2::TIdent2()
     { 

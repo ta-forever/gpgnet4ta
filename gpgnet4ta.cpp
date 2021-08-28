@@ -71,7 +71,7 @@ public:
             m_isHost = hostName == localName;
             if (m_isHost)
             {
-                m_gpgNetClient.gameOption("MapDetails", getMapDetails(mapName));
+                m_gpgNetClient.sendGameOption("MapDetails", getMapDetails(mapName));
             }
         }
         catch (std::exception &e)
@@ -99,11 +99,11 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] aiName:" << aiName << "slot:" << slot << "army:" << armyNumber << "team:" << teamNumber << "side:" << side << "isDead:" << isDead << "isWatcher:" << isWatcher;
                 if (m_isHost)
                 {
-                    m_gpgNetClient.aiOption(aiName, "Team", teamNumber);
-                    m_gpgNetClient.aiOption(aiName, "StartSpot", slot);
-                    m_gpgNetClient.aiOption(aiName, "Color", slot);
-                    m_gpgNetClient.aiOption(aiName, "Army", armyNumber);
-                    m_gpgNetClient.aiOption(aiName, "Faction", side);
+                    m_gpgNetClient.sendAiOption(aiName, "Team", teamNumber);
+                    m_gpgNetClient.sendAiOption(aiName, "StartSpot", slot);
+                    m_gpgNetClient.sendAiOption(aiName, "Color", slot);
+                    m_gpgNetClient.sendAiOption(aiName, "Army", armyNumber);
+                    m_gpgNetClient.sendAiOption(aiName, "Faction", side);
                 }
             }
             else
@@ -112,11 +112,11 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] playerName:" << name << "id:" << gpgnetId << "slot:" << slot << "army:" << armyNumber << "team:" << teamNumber << "side:" << side << "isDead:" << isDead << "isWatcher:" << isWatcher;
                 if (m_isHost)
                 {
-                    m_gpgNetClient.playerOption(gpgnetId, "Team", teamNumber);
-                    m_gpgNetClient.playerOption(gpgnetId, "StartSpot", slot);
-                    m_gpgNetClient.playerOption(gpgnetId, "Color", slot);
-                    m_gpgNetClient.playerOption(gpgnetId, "Army", armyNumber);
-                    m_gpgNetClient.playerOption(gpgnetId, "Faction", side);
+                    m_gpgNetClient.sendPlayerOption(gpgnetId, "Team", teamNumber);
+                    m_gpgNetClient.sendPlayerOption(gpgnetId, "StartSpot", slot);
+                    m_gpgNetClient.sendPlayerOption(gpgnetId, "Color", slot);
+                    m_gpgNetClient.sendPlayerOption(gpgnetId, "Army", armyNumber);
+                    m_gpgNetClient.sendPlayerOption(gpgnetId, "Faction", side);
                 }
             }
         }
@@ -138,7 +138,7 @@ public:
             qInfo() << "[ForwardGameEventsToGpgNet::onClearSlot]" << name << "slot" << slot;
             if (m_isHost)
             {
-                m_gpgNetClient.clearSlot(slot);
+                m_gpgNetClient.sendClearSlot(slot);
             }
         }
         catch (std::exception &e)
@@ -161,7 +161,7 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Launching'";
                 if (m_isHost)
                 {
-                    m_gpgNetClient.gameState("Launching", "Launching");
+                    m_gpgNetClient.sendGameState("Launching", "Launching");
                 }
             }
             else
@@ -169,7 +169,7 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Live'";
                 if (m_isHost)
                 {
-                    m_gpgNetClient.gameState("Launching", "Live");
+                    m_gpgNetClient.sendGameState("Launching", "Live");
                 }
             }
         }
@@ -193,10 +193,10 @@ public:
                 int army = result.value("army").toInt();
                 int score = result.value("score").toInt();
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded]" << result;
-                m_gpgNetClient.gameResult(army, score);
+                m_gpgNetClient.sendGameResult(army, score);
             }
             qInfo() << "[ForwardGameEventsToGpgNet::onGameEnded] GameState Ended";
-            m_gpgNetClient.gameState("Ended", "Ended");
+            m_gpgNetClient.sendGameState("Ended", "Ended");
         }
         catch (std::exception &e)
         {
@@ -562,6 +562,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
+    parser.addOption(QCommandLineOption("tadcompilerurl", "host:port/gameid of TA Demo Compiler", "tadcompilerurl"));
     parser.process(app);
 
     Logger::Initialise(parser.value("logfile").toStdString(), Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -648,6 +649,15 @@ int doMain(int argc, char* argv[])
         qInfo() << "[main] connecting game status events to HandleGameStatus";
         HandleGameStatus handleGameStatus(ircForward.get(), ircChannel, lobby);
         lobby.connectGameEvents(handleGameStatus);
+
+        if (parser.isSet("tadcompilerurl"))
+        {
+            QString user, host, gameId;
+            quint16 port;
+            SplitUserHostPortChannel(parser.value("tadcompilerurl"), user, host, port, gameId);
+            qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId;
+            lobby.enableForwardToDemoCompiler(host, port, gameId.toInt());
+        }
 
         if (ircForward)
         {

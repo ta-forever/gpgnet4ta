@@ -142,8 +142,11 @@ void GameReceiver::onReadyReadTcp()
         TADemo::Watchdog wd("GameReceiver::onReadyReadTcp", 100);
         QAbstractSocket* sender = static_cast<QAbstractSocket*>(QObject::sender());
         //qInfo() << "[GameReceiver::onReadyReadTcp]" << sender->localAddress().toString() << ":" << sender->localPort() << "from" << sender->peerAddress().toString() << ":" << sender->peerPort();
-        QByteArray datas = sender->readAll();
-        handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
+        while (sender->bytesAvailable())
+        {
+            QByteArray datas = sender->readAll();
+            handleMessage(sender, getChannelCodeFromSocket(sender), datas.data(), datas.size());
+        }
     }
     catch (std::exception &e)
     {
@@ -162,11 +165,14 @@ void GameReceiver::onReadyReadUdp()
         TADemo::Watchdog wd("GameReceiver::onReadyReadUdp", 100);
         QUdpSocket* sender = dynamic_cast<QUdpSocket*>(QObject::sender());
         QByteArray datas;
-        datas.resize(sender->pendingDatagramSize());
-        QHostAddress senderAddress;
-        quint16 senderPort;
-        sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
-        handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
+        while (sender->hasPendingDatagrams())
+        {
+            datas.resize(sender->pendingDatagramSize());
+            QHostAddress senderAddress;
+            quint16 senderPort;
+            sender->readDatagram(datas.data(), datas.size(), &senderAddress, &senderPort);
+            handleMessage(sender, CHANNEL_UDP, datas.data(), datas.size());
+        }
     }
     catch (std::exception &e)
     {

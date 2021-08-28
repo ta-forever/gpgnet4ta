@@ -9,6 +9,7 @@
 
 #include "TADemoParser.h"
 #include "TPacket.h"
+#include "HexDump.h"
 
 namespace TADemo
 {
@@ -29,6 +30,7 @@ namespace TADemo
             }
             else
             {
+                is->clear();
                 throw DataNotReadyException();
             }
         }
@@ -51,6 +53,7 @@ namespace TADemo
             }
             else
             {
+                is->clear();
                 throw DataNotReadyException();
             }
         }
@@ -61,6 +64,7 @@ namespace TADemo
             m_bytesRead += is->gcount();
             if (m_bytesRead < m_readBuffer.size())
             {
+                is->clear();
                 throw DataNotReadyException();
             }
             record = m_readBuffer;
@@ -163,12 +167,14 @@ namespace TADemo
         TPacket::decrypt(data, 1u, checks[0], checks[1]);
         if (checks[0] != checks[1])
         {
-            std::cerr << "[Parser::load PlayerStatusMessage] checksum error";
+            std::cerr << "[Parser::load PlayerStatusMessage] checksum error" << std::endl;
+            HexDump(data.data()+1, data.size()-1, std::cerr);
         }
         msg.statusMessage = TPacket::decompress(data.data()+1, data.size()-1, 3).substr(7);
         if (msg.statusMessage[0] != 0x03)
         {
-            std::cerr << "[Parser::load PlayerStatusMessage] decompression ran out of bytes!";
+            std::cerr << "[Parser::load PlayerStatusMessage] decompression ran out of bytes!" << std::endl;
+            HexDump(msg.statusMessage.data(), msg.statusMessage.size(), std::cerr);
         }
     }
 

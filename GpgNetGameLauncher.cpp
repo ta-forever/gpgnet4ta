@@ -7,7 +7,7 @@
 
 GpgNetGameLauncher::GpgNetGameLauncher(
     QString iniTemplate, QString gamePath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
-    LaunchClient &launchClient, gpgnet::GpgNetSend &gpgNetSend) :
+    LaunchClient &launchClient, gpgnet::GpgNetClient &gpgNetclient) :
     m_iniTemplate(iniTemplate),
     m_gamePath(gamePath),
     m_iniTarget(iniTarget),
@@ -16,9 +16,9 @@ GpgNetGameLauncher::GpgNetGameLauncher(
     m_lockOptions(lockOptions),
     m_maxUnits(maxUnits),
     m_launchClient(launchClient),
-    m_gpgNetSend(gpgNetSend)
+    m_gpgNetClient(gpgNetclient)
 {
-    m_gpgNetSend.gameState("Idle", "Idle");
+    m_gpgNetClient.sendGameState("Idle", "Idle");
     QObject::connect(&m_pollStillActiveTimer, &QTimer::timeout, this, &GpgNetGameLauncher::pollJdplayStillActive);
     QObject::connect(&m_quitCountResetTimer, &QTimer::timeout, this, &GpgNetGameLauncher::onResetQuitCount);
 }
@@ -32,7 +32,7 @@ void GpgNetGameLauncher::onCreateLobby(int protocol, int localPort, QString play
         m_thisPlayerName = playerName;
         m_thisPlayerId = playerId;
         m_launchClient.setPlayerName(playerName);
-        m_gpgNetSend.gameState("Lobby", "Staging");
+        m_gpgNetClient.sendGameState("Lobby", "Staging");
     }
     catch (std::exception &e)
     {
@@ -53,7 +53,7 @@ void GpgNetGameLauncher::pollJdplayStillActive()
         {
             qInfo() << "[GpgNetGameLauncher::pollJdplayStillActive] game stopped running. exit (or crash?)";
             m_pollStillActiveTimer.stop();
-            m_gpgNetSend.gameEnded();
+            m_gpgNetClient.sendGameEnded();
             emit gameTerminated();
         }
     }
@@ -86,10 +86,10 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
             onLaunchGame();
         }
 
-        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Team", 1);
-        m_gpgNetSend.gameOption("Slots", m_playerLimit);
+        m_gpgNetClient.sendPlayerOption(QString::number(m_thisPlayerId), "Team", 1);
+        m_gpgNetClient.sendGameOption("Slots", m_playerLimit);
         qInfo() << "GameOption MapDetails" << mapDetails;
-        m_gpgNetSend.gameOption("MapDetails", mapDetails);
+        m_gpgNetClient.sendGameOption("MapDetails", mapDetails);
         m_isHost = true;
     }
     catch (std::exception &e)
@@ -124,7 +124,7 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, QString, i
             onLaunchGame();
         }
 
-        m_gpgNetSend.playerOption(QString::number(m_thisPlayerId), "Team", 1);
+        m_gpgNetClient.sendPlayerOption(QString::number(m_thisPlayerId), "Team", 1);
     }
     catch (std::exception &e)
     {
@@ -159,7 +159,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 QString mapDetails = msg.mid(5);
                 m_mapName = mapDetails.split(QChar(0x1f))[0];
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting new map '" << m_mapName << "'. details:" << mapDetails;
-                m_gpgNetSend.gameOption("MapDetails", mapDetails);
+                m_gpgNetClient.sendGameOption("MapDetails", mapDetails);
             }
         }
         else if (msg == "/quit")
@@ -236,7 +236,7 @@ void GpgNetGameLauncher::onLaunchGame()
     m_alreadyLaunched = true;
     m_pollStillActiveTimer.start(3000);
 
-    m_gpgNetSend.gameState("Lobby", "Battleroom");
+    m_gpgNetClient.sendGameState("Lobby", "Battleroom");
     emit gameLaunched();
     // from here on, game state is not driven by GpgNetGameLauncher but instead is inferred by GameMonitor
 }

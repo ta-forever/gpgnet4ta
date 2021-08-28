@@ -142,7 +142,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         bool protect = unsigned(len) > m_tafnetNode->maxPacketSizeForPlayerId(destNodeId);
         protect |= m_packetParser && m_packetParser->getProgressTicks() < TICKS_TO_PROTECT_UDP;
 
-        if (m_packetParser && !protect)
+        if (m_packetParser)
         {
             static const std::set<TADemo::SubPacketCode> protectedSubpaks({
                 TADemo::SubPacketCode::CHAT_05,
@@ -155,7 +155,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
                 TADemo::SubPacketCode::TEAM_24
             });
 
-            std::set<TADemo::SubPacketCode> parsedSubpaks = m_packetParser->parseGameData(data, len);
+            std::set<TADemo::SubPacketCode> parsedSubpaks = m_packetParser->parseGameData(true, data, len);
             std::vector<TADemo::SubPacketCode> parsedProtectedSubpaks;
             std::set_intersection(
                 parsedSubpaks.begin(), parsedSubpaks.end(),
@@ -184,7 +184,7 @@ void TafnetGameNode::handleGameData(QAbstractSocket* receivingSocket, int channe
         m_tafnetNode->forwardGameData(destNodeId, Payload::ACTION_TCP_DATA, data, len);
         if (m_packetParser)
         {
-            m_packetParser->parseGameData(data, len);
+            m_packetParser->parseGameData(true, data, len);
         }
     }
 
@@ -244,7 +244,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
         gameSender->sendTcpData(data, len);
         if (m_packetParser)
         {
-            m_packetParser->parseGameData(data, len);
+            m_packetParser->parseGameData(false, data, len);
         }
         break;
 
@@ -253,7 +253,7 @@ void TafnetGameNode::handleTafnetMessage(std::uint8_t action, std::uint32_t peer
         gameSender->sendUdpData(data, len);
         if (m_packetParser)
         {
-            m_packetParser->parseGameData(data, len);
+            m_packetParser->parseGameData(false, data, len);
         }
         break;
 

@@ -19,6 +19,10 @@ if (WIN32)
         TaReplayer.cpp
         Logger.h
         Logger.cpp
+        TaReplayClient.h
+        TaReplayClient.cpp
+        TaReplayServerMessages.h
+        TaReplayServerMessages.cpp
         )
 
     target_include_directories(tareplayer 
@@ -34,6 +38,7 @@ if (WIN32)
     target_link_libraries(tareplayer
         jdplay
         tademo
+        gpgnet
         Qt5::Core
         Qt5::Network
         ws2_32
@@ -92,6 +97,31 @@ if (ENABLE_IRC)
     add_definitions(-D_ENABLE_IRC)
 endif()
 
+# -------------- TADEMOCOMPILER --------------
+
+add_executable(tademocompiler
+    TaDemoCompiler.h
+    TaDemoCompiler.cpp
+    TaDemoCompilerMessages.h
+    TaDemoCompilerMessages.cpp
+    TaReplayServerMessages.h
+    TaReplayServerMessages.cpp
+    TaReplayServer.h
+    TaReplayServer.cpp
+    Logger.h
+    Logger.cpp
+    )
+
+target_link_libraries(tademocompiler
+    gpgnet
+    tademo
+    Qt5::Core
+    Qt5::Network
+    )
+ 
+install(TARGETS tademocompiler)
+
+
 # -------------- GPGNET4TA -------------
 
 add_subdirectory(tademo)
@@ -121,6 +151,8 @@ add_executable(gpgnet4ta
     Logger.cpp
     ConsoleReader.h
     ConsoleReader.cpp
+    TaDemoCompilerClient.h
+    TaDemoCompilerClient.cpp
     ${IRC_SOURCES}
     )
 

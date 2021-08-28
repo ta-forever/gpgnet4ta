@@ -4,6 +4,7 @@
 #include <QtCore/quuid.h>
 #include "GameEventHandlerQt.h"
 #include "GameMonitor2.h"
+#include "TaDemoCompilerClient.h"
 
 namespace tafnet
 {
@@ -27,11 +28,13 @@ class TaLobby : public QObject
     QSharedPointer<TADemo::TAPacketParser> m_packetParser;  // snoops the network packets handled by m_game
     QSharedPointer<GameMonitor2> m_gameMonitor;             // infers major game events from packets provided by m_packetParser
     QSharedPointer<GameEventsSignalQt> m_gameEvents;        // translates inferred game events into Qt signals for external consumption
+    QSharedPointer<TaDemoCompilerClient> m_taDemoCompilerClient;          // submits data to TaDemoCompiler server for live replay
 
     QMap<QString, quint32> m_tafnetIdsByPlayerName;
 
 public:
     TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend);
+    void enableForwardToDemoCompiler(QString address, quint16 port, quint32 tafGameId);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
     quint32 getLocalPlayerDplayId();

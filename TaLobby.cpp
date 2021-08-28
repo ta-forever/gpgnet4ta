@@ -1,4 +1,5 @@
 #include "TaLobby.h"
+#include "TaDemoCompilerClient.h"
 
 #include "tafnet/TafnetNode.h"
 #include "tafnet/TafnetGameNode.h"
@@ -34,8 +35,17 @@ TaLobby::TaLobby(
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
     m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW));
-    m_packetParser.reset(new TADemo::TAPacketParser(m_gameMonitor.data()));
+    m_packetParser.reset(new TADemo::TAPacketParser());
+    m_packetParser->subscribe(m_gameMonitor.data());
 }
+
+
+void TaLobby::enableForwardToDemoCompiler(QString address, quint16 port, quint32 tafGameId)
+{
+    m_taDemoCompilerClient.reset(new TaDemoCompilerClient(QHostAddress(address), port, tafGameId));
+    m_packetParser->subscribe(m_taDemoCompilerClient.data());
+}
+
 
 void TaLobby::connectGameEvents(GameEventHandlerQt &subscriber)
 {
@@ -74,6 +84,12 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerAlias, QS
         m_gameMonitor->setLocalPlayerName(playerAlias.toStdString()); // this won't change
         m_gameMonitor->setPlayerRealName(playerAlias.toStdString(), playerRealName.toStdString());
 
+        if (m_taDemoCompilerClient)
+        {
+            m_taDemoCompilerClient->setHostPlayerName(playerAlias);
+            m_taDemoCompilerClient->setLocalPlayerName(playerAlias);
+        }
+
         m_proxy.reset(new tafnet::TafnetNode(
             playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
         m_game.reset(new tafnet::TafnetGameNode(
@@ -109,6 +125,10 @@ void TaLobby::onJoinGame(QString _host, QString playerAlias, QString playerRealN
         SplitHostAndPort(_host, host, port);
         m_gameMonitor->setHostPlayerName(playerAlias.toStdString());
         m_gameMonitor->setPlayerRealName(playerAlias.toStdString(), playerRealName.toStdString());
+        if (m_taDemoCompilerClient)
+        {
+            m_taDemoCompilerClient->setHostPlayerName(playerAlias);
+        }
         m_proxy->joinGame(host, port, playerId);
         m_game->registerRemotePlayer(playerId, 47624);
     }
