@@ -32,6 +32,8 @@
 #include <dplay.h>
 #include <dplobby.h>
 #include <string>
+#include <cstdint>
+
 
 BOOL FAR PASCAL EnumSessionsCallback(LPCDPSESSIONDESC2 lpThisSD, LPDWORD lpdwTimeOut, DWORD dwFlags, LPVOID lpContext);
 
@@ -48,8 +50,8 @@ private:
     std::string enumCallbackSessionName;
     std::string enumCallbackSessionPassword;
 
-    LPDIRECTPLAY3A lpDP;		// directplay interface pointer
-    LPDIRECTPLAYLOBBY3A	lpDPLobby;	// lobby interface pointer
+    LPDIRECTPLAY3 lpDP;		// directplay interface pointer
+    LPDIRECTPLAYLOBBY3	lpDPLobby;	// lobby interface pointer
 
     DPNAME dpName;			// player description
     DPSESSIONDESC2 dpSessionDesc;       // session description
@@ -70,7 +72,7 @@ public:
     bool searchOnce();
     bool launch(bool startGame);
     bool pollStillActive(DWORD &exitCode);
-    void pollSessionStatus(LPDIRECTPLAY3A dplay = NULL);
+    void pollSessionStatus(LPDIRECTPLAY3 dplay = NULL);
     void printSessionDesc();
     bool isHost();
     void releaseDirectPlay();
@@ -81,7 +83,17 @@ public:
     DWORD_PTR getUserData2() { return dpSessionDesc.dwUser2; }
     DWORD_PTR getUserData3() { return dpSessionDesc.dwUser3; }
     DWORD_PTR getUserData4() { return dpSessionDesc.dwUser4; }
+
+    void dpClose();
+    bool dpOpen(int maxPlayers, const char* sessionName, const char* mapName, std::uint32_t dwUser1, std::uint32_t dwUser2, std::uint32_t dwUser3, std::uint32_t dwUser4);
+    void dpGetSession(std::uint32_t&dwUser1, std::uint32_t&dwUser2, std::uint32_t&dwUser3, std::uint32_t&dwUser4);
+    void dpSetSession(std::uint32_t dwUser1, std::uint32_t dwUser2, std::uint32_t dwUser3, std::uint32_t dwUser4);
     void dpSend(DPID sourceDplayId, DPID destDplayId, DWORD flags, LPVOID data, DWORD size);
+    bool dpReceive(std::uint8_t* buffer, std::uint32_t& size, std::uint32_t& from, std::uint32_t& to);
+    std::uint32_t dpCreatePlayer(const char* name);
+    void dpDestroyPlayer(std::uint32_t dpid);
+    void dpSetPlayerName(std::uint32_t id, const char* name);
+    void dpEnumPlayers();
 
     void updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD); //has to be public for the callback function
     static JDPlay* getInstance(); //makes the object available to the callback function

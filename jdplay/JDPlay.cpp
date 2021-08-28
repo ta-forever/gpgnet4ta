@@ -31,6 +31,9 @@
 #include "JDPlay.h"
 #include <iostream>
 #include <windowsx.h>	//GlobalAllocPtr
+#include <iomanip>
+#include <sstream>
+#include "DPlayWrapper.h"
 
 inline BSTR _ConvertStringToBSTR(const char* pSrc)
 {
@@ -63,6 +66,39 @@ inline BSTR _ConvertStringToBSTR(const char* pSrc)
     return wsOut;
 };
 
+std::string ToAnsi(LPWSTR s)
+{
+    std::string result;
+    WCHAR* ptr = s;
+    for (; *ptr != 0u; ++ptr)
+    {
+        result.push_back(char(*ptr));
+    }
+    result.push_back(0);
+    return result;
+}
+
+std::string FromAnsi(const char* s)
+{
+    std::string result;
+    for (; *s != 0u; ++s)
+    {
+        result.push_back(*s);
+        result.push_back(0);
+    }
+    result.push_back(0);
+    return result;
+}
+
+void FromAnsi(const char* ansi, LPWSTR dest, std::size_t maxBytes)
+{
+    for (; *ansi != 0u && maxBytes>3u; ++ansi, ++dest, maxBytes -= 2)
+    {
+        *dest = *ansi;
+    }
+    *dest = 0;
+}
+
 using namespace std;
 
 JDPlay* JDPlay::instance;
@@ -81,9 +117,9 @@ BOOL FAR PASCAL enumPlayersCallback(
     DWORD           dwFlags,
     LPVOID          lpContext)
 {
-    cout << "dpID:" << dpId
+    cout << "\rdpID:" << dpId
         << ", dwPlayerType:" << (dwPlayerType == DPPLAYERTYPE_PLAYER ? "Player" : "Group")
-        << ", lpName:" << lpName;
+        << ", lpName:" << ToAnsi(lpName->lpszShortName);
     if (dwFlags & DPENUMGROUPS_SHORTCUT) cout << ", SHORTCUT";
     if (dwFlags & DPENUMGROUPS_STAGINGAREA) cout << ", STAGING";
     if (dwFlags & DPENUMPLAYERS_GROUP) cout << ", PLYRS&GRPS";
@@ -92,6 +128,7 @@ BOOL FAR PASCAL enumPlayersCallback(
     if (dwFlags & DPENUMPLAYERS_SESSION) cout << ", SESSION";
     if (dwFlags & DPENUMPLAYERS_SERVERPLAYER) cout << ", SERVER";
     if (dwFlags & DPENUMPLAYERS_SPECTATOR) cout << ", SPECTATOR";
+    cout << std::endl;
     return true;
 }
 
@@ -116,8 +153,8 @@ JDPlay::JDPlay(const char* playerName, int searchValidationCount, bool debug){
 	// populate player info
 	dpName.dwSize = sizeof(DPNAME);
 	dpName.dwFlags = 0; // not used, must be zero
-	dpName.lpszLongNameA = (char*)malloc(256);
-	dpName.lpszShortNameA = (char*)malloc(256);
+	dpName.lpszLongName = (LPWSTR)malloc(256);
+	dpName.lpszShortName = (LPWSTR)malloc(256);
 	updatePlayerName(playerName);
 
 	if(debug){
@@ -178,69 +215,98 @@ bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, i
 	}
 	
 	// create TCP connection ***********************************************************************
-	LPDIRECTPLAYLOBBYA old_lpDPLobbyA = NULL;    // old lobby pointer
+	LPDIRECTPLAYLOBBY old_lpDPLobby = NULL;      // old lobby pointer
 	DPCOMPOUNDADDRESSELEMENT  address[2];        // to create compound addr
 	DWORD     addressSize = 0;					// size of compound address
 	LPVOID    lpConnection = NULL;				// pointer to make connection
 
-	// registering COM
-	hr = CoInitialize(NULL);
-	
-	if(hr != S_OK){
-		if(debug){
-			cout << "initialize() - ERROR: failed to initialize COM" << endl;
-			fflush(stdout);
-		}
-		return false;
-	}
+    if (true)
+    {
+        // registering COM
+        hr = CoInitialize(NULL);
 
-	if(debug){
-		cout << "initialize() - COM initialized" << endl;
-		fflush(stdout);
-	}
+        if (hr != S_OK) {
+            if (debug) {
+                cout << "initialize() - ERROR: failed to initialize COM" << endl;
+                fflush(stdout);
+            }
+            return false;
+        }
 
-	// creating directplay object
-	hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3A,(LPVOID*)&lpDP );
-	
-	if(hr != S_OK){
-		if(debug){
-			cout << "initialize() - ERROR: failed to initialize DirectPlay" << endl;
-			fflush(stdout);
-		}
-		return false;
-	}
+        if (debug) {
+            cout << "initialize() - COM initialized" << endl;
+            fflush(stdout);
+        }
 
-	CoUninitialize();  // unregister the COM
+        // creating directplay object
+        hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&lpDP);
 
-	if(debug){
-		cout << "initialize() - initialized DirectPlay and deinitialized COM" << endl;
-		fflush(stdout);
-	}
+        if (hr != S_OK) {
+            if (debug) {
+                cout << "initialize() - ERROR: failed to initialize DirectPlay" << endl;
+                fflush(stdout);
+            }
+            return false;
+        }
 
-	// creating lobby object
-	hr = DirectPlayLobbyCreate(NULL, &old_lpDPLobbyA, NULL, NULL, 0);
+        CoUninitialize();  // unregister the COM
 
-	if(hr != S_OK){
-		if(debug){
-			cout << "initialize() - ERROR[" << getDPERR(hr) <<"]: failed to create lobby object" << endl;
-			fflush(stdout);
-		}
-		return false;
-	}
+        if (debug) {
+            cout << "initialize() - initialized DirectPlay and deinitialized COM" << endl;
+            fflush(stdout);
+        }
 
-	// get new interface of lobby
-	hr = old_lpDPLobbyA->QueryInterface(IID_IDirectPlayLobby3A, (LPVOID *)&lpDPLobby);
-	
-	if(hr != S_OK){
-		if(debug){
-			cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to get new lobby interface" << endl;
-			fflush(stdout);
-		}
-		return false;
-	}
+        // creating lobby object
+        hr = DirectPlayLobbyCreate(NULL, &old_lpDPLobby, NULL, NULL, 0);
+
+        if (hr != S_OK) {
+            if (debug) {
+                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to create lobby object" << endl;
+                fflush(stdout);
+            }
+            return false;
+        }
+
+        // get new interface of lobby
+        hr = old_lpDPLobby->QueryInterface(IID_IDirectPlayLobby3, (LPVOID*)&lpDPLobby);
+
+        if (hr != S_OK) {
+            if (debug) {
+                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to get new lobby interface" << endl;
+                fflush(stdout);
+            }
+            return false;
+        }
+    }
+    else
+    {
+        GUID guid;
+        std::memset(&guid, 0, sizeof(guid));
+        LPDIRECTPLAY dp1;
+        hr = DPlayWrapper().directPlayCreate(&guid, &dp1, NULL);
+        if (hr != S_OK) {
+            std::cout << std::hex << hr << " unable to create DirectPlay" << std::endl;
+            return false;
+        }
+        hr = dp1->QueryInterface(IID_IDirectPlay3, (LPVOID*)&lpDP);
+        if (hr != S_OK) {
+            std::cout << std::hex << hr << " unable to get DirectPlay3" << std::endl;
+            return false;
+        }
+        hr = DPlayWrapper().directPlayLobbyCreate(NULL, &old_lpDPLobby, NULL, NULL, 0);
+        if (hr != S_OK) {
+            std::cout << std::hex << hr << " unable to create DirectPlayLobby" << std::endl;
+            return false;
+        }
+        hr = old_lpDPLobby->QueryInterface(IID_IDirectPlayLobby3, (LPVOID*)&lpDPLobby);
+        if (hr != S_OK) {
+            std::cout << std::hex << hr << " unable to get DirectPlayLobby3" << std::endl;
+            return false;
+        }
+    }
 
 	// release old interface since we have new one
-	hr = old_lpDPLobbyA->Release();
+	hr = old_lpDPLobby->Release();
 
 	if(hr != S_OK){
 		if(debug){
@@ -314,12 +380,10 @@ bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, i
 	dpSessionDesc.dwFlags = 0;									// optional: DPSESSION_MIGRATEHOST
 	dpSessionDesc.guidApplication = gameID;						// Game GUID
 	dpSessionDesc.guidInstance = gameID;						// ID for the session instance
-	dpSessionDesc.lpszSessionName = L"Coopnet Session";		// name of the session
-	dpSessionDesc.lpszSessionNameA = "Coopnet Session";			// ANSI name of the session
+	dpSessionDesc.lpszSessionName = L"Coopnet Session";			// name of the session
 	dpSessionDesc.dwMaxPlayers = maxPlayers;					// Maximum # players allowed in session
 	dpSessionDesc.dwCurrentPlayers = 0;							// Current # players in session (read only)
-	dpSessionDesc.lpszPassword = L"\0";						// ANSI password of the session (optional)
-	dpSessionDesc.lpszPasswordA = "\0";							// ANSI password of the session (optional)
+	dpSessionDesc.lpszPassword = L"\0";							// password of the session (optional)
 	dpSessionDesc.dwReserved1 = 0;								// Reserved for future M$ use.
 	dpSessionDesc.dwReserved2 = 0;
 	dpSessionDesc.dwUser1 = 0;									// For use by the application
@@ -368,14 +432,12 @@ bool JDPlay::isHost(){
 	return sessionFlags != DPOPEN_JOIN;
 }
 
-void JDPlay::updatePlayerName(const char* playerName){
-
-	strncpy(dpName.lpszShortNameA, playerName, 256);
-	strncpy(dpName.lpszLongNameA, playerName, 256);
-    dpName.lpszShortNameA[255] = dpName.lpszLongNameA[255] = 0;
+void JDPlay::updatePlayerName(const char* playerNameA){
+    FromAnsi(playerNameA, dpName.lpszShortName, 256);
+    FromAnsi(playerNameA, dpName.lpszLongName, 256);
 	
 	if(debug){
-		cout << "updatePlayerName() - playername set to \"" << playerName << "\"" << endl;
+		cout << "updatePlayerName() - playername set to \"" << playerNameA << "\"" << endl;
 		cout << "-- updatePlayerName()" << endl;
 		fflush(stdout);
 	}
@@ -525,7 +587,7 @@ bool JDPlay::pollStillActive(DWORD& exitCode)
     return exitCode == STILL_ACTIVE;
 }
 
-void JDPlay::pollSessionStatus(LPDIRECTPLAY3A dplay)
+void JDPlay::pollSessionStatus(LPDIRECTPLAY3 dplay)
 {
     HRESULT hr;
 
@@ -553,7 +615,7 @@ void JDPlay::pollSessionStatus(LPDIRECTPLAY3A dplay)
         {
             cout << "CoInitialize:" << getDPERR(hr) << endl;
         }
-        hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3A, (LPVOID*)&dplay);
+        hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&dplay);
         CoUninitialize();  // unregister the COM
         if (S_OK != hr)
         {
@@ -619,20 +681,18 @@ void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD){
 		dpSessionDesc.dwUser3 = lpFoundSD->dwUser3;
 		dpSessionDesc.dwUser4 = lpFoundSD->dwUser4;
 		dpSessionDesc.lpszSessionName = lpFoundSD->lpszSessionName;
-		dpSessionDesc.lpszSessionNameA = lpFoundSD->lpszSessionNameA;
 		dpSessionDesc.lpszPassword = lpFoundSD->lpszPassword;
-		dpSessionDesc.lpszPasswordA = lpFoundSD->lpszPasswordA;
 
         validateCount = 0;
 	}	
 
-    if (lpFoundSD->lpszSessionNameA)
+    if (lpFoundSD->lpszSessionName)
     {
-        enumCallbackSessionName = lpFoundSD->lpszSessionNameA;
+        enumCallbackSessionName = ToAnsi(lpFoundSD->lpszSessionName);
     }
-    if (lpFoundSD->lpszPasswordA)
+    if (lpFoundSD->lpszPassword)
     {
-        enumCallbackSessionPassword = lpFoundSD->lpszPasswordA;
+        enumCallbackSessionPassword = ToAnsi(lpFoundSD->lpszPassword);
     }
 
 	if(validateCount >= searchValidationCount){
@@ -640,18 +700,12 @@ void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD){
 	}else{
 		foundLobby = false;
 	}
-
-	if(debug){
-		cout << "updateFoundSessionDescription() - curSessionName = \"" << dpSessionDesc.lpszSessionNameA << "\"  validateCount = " << validateCount << ", foundLobby = " << foundLobby << endl;
-		cout << "-- updateFoundSessionDescription()" << endl;
-		fflush(stdout);
-	}
 }
 
 
 std::string JDPlay::getAdvertisedPlayerName()
 {
-    return dpName.lpszShortNameA;
+    return ToAnsi(dpName.lpszShortName);
 }
 
 std::string JDPlay::getAdvertisedSessionName()
@@ -659,9 +713,97 @@ std::string JDPlay::getAdvertisedSessionName()
     return enumCallbackSessionName;
 }
 
+void JDPlay::dpClose()
+{
+    lpDP->Close();
+}
+
+bool JDPlay::dpOpen(int maxPlayers, const char* sessionName, const char* mapName, std::uint32_t dwUser1, std::uint32_t dwUser2, std::uint32_t dwUser3, std::uint32_t dwUser4)
+{
+    std::ostringstream ss;
+    ss << std::left << std::setfill(' ') << std::setw(16) << sessionName << mapName;
+    std::string sessionAndMap = FromAnsi(ss.str().c_str());
+
+    dpSessionDesc.dwCurrentPlayers = 0;
+    dpSessionDesc.dwMaxPlayers = maxPlayers;
+    dpSessionDesc.lpszSessionName = (LPWSTR)sessionAndMap.data();
+    dpSessionDesc.dwUser1 = dwUser1;
+    dpSessionDesc.dwUser2 = dwUser2;
+    dpSessionDesc.dwUser3 = dwUser3;
+    dpSessionDesc.dwUser4 = dwUser4;
+    return lpDP->Open(&dpSessionDesc, DPOPEN_CREATE) == S_OK;
+}
+
+void JDPlay::dpGetSession(std::uint32_t& dwUser1, std::uint32_t& dwUser2, std::uint32_t& dwUser3, std::uint32_t& dwUser4)
+{
+    DWORD size;
+    lpDP->GetSessionDesc(NULL, &size);
+    lpDP->GetSessionDesc(&dpSessionDesc, &size);
+    dwUser1 = dpSessionDesc.dwUser1;
+    dwUser2 = dpSessionDesc.dwUser2;
+    dwUser3 = dpSessionDesc.dwUser3;
+    dwUser4 = dpSessionDesc.dwUser4;
+}
+
+void JDPlay::dpSetSession(std::uint32_t dwUser1, std::uint32_t dwUser2, std::uint32_t dwUser3, std::uint32_t dwUser4)
+{
+    dpSessionDesc.dwUser1 = dwUser1;
+    dpSessionDesc.dwUser2 = dwUser2;
+    dpSessionDesc.dwUser3 = dwUser3;
+    dpSessionDesc.dwUser4 = dwUser4;
+    lpDP->SetSessionDesc(&dpSessionDesc, dpSessionDesc.dwSize);
+}
+
 void JDPlay::dpSend(DPID sourceDplayId, DPID destDplayId, DWORD flags, LPVOID data, DWORD size)
 {
     lpDP->Send(sourceDplayId, destDplayId, flags, data, size);
+}
+
+bool JDPlay::dpReceive(std::uint8_t *buffer, std::uint32_t &size, std::uint32_t &from, std::uint32_t &to)
+{
+    DPID _from = from, _to = to;
+    DWORD _size;
+    _size = size;
+    HRESULT hr = lpDP->Receive(&_from, &_to, 1, buffer, &_size);
+    size = _size;
+    from = _from;
+    to = _to;
+    return hr == S_OK;
+}
+
+std::uint32_t JDPlay::dpCreatePlayer(const char *nameA)
+{
+    DPID dpid;
+    DPNAME dpname;
+    std::string name = FromAnsi(nameA);
+    std::memset(&dpname, 0, sizeof(dpname));
+    dpname.dwSize = sizeof(dpname);
+    dpname.lpszLongName = (LPWSTR)name.data();
+    dpname.lpszShortName = (LPWSTR)name.data();
+    
+    lpDP->CreatePlayer(&dpid, &dpname, 0, NULL, 0, 0);
+    return dpid;
+}
+
+void JDPlay::dpDestroyPlayer(std::uint32_t dpid)
+{
+    lpDP->DestroyPlayer(dpid);
+}
+
+void JDPlay::dpSetPlayerName(std::uint32_t id, const char* nameA)
+{
+    DPNAME dpname;
+    std::string name = FromAnsi(nameA);
+    dpname.dwFlags = 0u;
+    dpname.dwSize = sizeof(dpname);
+    dpname.lpszLongName = (LPWSTR)name.data();
+    dpname.lpszShortName = (LPWSTR)name.data();
+    lpDP->SetPlayerName(id, &dpname, DPSET_GUARANTEED);
+}
+
+void JDPlay::dpEnumPlayers()
+{
+    lpDP->EnumPlayers(&dpSessionDesc.guidInstance, enumPlayersCallback, NULL, 0);
 }
 
 JDPlay* JDPlay::getInstance(){

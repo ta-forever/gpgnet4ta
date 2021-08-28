@@ -52,7 +52,6 @@ namespace TADemo
         data[2] = check >> 8;
     }
 
-
     bytestring TPacket::compress(const bytestring &data)
     {
         unsigned index, cbf, count, a, matchl, cmatchl;
@@ -257,30 +256,30 @@ namespace TADemo
         case SubPacketCode::UNIT_STATE_11: len = 4;     break;
         case SubPacketCode::UNIT_BUILD_FINISHED_12: len = 5;     break;
         case SubPacketCode::GIVE_UNIT_14: len = 24;    break;
-        case SubPacketCode::UNK_15: len = 1;    break;
+        case SubPacketCode::START_15: len = 1;    break;
         case SubPacketCode::SHARE_RESOURCES_16: len = 17;    break;
         case SubPacketCode::UNK_17: len = 2;    break;
         case SubPacketCode::HOST_MIGRATION_18: len = 2;    break;
         case SubPacketCode::SPEED_19: len = 3;     break;
-        case SubPacketCode::UNIT_TYPES_SYNC_1A: len = 14;   break;
+        case SubPacketCode::UNIT_DATA_1A: len = 14;   break;
         case SubPacketCode::REJECT_1B: len = 6;     break;
-        case SubPacketCode::UNK_1E: len = 2;    break;
+        case SubPacketCode::START_1E: len = 2;    break;
         case SubPacketCode::UNK_1F: len = 5;     break;
         case SubPacketCode::PLAYER_INFO_20: len = 192;  break;
         case SubPacketCode::UNK_21: len = 10;    break;
-        case SubPacketCode::UNK_22:  len = 6;    break;
+        case SubPacketCode::IDENT3_22:  len = 6;    break;
         case SubPacketCode::ALLY_23: len = 14;    break;
         case SubPacketCode::TEAM_24: len = 6; break;
-        case SubPacketCode::UNK_26:  len = 41;   break;
+        case SubPacketCode::IDENT2_26:  len = 41;   break;
         case SubPacketCode::PLAYER_RESOURCE_INFO_28: len = 58;    break;
         case SubPacketCode::UNK_29: len = 3;     break;
-        case SubPacketCode::UNK_2A:  len = 2;    break;
+        case SubPacketCode::LOADING_PROGRESS_2A:  len = 2;    break;
         case SubPacketCode::UNIT_STAT_AND_MOVE_2C:
             if (sz >= 3) len = *(std::uint16_t*)(&s[1]);
             break;
         case SubPacketCode::UNK_2E: len = 9; break;
         case SubPacketCode::UNK_F6: len = 1;     break;
-        case SubPacketCode::ENEMY_CHAT_F9: len = 73;    break;
+        case SubPacketCode::ALLY_CHAT_F9: len = 73;    break;
         case SubPacketCode::REPLAYER_SERVER_FA: len = 1;     break;
         case SubPacketCode::RECORDER_DATA_CONNECT_FB:
             if (sz >= 2) len = unsigned(s[1]) + 3;
@@ -488,10 +487,10 @@ namespace TADemo
             {
                 ut.push_back(bytestring());
                 bytestring &tmp = ut.back();
-                tmp.reserve(end - ptr + 4);
+                tmp.reserve(subpakLen + 4);
                 tmp.append(ptr, 3);
                 tmp.append((std::uint8_t*)&packnum, 4);
-                tmp.append(ptr + 3, end);
+                tmp.append(ptr + 3, subpakLen - 3);
                 ++packnum;
                 tmp[0] = 0x2c;
                 break;
@@ -621,6 +620,297 @@ namespace TADemo
         std::strncpy(&chatMessage[1], message.c_str(), 64);
         chatMessage[64] = 0;
         return bytestring((std::uint8_t*)chatMessage, sizeof(chatMessage));
+    }
+
+    bytestring TPacket::createHostMigrationSubpacket(int playerNumber)
+    {
+        bytestring bs;
+        bs.push_back(std::uint8_t(SubPacketCode::HOST_MIGRATION_18));
+        bs.push_back(playerNumber);
+        return bs;
+    }
+
+    TPing::TPing(std::uint32_t from, std::uint32_t id, std::uint32_t value) :
+        from(from),
+        id(id),
+        value(value)
+    { }
+
+    static std::uint32_t toUint32(const std::uint8_t* bytes)
+    {
+        std::uint32_t result = bytes[3];
+        for (int n = 2; n >= 0; --n) {
+            result <<= 8;
+            result |= bytes[n];
+        }
+        return result;
+    }
+
+    static std::uint16_t toUint16(const std::uint8_t* bytes)
+    {
+        std::uint16_t result = bytes[1];
+        result <<= 8;
+        result |= bytes[0];
+        return result;
+    }
+
+    static bytestring& serialise(bytestring& dest, std::uint32_t x)
+    {
+        dest.push_back(std::uint8_t(x));
+        dest.push_back(x >> 8);
+        dest.push_back(x >> 16);
+        dest.push_back(x >> 24);
+        return dest;
+    }
+
+    static bytestring& serialise(bytestring& dest, std::uint16_t x)
+    {
+        dest.push_back(std::uint8_t(x));
+        dest.push_back(x >> 8);
+        return dest;
+    }
+
+    TPing::TPing(const bytestring& subPacket)
+    {
+        id = toUint32(subPacket.data() + 1);
+        value = toUint32(subPacket.data() + 5);
+        from = toUint32(subPacket.data()+9);
+    }
+
+    bytestring TPing::asSubPacket() const
+    {
+        bytestring result;
+        result.push_back(std::uint8_t(SubPacketCode::PING_02));
+        serialise(result, id);
+        serialise(result, value);
+        serialise(result, from);
+        return result;
+    }
+
+    TPlayerInfo::TPlayerInfo(const bytestring& subPacket)
+    {
+        const std::uint8_t* ptr = subPacket.data() + 1;
+        std::memcpy(fill1, ptr, sizeof(fill1));
+        width = toUint16(ptr + 139);
+        height = toUint16(ptr + 141);
+        fill3 = ptr[143];
+        player1Id = toUint32(ptr + 144);
+        std::memcpy(data2, ptr + 148, sizeof(data2));
+        clicked = ptr[155];
+        std::memcpy(fill2, ptr + 156, sizeof(fill2));
+        data5 = toUint16(ptr + 165);
+        versionMajor = ptr[167];
+        versionMinor = ptr[168];
+        std::memcpy(data3, ptr + 169, sizeof(data3));
+        player2Id = toUint32(ptr + 186);
+        data4 = ptr[190];
+    }
+
+    bytestring TPlayerInfo::asSubPacket() const
+    {
+        bytestring result;
+        result.push_back(std::uint8_t(SubPacketCode::PLAYER_INFO_20));
+        result.append(fill1, fill1 + sizeof(fill1));
+        serialise(result, width);
+        serialise(result, height);
+        result.push_back(fill3);
+        serialise(result, player1Id);
+        result.append(data2, data2 + sizeof(data2));
+        result.push_back(clicked);
+        result.append(fill2, fill2 + sizeof(fill2));
+        serialise(result, data5);
+        result.push_back(versionMajor);
+        result.push_back(versionMinor);
+        result.append(data3, data3 + sizeof(data3));
+        serialise(result, player2Id);
+        result.push_back(data4);
+        return result;
+    }
+
+    void TPlayerInfo::setDpId(std::uint32_t dpid)
+    {
+        player1Id = player2Id = dpid;
+    }
+
+    void TPlayerInfo::setInternalVersion(std::uint8_t v)
+    {
+        // offset 188 once smartpaked
+        data3[188-177] = v;
+    }
+
+    void TPlayerInfo::setAllowWatch(bool allowWatch)
+    {
+        // offset 163 once smartpaked
+        if (allowWatch)
+        {
+            clicked |= 0x80;
+        }
+        else
+        {
+            clicked &= ~0x80;
+        }
+    }
+
+    void TPlayerInfo::setCheat(bool isCheat)
+    {
+        // offset 164 once smartpaked
+        if (isCheat)
+        {
+            fill2[0] |= 0x20;
+        }
+        else
+        {
+            fill2[0] &= ~0x20;
+        }
+    }
+
+    void TPlayerInfo::setPermLos(bool permLos)
+    {
+        // offset 164 once smartpaked
+        fill2[0] = 0x08;
+
+        // crashville
+        /*
+        if (permLos)
+        {
+            fill2[0] |= 0x08;
+        }
+        else
+        {
+            fill2[0] &= ~0x08;
+        }
+        */
+    }
+
+    bool TPlayerInfo::isClickedIn()
+    {
+        // offset 163 once smartpaked
+        return (clicked & 0x20) != 0u;
+    }
+
+    TIdent2::TIdent2()
+    { 
+        std::memset(dpids, 0, sizeof(dpids));
+    }
+
+    TIdent2::TIdent2(const bytestring& subPacket)
+    {
+        const std::uint8_t* ptr = subPacket.data() + 1;
+        for (std::size_t n = 0u; n < 10u; ++n, ptr += 4)
+        {
+            dpids[n] = toUint32(ptr);
+        }
+    }
+
+    bytestring TIdent2::asSubPacket() const
+    {
+        bytestring result;
+        result.push_back(std::uint8_t(SubPacketCode::IDENT2_26));
+        for (std::size_t n = 0u; n < 10u; ++n)
+        {
+            serialise(result, dpids[n]);
+        }
+        return result;
+    }
+
+    TIdent3::TIdent3(std::uint32_t playerDpId, std::uint8_t playerNumber):
+        dpid(playerDpId),
+        number(playerNumber)
+    { }
+
+    TIdent3::TIdent3(const bytestring& subPacket)
+    {
+        dpid = toUint32(subPacket.data() + 1);
+        number = subPacket[5];
+    }
+
+    bytestring TIdent3::asSubPacket() const
+    {
+        bytestring result;
+        result.push_back(std::uint8_t(SubPacketCode::IDENT3_22));
+        serialise(result, dpid);
+        result.push_back(number);
+        return result;
+    }
+
+    TUnitData::TUnitData()
+    {
+        std::memset(this, 0, sizeof(this));
+        pktid = SubPacketCode::UNIT_DATA_1A;
+    }
+
+    TUnitData::TUnitData(std::uint32_t id, std::uint16_t limit, bool inUse):
+        pktid(SubPacketCode::UNIT_DATA_1A),
+        sub(0x03),
+        fill(0u),
+        id(id)
+    {
+        if (inUse)
+        {
+            u.statusAndLimit[0] = 0x0101;
+            u.statusAndLimit[1] = limit;
+        }
+        else
+        {
+            u.statusAndLimit[0] = 0x0001;
+            u.statusAndLimit[1] = 0xffff;
+        }
+    }
+
+    TUnitData::TUnitData(const bytestring& subPacket)
+    {
+        const std::uint8_t* ptr = subPacket.data();
+        pktid = SubPacketCode(ptr[0]);
+        sub = ptr[1];
+        fill = toUint32(ptr + 2);
+        id = toUint32(ptr + 6);
+        if (sub == 0x03)
+        {
+            u.statusAndLimit[0] = toUint16(ptr + 10);
+            u.statusAndLimit[1] = toUint16(ptr + 12);
+        }
+        else
+        {
+            u.crc = toUint32(ptr + 10);
+        }
+    }
+
+    bytestring TUnitData::asSubPacket() const
+    {
+        bytestring bs;
+        bs.push_back(std::uint8_t(pktid));
+        bs.push_back(sub);
+        serialise(bs, fill);
+        serialise(bs, id);
+        if (sub == 0x03)
+        {
+            serialise(bs, u.statusAndLimit[0]);
+            serialise(bs, u.statusAndLimit[1]);
+        }
+        else
+        {
+            serialise(bs, u.crc);
+        }
+        return bs;
+    }
+
+    TProgress::TProgress(std::uint8_t percent):
+        percent(percent),
+        data(0x06)
+    { }
+
+    TProgress::TProgress(const bytestring& subPacket):
+        percent(subPacket[1]),
+        data(subPacket[2])
+    { }
+
+    bytestring TProgress::asSubPacket() const
+    {
+        bytestring result;
+        result.push_back(std::uint8_t(SubPacketCode::LOADING_PROGRESS_2A));
+        result.push_back(percent);
+        result.push_back(data);
+        return result;
     }
 
 #define STRINGIFY(x) #x

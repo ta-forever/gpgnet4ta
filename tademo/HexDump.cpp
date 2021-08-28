@@ -11,14 +11,14 @@ namespace TADemo
         const unsigned char* buff = (const unsigned char*)_buff;
         for (std::size_t base = 0; base < size; base += 16)
         {
-            s << std::setw(4) << std::hex << base << ": ";
+            s << std::setw(4) << std::setfill('0') << std::uppercase << std::hex << base << ": ";
             for (std::size_t ofs = 0; ofs < 16; ++ofs)
             {
                 std::size_t idx = base + ofs;
                 if (idx < size)
                 {
                     unsigned byte = buff[idx] & 0x0ff;
-                    s << std::setw(2) << std::hex << byte << ' ';
+                    s << std::setw(2) << std::setfill('0') << std::uppercase << std::hex << byte << ' ';
                 }
                 else
                 {

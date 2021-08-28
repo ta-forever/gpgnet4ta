@@ -185,7 +185,7 @@ namespace TADemo
         p.data = data.substr(3);
     }
 
-    bool Parser::parse(std::istream *is)
+    bool Parser::parse(std::istream *is, unsigned maxPaksToLoad)
     {
         m_is = is;
         if (!m_is)
@@ -196,7 +196,7 @@ namespace TADemo
         unsigned numPacketsRead = m_numPacketsRead;
         try
         {
-            doParse();
+            doParse(maxPaksToLoad);
         }
         catch (RecordReader::DataNotReadyException &)
         { }
@@ -217,7 +217,7 @@ namespace TADemo
         return m_numTimesNewDataReceived;
     }
 
-    void Parser::doParse()
+    void Parser::doParse(unsigned maxPaksToLoad)
     {
         if (!m_header)
         {
@@ -272,7 +272,7 @@ namespace TADemo
             handle(ud);
         }
 
-        for (;; ++m_numPacketsRead)
+        for (unsigned n = 0u; n < maxPaksToLoad || maxPaksToLoad == 0u; ++n, ++m_numPacketsRead)
         {
             Packet p;
             load(p);

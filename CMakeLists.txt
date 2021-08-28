@@ -4,7 +4,6 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(Qt5 COMPONENTS Core Network REQUIRED)
 
-# -------------- TALAUNCHER -------------
 
 if (WIN32)
 
@@ -14,6 +13,36 @@ if (WIN32)
     set(DIRECT_PLAY_LIBS "dplayx;dxguid")
 
     add_subdirectory(jdplay)
+
+    # -------------- REPLAYER ---------------
+    add_executable(tareplayer
+        TaReplayer.cpp
+        Logger.h
+        Logger.cpp
+        )
+
+    target_include_directories(tareplayer 
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${DIRECT_PLAY_INCLUDE_DIR})
+
+    target_link_directories(tareplayer
+        PUBLIC
+        ${DIRECT_PLAY_LIB_DIR} 
+        )
+
+    target_link_libraries(tareplayer
+        jdplay
+        tademo
+        Qt5::Core
+        Qt5::Network
+        ws2_32
+        ${DIRECT_PLAY_LIBS}
+        )
+
+    install(TARGETS tareplayer)
+
+    # -------------- TALAUNCHER -------------
 
     set(CMAKE_AUTOMOC ON)
     add_executable(talauncher

@@ -104,7 +104,7 @@ namespace TADemo
 
         Parser();
 
-        virtual bool parse(std::istream *is);
+        virtual bool parse(std::istream *is, unsigned maxPaksToLoad);
         virtual int numTimesNewDataReceived() const;
 
         virtual void handle(const Header &header) = 0;
@@ -116,7 +116,7 @@ namespace TADemo
 
     private:
 
-        virtual void doParse();
+        virtual void doParse(unsigned maxPaksToLoad);
 
         virtual void load(Header &);
         virtual void load(ExtraHeader &);

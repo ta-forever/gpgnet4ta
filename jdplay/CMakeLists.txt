@@ -1,6 +1,8 @@
 add_library(jdplay STATIC
     JDPlay.h
-    JDPlay.cpp)
+    JDPlay.cpp
+    DPlayWrapper.h
+    DPlayWrapper.cpp)
 
 target_include_directories(jdplay 
     PUBLIC
