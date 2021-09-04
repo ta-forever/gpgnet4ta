@@ -13,7 +13,7 @@ namespace tareplay {
     class TaReplayServer : public QObject
     {
     public:
-        TaReplayServer(QString demoPathTemplate, QHostAddress addr, quint16 port, quint16 delaySeconds);
+        TaReplayServer(QString demoPathTemplate, QHostAddress addr, quint16 port, quint16 delaySeconds, qint64 maxBytesPerUserPerSecond);
         ~TaReplayServer();
 
     private:
@@ -42,6 +42,7 @@ namespace tareplay {
 
         QString m_demoPathTemplate;
         quint16 m_delaySeconds;
+        qint64 m_maxBytesPerUserPerSecond;
         QTcpServer m_tcpServer;
         QMap<QTcpSocket*, QSharedPointer<UserContext> > m_users;
     };

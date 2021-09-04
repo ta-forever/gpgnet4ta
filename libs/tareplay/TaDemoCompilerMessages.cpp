@@ -2,6 +2,8 @@
 
 using namespace tareplay;
 
+const char* const HelloMessage::ID = "Hello";
+
 HelloMessage::HelloMessage():
     gameId(0u),
     playerDpId(0u)
@@ -15,13 +17,15 @@ HelloMessage::HelloMessage(QVariantList command)
 void HelloMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("Hello"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     gameId = command[1].toUInt();
     playerDpId = command[2].toUInt();
 }
+
+const char* const GameInfoMessage::ID = "GameInfo";
 
 GameInfoMessage::GameInfoMessage():
     maxUnits(1500u),
@@ -36,13 +40,15 @@ GameInfoMessage::GameInfoMessage(QVariantList command)
 void GameInfoMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("GameInfo"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     maxUnits = command[1].toUInt();
     mapName = command[2].toString();
 }
+
+const char* const GamePlayerMessage::ID = "GamePlayer";
 
 GamePlayerMessage::GamePlayerMessage():
     side(1),
@@ -57,7 +63,7 @@ GamePlayerMessage::GamePlayerMessage(QVariantList command)
 void GamePlayerMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("GamePlayer"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
@@ -65,6 +71,8 @@ void GamePlayerMessage::set(QVariantList command)
     name = command[2].toString();
     statusMessage = command[3].toByteArray();
 }
+
+const char* const GamePlayerNumber::ID = "GamePlayerNumber";
 
 GamePlayerNumber::GamePlayerNumber():
     dplayId(0u),
@@ -79,13 +87,15 @@ GamePlayerNumber::GamePlayerNumber(QVariantList command)
 void GamePlayerNumber::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("GamePlayerNumber"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     dplayId = command[1].toUInt();
     number = command[2].toUInt();
 }
+
+const char* const GamePlayerLoading::ID = "GamePlayerLoading";
 
 GamePlayerLoading::GamePlayerLoading()
 { }
@@ -98,7 +108,7 @@ GamePlayerLoading::GamePlayerLoading(QVariantList command)
 void GamePlayerLoading::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("GamePlayerLoading"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
@@ -107,6 +117,8 @@ void GamePlayerLoading::set(QVariantList command)
         lockedInPlayers.push_back(command[n].toUInt());
     }
 }
+
+const char* const GameUnitDataMessage::ID = "UnitData";
 
 GameUnitDataMessage::GameUnitDataMessage()
 { }
@@ -119,12 +131,14 @@ GameUnitDataMessage::GameUnitDataMessage(QVariantList command)
 void GameUnitDataMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("UnitData"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     unitData = command[1].toByteArray();
 }
+
+const char* const GameMoveMessage::ID = "Move";
 
 GameMoveMessage::GameMoveMessage()
 { }
@@ -137,7 +151,7 @@ GameMoveMessage::GameMoveMessage(QVariantList command)
 void GameMoveMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("Move"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }

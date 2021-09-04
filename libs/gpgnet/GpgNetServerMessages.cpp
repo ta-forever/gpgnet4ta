@@ -17,6 +17,8 @@ static void SplitAliasAndRealName(QString aliasAndReal, QString& alias, QString&
     }
 }
 
+const char* const CreateLobbyCommand::ID = "CreateLobby";
+
 CreateLobbyCommand::CreateLobbyCommand() :
     protocol(0),
     localPort(47625),
@@ -35,7 +37,7 @@ CreateLobbyCommand::CreateLobbyCommand(QVariantList command)
 void CreateLobbyCommand::Set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("CreateLobby"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
@@ -46,6 +48,8 @@ void CreateLobbyCommand::Set(QVariantList command)
     playerId = command[4].toInt();
     natTraversal = command[5].toInt();
 }
+
+const char* const HostGameCommand::ID = "HostGame";
 
 HostGameCommand::HostGameCommand() :
     mapName("SHERWOOD")
@@ -59,12 +63,14 @@ HostGameCommand::HostGameCommand(QVariantList qvl)
 void HostGameCommand::Set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("HostGame"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     mapName = command[1].toString();
 }
+
+const char* const JoinGameCommand::ID = "JoinGame";
 
 JoinGameCommand::JoinGameCommand() :
     remoteHost("127.0.0.1"),
@@ -82,7 +88,7 @@ JoinGameCommand::JoinGameCommand(QVariantList qvl)
 void JoinGameCommand::Set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("JoinGame"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
@@ -91,6 +97,8 @@ void JoinGameCommand::Set(QVariantList command)
     remotePlayerId = command[3].toInt();
     SplitAliasAndRealName(_remotePlayerName, remotePlayerAlias, remotePlayerRealName);
 }
+
+const char* const ConnectToPeerCommand::ID = "ConnectToPeer";
 
 ConnectToPeerCommand::ConnectToPeerCommand() :
     host("127.0.0.1"),
@@ -108,7 +116,7 @@ ConnectToPeerCommand::ConnectToPeerCommand(QVariantList qvl)
 void ConnectToPeerCommand::Set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("ConnectToPeer"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
@@ -117,6 +125,8 @@ void ConnectToPeerCommand::Set(QVariantList command)
     playerId = command[3].toInt();
     SplitAliasAndRealName(_playerName, playerAlias, playerRealName);
 }
+
+const char* const DisconnectFromPeerCommand::ID = "DisconnectFromPeer";
 
 DisconnectFromPeerCommand::DisconnectFromPeerCommand() :
     playerId(0)
@@ -130,7 +140,7 @@ DisconnectFromPeerCommand::DisconnectFromPeerCommand(QVariantList qvl)
 void DisconnectFromPeerCommand::Set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    if (cmd.compare("DisconnectFromPeer"))
+    if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }

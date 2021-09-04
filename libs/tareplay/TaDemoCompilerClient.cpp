@@ -1,4 +1,5 @@
 #include "TaDemoCompilerClient.h"
+#include "TaDemoCompilerMessages.h"
 #include "taflib/HexDump.h"
 #include <sstream>
 
@@ -19,7 +20,7 @@ TaDemoCompilerClient::TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, q
     m_tcpSocket.connectToHost(m_taDemoCompilerAddress, m_taDemoCompilerPort);
     if (!m_tcpSocket.waitForConnected(3000))
     {
-        throw std::runtime_error("unable to connect to TA Demo Compiler");
+        throw ConnectionError();
     }
 }
 
@@ -43,23 +44,21 @@ void TaDemoCompilerClient::setLocalPlayerName(QString name)
 void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId)
 {
     qInfo() << "[TaDemoCompilerClient::sendHello] gameid,dplayPlayerId" << gameId << dplayPlayerId;
-    m_protocol.sendCommand("Hello", 2);
+    m_protocol.sendCommand(HelloMessage::ID, 2);
     m_protocol.sendArgument(gameId);
     m_protocol.sendArgument(dplayPlayerId);
 }
 
 void TaDemoCompilerClient::sendGameInfo(quint16 maxUnits, QString mapName)
 {
-    qInfo() << "[TaDemoCompilerClient::sendGameInfo] numPlayers,maxUnits,mapName" << maxUnits << mapName;
-    m_protocol.sendCommand("GameInfo", 2);
+    m_protocol.sendCommand(GameInfoMessage::ID, 2);
     m_protocol.sendArgument(maxUnits);
     m_protocol.sendArgument(mapName.toUtf8());
 }
 
 void TaDemoCompilerClient::sendGamePlayer(qint8 side, QString name, QByteArray statusMessage)
 {
-    qInfo() << "[TaDemoCompilerClient::sendGamePlayer] side,name" << side << name;
-    m_protocol.sendCommand("GamePlayer", 3);
+    m_protocol.sendCommand(GamePlayerMessage::ID, 3);
     m_protocol.sendArgument(side);
     m_protocol.sendArgument(name.toUtf8());
     m_protocol.sendArgument(statusMessage);
@@ -68,7 +67,7 @@ void TaDemoCompilerClient::sendGamePlayer(qint8 side, QString name, QByteArray s
 void TaDemoCompilerClient::sendGamePlayerNumber(quint32 dplayId, quint8 number)
 {
     qInfo() << "[TaDemoCompilerClient::sendGamePlayerNumber] dplayid,number" << dplayId << number;
-    m_protocol.sendCommand("GamePlayerNumber", 2);
+    m_protocol.sendCommand(GamePlayerNumber::ID, 2);
     m_protocol.sendArgument(dplayId);
     m_protocol.sendArgument(number);
 }
@@ -76,7 +75,7 @@ void TaDemoCompilerClient::sendGamePlayerNumber(quint32 dplayId, quint8 number)
 void TaDemoCompilerClient::sendGamePlayerLoading(QSet<quint32> lockedInPlayers)
 {
     qInfo() << "[TaDemoCompilerClient::sendGamePlayerLoading]";
-    m_protocol.sendCommand("GamePlayerLoading", lockedInPlayers.size());
+    m_protocol.sendCommand(GamePlayerLoading::ID, lockedInPlayers.size());
     m_protocol.sendArgument(m_hostDplayId);
     for (quint32 dpid: lockedInPlayers)
     {
@@ -89,21 +88,18 @@ void TaDemoCompilerClient::sendGamePlayerLoading(QSet<quint32> lockedInPlayers)
 
 void TaDemoCompilerClient::sendUnitData(QByteArray unitData)
 {
-    qInfo() << "[TaDemoCompilerClient::sendUnitData]";
-    m_protocol.sendCommand("UnitData", 1);
+    m_protocol.sendCommand(GameUnitDataMessage::ID, 1);
     m_protocol.sendArgument(unitData);
 }
 
 void TaDemoCompilerClient::sendMoves(QByteArray moves)
 {
-    qInfo() << "[TaDemoCompilerClient::sendMoves]";
+    if (m_ticks < 3)
+    {
+        qInfo() << "[TaDemoCompilerClient::sendMoves]" << moves.size() << "bytes";
+    }
 
-    std::ostringstream ss;
-    ss << "\n";
-    taflib::HexDump(moves.data(), moves.size(), ss);
-    qInfo() << ss.str().c_str();
-
-    m_protocol.sendCommand("Move", 1);
+    m_protocol.sendCommand(GameMoveMessage::ID, 1);
     m_protocol.sendArgument(moves);
 }
 
@@ -204,10 +200,10 @@ void TaDemoCompilerClient::onTaPacket(
             tapacket::TUnitData ud(tapacket::bytestring((std::uint8_t*)s.data(), s.size()));
             if (ud.sub == 2 || ud.sub == 3)
             {
-                std::ostringstream ss;
-                ss << "unitdata:\n";
-                taflib::HexDump(s.data(), s.size(), ss);
-                qInfo() << ss.str().c_str();
+                //std::ostringstream ss;
+                //ss << "unitdata:\n";
+                //taflib::HexDump(s.data(), s.size(), ss);
+                //qInfo() << ss.str().c_str();
                 sendUnitData(QByteArray((char*)s.data(), s.size()));
             }
             break;
@@ -249,9 +245,5 @@ void TaDemoCompilerClient::onTaPacket(
     if (m_ticks >= 0)   // NB 64bit int, initialised to -1 but later populated with 32bit uint
     {
         sendMoves(filteredMoves);
-    }
-    else
-    {
-        qInfo() << "[TaDemoCompilerClient::onTaPacket] not sending because m_ticks=" << m_ticks;
     }
 }

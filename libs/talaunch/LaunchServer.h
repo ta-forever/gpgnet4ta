@@ -13,6 +13,7 @@ namespace talaunch {
     {
         Q_OBJECT
 
+        const int m_keepAliveTimeout;
         QTcpServer m_tcpServer;
         QList<QTcpSocket*> m_tcpSockets;
         std::shared_ptr<jdplay::JDPlay> m_jdPlay;
@@ -25,15 +26,15 @@ namespace talaunch {
         void gameExitedWithError(quint32 exitCode);
 
     public:
-        LaunchServer(QHostAddress addr, quint16 port);
+        LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout);
 
     private:
 
         void onNewConnection();
         void onReadyReadTcp();
+        void launchGame(QString _guid, QString _player, QString _ipaddr, bool asHost, bool doSearch);
         void onSocketStateChanged(QAbstractSocket::SocketState socketState);
         void timerEvent(QTimerEvent* event);
-        void launchGame(QString gameGuid, QString playerName, QString gameAddress, bool asHost);
         void notifyClients(QString msg);
     };
 

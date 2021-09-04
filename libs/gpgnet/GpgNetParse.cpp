@@ -2,6 +2,7 @@
 
 #include <QtCore/qsharedpointer.h>
 
+
 using namespace gpgnet;
 
 GpgNetParse::RecordReader::RecordReader():

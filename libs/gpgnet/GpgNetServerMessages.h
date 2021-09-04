@@ -15,6 +15,7 @@ namespace gpgnet
         int playerId;
         int natTraversal;
 
+        static const char* const ID;
         CreateLobbyCommand();
         CreateLobbyCommand(QVariantList command);
         void Set(QVariantList command);
@@ -24,6 +25,7 @@ namespace gpgnet
     {
         QString mapName;
 
+        static const char* const ID;
         HostGameCommand();
         HostGameCommand(QVariantList qvl);
         void Set(QVariantList command);
@@ -37,6 +39,7 @@ namespace gpgnet
         QString remotePlayerRealName;
         int remotePlayerId;
 
+        static const char* const ID;
         JoinGameCommand();
         JoinGameCommand(QVariantList qvl);
         void Set(QVariantList command);
@@ -50,6 +53,7 @@ namespace gpgnet
         QString playerRealName;
         int playerId;
 
+        static const char* const ID;
         ConnectToPeerCommand();
         ConnectToPeerCommand(QVariantList qvl);
         void Set(QVariantList command);
@@ -59,6 +63,7 @@ namespace gpgnet
     {
         int playerId;
 
+        static const char* const ID;
         DisconnectFromPeerCommand();
         DisconnectFromPeerCommand(QVariantList qvl);
         void Set(QVariantList command);

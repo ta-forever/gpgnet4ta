@@ -18,15 +18,16 @@ TaReplayClient::TaReplayClient(QHostAddress replayServerAddress, quint16 replayS
     m_gpgNetSerialiser(m_socketStream),
     m_status(TaReplayServerStatus::CONNECTING)
 {
-    QString tempFileName;
-    {
-        QTemporaryFile tmpfile(QDir::tempPath() + QString("/taf-replay-%1").arg(tafGameId) + ".XXXXXX.tad");
-        tmpfile.open();
-        tempFileName = tmpfile.fileName();
-        qInfo() << "[TaReplayClient::TaReplayClient] replay buffer file:" << tempFileName;
-    }
-    m_replayBufferOStream.open(tempFileName.toStdString(), std::ios::out | std::ios::binary);
-    m_replayBufferIStream.open(tempFileName.toStdString(), std::ios::in | std::ios::binary);
+    QTemporaryFile tmpfile(QDir::tempPath() + QString("/taf-replay-%1").arg(tafGameId) + ".XXXXXX.tad");
+    tmpfile.open();
+    m_tempFilename = tmpfile.fileName();
+    qInfo() << "[TaReplayClient::TaReplayClient] replay buffer file:" << m_tempFilename;
+
+    m_replayBufferOStream.open(m_tempFilename.toStdString(), std::ios::out | std::ios::binary);
+    qInfo() << "[TaReplayClient::TaReplayClient] ostream opened. good,eof,fail,bad=" << m_replayBufferOStream.good() << m_replayBufferOStream.eof() << m_replayBufferOStream.fail() << m_replayBufferOStream.bad();
+
+    m_replayBufferIStream.open(m_tempFilename.toStdString(), std::ios::in | std::ios::binary);
+    qInfo() << "[TaReplayClient::TaReplayClient] istream opened. good,eof,fail,bad=" << m_replayBufferIStream.good() << m_replayBufferIStream.eof() << m_replayBufferIStream.fail() << m_replayBufferIStream.bad();
 
     m_socketStream.setByteOrder(QDataStream::ByteOrder::LittleEndian);
     QObject::connect(&m_tcpSocket, &QTcpSocket::readyRead, this, &TaReplayClient::onReadyRead);
@@ -36,11 +37,25 @@ TaReplayClient::TaReplayClient(QHostAddress replayServerAddress, quint16 replayS
 
 TaReplayClient::~TaReplayClient()
 {
+    m_replayBufferOStream.close();
+    m_replayBufferIStream.close();
+    QDir().remove(m_tempFilename);
 }
 
 void TaReplayClient::timerEvent(QTimerEvent* event)
 {
-    connect();
+    try
+    {
+        connect();
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaReplayClient::timerEvent] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaReplayClient::timerEvent] general exception:";
+    }
 }
 
 void TaReplayClient::connect()
@@ -54,15 +69,26 @@ void TaReplayClient::connect()
 
 void TaReplayClient::onSocketStateChanged(QAbstractSocket::SocketState socketState)
 {
-    if (socketState == QAbstractSocket::UnconnectedState)
+    try
     {
-        qWarning() << "[TaReplayClient::onSocketStateChanged] socket disconnected";
-        m_status = TaReplayServerStatus::CONNECTING;
+        if (socketState == QAbstractSocket::UnconnectedState)
+        {
+            qWarning() << "[TaReplayClient::onSocketStateChanged] socket disconnected";
+            m_status = TaReplayServerStatus::CONNECTING;
+        }
+        else if (socketState == QAbstractSocket::ConnectedState)
+        {
+            qInfo() << "[TaReplayClient::onSocketStateChanged] socket connected";
+            sendSubscribe(m_tafGameId, m_position);
+        }
     }
-    else if (socketState == QAbstractSocket::ConnectedState)
+    catch (const std::exception & e)
     {
-        qInfo() << "[TaReplayClient::onSocketStateChanged] socket connected";
-        sendSubscribe(m_tafGameId, m_position);
+        qWarning() << "[TaReplayClient::onSocketStateChanged] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaReplayClient::onSocketStateChanged] general exception:";
     }
 }
 
@@ -99,7 +125,6 @@ void TaReplayClient::onReadyRead()
             else
             {
                 qWarning() << "[TaReplayClient::onReadyRead] unexpected message from replay server!" << cmd;
-                continue;
             }
         }
         m_replayBufferOStream.flush();

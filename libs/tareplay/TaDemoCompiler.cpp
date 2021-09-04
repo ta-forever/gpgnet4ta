@@ -110,13 +110,11 @@ void TaDemoCompiler::onReadyRead()
         auto itUserContext = m_players.find(sender);
         if (itUserContext == m_players.end())
         {
-            qWarning() << "[TaDemoCompiler::onReadyRead] received data from unknown user!";
-            return;
+            throw std::runtime_error("received data from unknown user!");
         }
         if (!itUserContext.value()->dataStream)
         {
-            qCritical() << "[TaDemoCompiler::onReadyRead] null datastream for player" << itUserContext.value()->playerDpId << "in game" << itUserContext.value()->gameId;
-            return;
+            throw std::runtime_error("null datastream!");;
         }
         UserContext& userContext = *itUserContext.value().data();
 
@@ -143,7 +141,7 @@ void TaDemoCompiler::onReadyRead()
                     }
                 }
             }
-            else if (cmd == "Hello")
+            else if (cmd == HelloMessage::ID)
             {
                 HelloMessage msg(command);
                 qInfo() << "[TaDemoCompiler::onReadyRead] received Hello from player" << msg.playerDpId << "in game" << msg.gameId;
@@ -151,33 +149,28 @@ void TaDemoCompiler::onReadyRead()
                 userContext.playerDpId = msg.playerDpId;
                 m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
             }
-            else if (cmd == "GameInfo")
+            else if (cmd == GameInfoMessage::ID)
             {
                 GameContext& game = m_games[userContext.gameId];
-                qInfo() << "[TaDemoCompiler::onReadyRead] player" << userContext.playerDpId << "forwarded header for game" << userContext.gameId;
                 game.gameId = userContext.gameId;
                 game.expiryCountdown = GAME_EXPIRY_TICKS;
                 game.header = GameInfoMessage(command);
             }
-            else if (cmd == "GamePlayer")
+            else if (cmd == GamePlayerMessage::ID)
             {
-                //qInfo() << "[TaDemoCompiler::onReadyRead] player" << itUserContext->playerDpId << "forwarded player info";
                 auto itGame = m_games.find(userContext.gameId);
                 if (itGame != m_games.end())
                 {
                     GameContext& game = itGame.value();
-                    qInfo() << "[TaDemoCompiler::onReadyRead] player" << userContext.playerDpId << "forwarded player info for game" << game.gameId;
                     game.expiryCountdown = GAME_EXPIRY_TICKS;
                     game.players[userContext.playerDpId]->gamePlayerInfo = GamePlayerMessage(command);
                 }
             }
-            else if (cmd == "UnitData")
+            else if (cmd == GameUnitDataMessage::ID)
             {
-                //qInfo() << "[TaDemoCompiler::onReadyRead] player" << itUserContext->playerDpId << "forwarded unit data";
                 auto itGame = m_games.find(userContext.gameId);
                 if (itGame != m_games.end())
                 {
-                    //qInfo() << "[TaDemoCompiler::onReadyRead] player" << itUserContext->playerDpId << "forwarded unit data for game" << itGame->gameId;
                     GameUnitDataMessage msg(command);
                     tapacket::TUnitData ud(tapacket::bytestring((std::uint8_t*)msg.unitData.data(), msg.unitData.size()));
                     GameContext& game = itGame.value();
@@ -193,7 +186,7 @@ void TaDemoCompiler::onReadyRead()
                     }
                 }
             }
-            else if (cmd == "GamePlayerLoading")
+            else if (cmd == GamePlayerLoading::ID)
             {
                 GamePlayerLoading msg(command);
                 std::ostringstream ss;
@@ -209,7 +202,9 @@ void TaDemoCompiler::onReadyRead()
                     if (!itGame->demoCompilation)
                     {
                         itGame->playersLockedIn = msg.lockedInPlayers;
-                        itGame->demoCompilation = commitHeaders(itGame.value());
+                        itGame->finalFileName = m_demoPathTemplate.arg(itGame->gameId);
+                        itGame->tempFileName = itGame->finalFileName + ".part";
+                        itGame->demoCompilation = commitHeaders(itGame.value(), itGame->tempFileName);
                     }
                 }
             }
@@ -237,9 +232,8 @@ void TaDemoCompiler::onReadyRead()
     }
 }
 
-std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& game)
+std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& game, QString filename)
 {
-    QString filename = m_demoPathTemplate.arg(game.gameId);
     qInfo() << "[TaDemoCompiler::onReadyRead] creating new demo compilation" << filename;
 
     for (int numPlayer = 0; numPlayer < game.playersLockedIn.size(); ++numPlayer)
@@ -327,7 +321,18 @@ void TaDemoCompiler::commitMove(const TaDemoCompiler::GameContext& game, int pla
 
 void TaDemoCompiler::timerEvent(QTimerEvent* event)
 {
-    closeExpiredGames();
+    try
+    {
+        closeExpiredGames();
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaDemoCompiler::timerEvent] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaDemoCompiler::timerEvent] general exception:";
+    }
 }
 
 void TaDemoCompiler::closeExpiredGames()
@@ -343,7 +348,12 @@ void TaDemoCompiler::closeExpiredGames()
 
     for (quint32 gameid : expiredGameIds)
     {
-        qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing";
+        if (m_games[gameid].demoCompilation)
+        {
+            qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing" << m_games[gameid].finalFileName;
+            m_games[gameid].demoCompilation.reset();
+            QFile::rename(m_games[gameid].tempFileName, m_games[gameid].finalFileName);
+        }
         m_games.remove(gameid);
     }
 }

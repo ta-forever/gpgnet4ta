@@ -234,7 +234,7 @@ void GpgNetGameLauncher::onLaunchGame()
     }
 
     m_alreadyLaunched = true;
-    m_pollStillActiveTimer.start(3000);
+    m_pollStillActiveTimer.start(1000);
 
     m_gpgNetClient.sendGameState("Lobby", "Battleroom");
     emit gameLaunched();

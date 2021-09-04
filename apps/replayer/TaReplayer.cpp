@@ -1,22 +1,11 @@
-#include <QtCore/qcoreapplication.h>
-#include <QtCore/qcommandlineparser.h>
-#include <QtCore/qdir.h>
-#include <QtCore/qtemporaryfile.h>
-#include <QtCore/qthread.h>
-
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <memory>
-#include <set>
-#include <queue>
-#include <algorithm>
+#include "TaReplayer.h"
 
 #include "jdplay/JDPlay.h"
 #include "taflib/HexDump.h"
 #include "taflib/Logger.h"
-#include "tapacket/TADemoParser.h"
-#include "tareplay/TaReplayClient.h"
+
+#include <dplay.h>
+#include <sstream>
 
 #ifdef min
 #undef min
@@ -26,131 +15,7 @@
 #undef max
 #endif
 
-class Replayer : public QObject, public tapacket::Parser
-{
-    enum class ReplayState
-    {
-        LOADING_DEMO_PLAYERS,
-        LOBBY,
-        LAUNCH,
-        LOAD,
-        PLAY,
-        DONE
-    };
-
-    struct DemoPlayer : public tapacket::Player
-    {
-        DemoPlayer(const tapacket::Player& demoPlayer);
-        int ordinalId;              // 0 to 9
-        std::uint32_t dpId;
-        std::uint32_t originalDpId;
-        tapacket::bytestring statusPacket;
-        std::uint32_t ticks;
-    };
-
-    enum class DpPlayerState
-    {
-        START_SYNC = 0,
-        SEND_UNITS = 1,
-        WAIT_RECEIVE_UNITS = 2,
-        CHECK_ERRORS = 3,
-        SEND_ACKS = 4,
-        WAIT_ACKS = 5,
-        END_SYNC = 6,
-        WAIT_GO = 7,
-        LOADING = 8,
-        PLAYING = 9
-    };
-
-    struct DpPlayer
-    {
-        DpPlayer(std::uint32_t dpid);
-        int ordinalId;              // 0 to 9
-        std::uint32_t dpid;
-        std::uint32_t ticks;
-        tapacket::bytestring statusPacket;
-        DpPlayerState state;
-        int unitSyncSendCount;      //Number of $1a sent to this player.
-        int unitSyncNextUnit;       //What unit we should send.
-        int unitSyncErrorCount;     //Number of faulty units
-        int unitSyncAckCount;       //Number of units the client responded to with crc. 
-                                    //(alternatively: responded with crc on) 
-        int unitSyncReceiveCount;   //Number of $1a it claims to have recieved 
-        bool hasTaken;              //True if this player has taken control over someone.
-    };
-
-    struct UnitInfo
-    {
-        UnitInfo();
-        std::uint32_t id;
-        std::uint32_t crc;
-        std::uint16_t limit;
-        bool inUse;
-    };
-
-    const std::uint32_t SY_UNIT_ID = 0x92549357;
-    const double WALL_TO_GAME_TICK_RATIO = 1.0; // wall clock 33ms, game clock 33ms
-    const unsigned NUM_PAKS_TO_PRELOAD = 100u;
-    const int UNITS_SYNC_PER_TICK = 100;
-
-    int m_timerId;
-    std::shared_ptr<jdplay::JDPlay> m_jdPlay;
-    std::uint32_t m_tcpSeq;
-    std::uint32_t m_wallClockTicks;
-    std::uint32_t m_demoTicks;
-    std::uint32_t m_targetTicks;
-    double m_targetTicksFractional;
-    unsigned m_playBackSpeed;
-    ReplayState m_state;
-    bool m_isPaused;
-    std::istream *m_demoDataStream;
-
-    std::vector<std::uint32_t> m_dpIdsPrealloc;
-    tapacket::Header m_header;
-    std::vector<std::shared_ptr<DemoPlayer> > m_demoPlayers;
-    std::map<std::uint32_t, std::shared_ptr<DemoPlayer> > m_demoPlayersById;// keyed by dpid  @todo do we need this?
-    std::map<std::uint32_t, std::shared_ptr<DpPlayer> > m_dpPlayers;  // keyed by dpid
-    std::map<std::uint32_t, UnitInfo> m_demoUnitInfo;               // keyed by unit id
-    std::vector<const UnitInfo*> m_demoUnitInfoLinear;              // pointers into m_demoUnitInfo
-    std::uint32_t m_demoUnitsCrc;
-    std::queue<std::pair<tapacket::Packet, std::vector<tapacket::bytestring> > > m_pendingGamePackets; // source player number (NOT dpid) and subpak
-
-public:
-    Replayer(std::istream*);
-
-    void hostGame(QString _guid, QString _player, QString _ipaddr);
-
-    virtual void handle(const tapacket::Header& header);
-    virtual void handle(const tapacket::Player& player, int n, int ofTotal);
-    virtual void handle(const tapacket::ExtraSector& es, int n, int ofTotal) {}
-    virtual void handle(const tapacket::PlayerStatusMessage& msg, std::uint32_t dplayid, int n, int ofTotal);
-    virtual void handle(const tapacket::UnitData& unitData);
-    virtual void handle(const tapacket::Packet& packet, const std::vector<tapacket::bytestring>& unpaked, std::size_t n);
-
-private:
-    void timerEvent(QTimerEvent* event) override;
-    void onLobbySystemMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
-    void onLobbyTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
-    void onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
-    void onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
-
-    void send(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak);
-    void sendUdp(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak);
-    void say(std::uint32_t fromId, const std::string& text);
-    void createSonar(std::uint32_t receivingDpId, unsigned number);
-    std::shared_ptr<DemoPlayer> getDemoPlayerByOriginalDpId(std::uint32_t originalDpId);
-
-    void onCompletedLoadingDemoPlayers();
-    bool doLobby();
-    void doLaunch();
-    bool doLoad();
-    bool doPlay();
-    int doSyncWatcher(DpPlayer& dpPlayer);
-    void sendPlayerInfos();
-    void processUnitData(const tapacket::TUnitData& unitData);
-};
-
-Replayer::Replayer(std::istream *demoDataStream) :
+Replayer::Replayer(std::istream* demoDataStream) :
     m_timerId(startTimer(100, Qt::TimerType::PreciseTimer)),
     m_tcpSeq(0xfffffffe),
     m_wallClockTicks(0u),
@@ -160,10 +25,12 @@ Replayer::Replayer(std::istream *demoDataStream) :
     m_playBackSpeed(10u),
     m_state(ReplayState::LOADING_DEMO_PLAYERS),
     m_isPaused(false),
-    m_demoDataStream(demoDataStream)
+    m_tickLastUserPauseEvent(0u),
+    m_demoDataStream(demoDataStream),
+    m_launch(true)
 { }
 
-Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player):
+Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
     tapacket::Player(player),
     dpId(0u),
     originalDpId(0u),
@@ -182,7 +49,7 @@ Replayer::DpPlayer::DpPlayer(std::uint32_t dpid) :
     hasTaken(false)
 { }
 
-Replayer::UnitInfo::UnitInfo():
+Replayer::UnitInfo::UnitInfo() :
     id(0u),
     crc(0u),
     limit(0u),
@@ -222,11 +89,11 @@ std::shared_ptr<Replayer::DemoPlayer> Replayer::getDemoPlayerByOriginalDpId(std:
 
 void Replayer::hostGame(QString _guid, QString _player, QString _ipaddr)
 {
-    qInfo() << "[Replayer::handle] player=" << _player;
     std::string guid = _guid.toStdString();
     std::string player = _player.toStdString();
     std::string ipaddr = _ipaddr.toStdString();
 
+    qInfo() << "[Replayer::hostGame]" << guid.c_str() << player.c_str() << ipaddr.c_str();
     m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 3, false));
     if (!m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), true, 10))
     {
@@ -252,12 +119,11 @@ void Replayer::hostGame(QString _guid, QString _player, QString _ipaddr)
             ss << "dpIdPrealloc" << n;
             std::uint32_t dpid = m_jdPlay->dpCreatePlayer(ss.str().c_str());
             m_dpIdsPrealloc.push_back(dpid);
-            qInfo() << ss.str().c_str() << '/' << dpid;
         }
 
         if (m_dpIdsPrealloc.front() > m_dpIdsPrealloc.back())
         {
-            qWarning() << "[Replayer::hostGame] bad dpIdPrealloc!";
+            qWarning() << "[Replayer::hostGame] don't like these DPIDs (they may confuse the user's instance). reallocating ...";
             while (!m_dpIdsPrealloc.empty())
             {
                 m_jdPlay->dpDestroyPlayer(m_dpIdsPrealloc.back());
@@ -314,7 +180,7 @@ void Replayer::handle(const tapacket::UnitData& unitData)
     {
         m_demoUnitInfo.erase(*it);
     }
-    
+
     UnitInfo& syUnit = m_demoUnitInfo[SY_UNIT_ID];
     syUnit.id = SY_UNIT_ID;
     syUnit.crc = 0u;
@@ -374,60 +240,76 @@ void Replayer::handle(const tapacket::Packet& packet, const std::vector<tapacket
 
 void Replayer::timerEvent(QTimerEvent* event)
 {
-    ++m_wallClockTicks;
-    if (m_state != ReplayState::PLAY && m_state != ReplayState::DONE && m_pendingGamePackets.size() < 1u)
+    try
     {
-        this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
+        ++m_wallClockTicks;
+        if (m_state != ReplayState::PLAY && m_state != ReplayState::DONE && m_pendingGamePackets.size() < 1u)
+        {
+            this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
+        }
+
+        switch (m_state) {
+        case ReplayState::LOADING_DEMO_PLAYERS:
+            if (this->m_pendingGamePackets.size() > 0u && m_demoPlayers.size() > 0u && m_demoPlayers.back()->originalDpId != 0u)
+            {
+                onCompletedLoadingDemoPlayers();
+                m_state = ReplayState::LOBBY;
+                qInfo() << "LOBBY";
+                m_wallClockTicks = 0u;   // we're going to use it to indicate load progress
+            }
+            break;
+
+        case ReplayState::LOBBY:
+            if (m_launch)
+            {
+                m_launch = false;
+                emit readyToJoin();
+            }
+            if (doLobby())
+            {
+                m_state = ReplayState::LAUNCH;
+                qInfo() << "LAUNCH";
+            }
+            break;
+
+        case ReplayState::LAUNCH:
+            doLaunch();
+            m_state = ReplayState::LOAD;
+            qInfo() << "LOAD";
+            m_wallClockTicks = 0u;   // we're going to use it to indicate load progress
+            //break;
+
+        case ReplayState::LOAD:
+            if (doLoad())
+            {
+                m_state = ReplayState::PLAY;
+                qInfo() << "PLAY";
+                m_wallClockTicks = 0u;
+                killTimer(m_timerId);
+                m_timerId = startTimer(33, Qt::TimerType::PreciseTimer);
+            }
+            break;
+
+        case ReplayState::PLAY:
+            if (doPlay())
+            {
+                m_state = ReplayState::DONE;
+                qInfo() << "DONE";
+            }
+            break;
+
+        case ReplayState::DONE:
+            break;
+        };
     }
-
-    switch (m_state) {
-    case ReplayState::LOADING_DEMO_PLAYERS:
-        qInfo() << "LOADING_DEMO_PLAYERS";
-        if (m_demoPlayers.size() > 0u && m_demoPlayers.back()->originalDpId != 0u)
-        {
-            onCompletedLoadingDemoPlayers();
-            m_state = ReplayState::LOBBY;
-            qInfo() << "LOBBY";
-        }
-        break;
-
-    case ReplayState::LOBBY:
-        if (doLobby())
-        {
-            m_state = ReplayState::LAUNCH;
-            qInfo() << "LAUNCH";
-        }
-        break;
-
-    case ReplayState::LAUNCH:
-        doLaunch();
-        m_state = ReplayState::LOAD;
-        qInfo() << "LOAD";
-        m_wallClockTicks = 0u;   // we're going to use it to indicate load progress
-        //break;
-
-    case ReplayState::LOAD:
-        if (doLoad())
-        {
-            m_state = ReplayState::PLAY;
-            qInfo() << "PLAY";
-            m_wallClockTicks = 0u;
-            killTimer(m_timerId);
-            m_timerId = startTimer(33, Qt::TimerType::PreciseTimer);
-        }
-        break;
-
-    case ReplayState::PLAY:
-        if (doPlay())
-        {
-            m_state = ReplayState::DONE;
-            qInfo() << "DONE";
-        }
-        break;
-
-    case ReplayState::DONE:
-        break;
-    };
+    catch (const std::exception & e)
+    {
+        qWarning() << "[Replayer::timerEvent] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[Replayer::timerEvent] general exception:";
+    }
 }
 
 bool Replayer::doLobby()
@@ -452,7 +334,6 @@ bool Replayer::doLobby()
     int goCount = 0;
     if (m_wallClockTicks % 10u == 0u)
     {
-        m_wallClockTicks = 0u;
         sendPlayerInfos();
         for (auto& dpPlayer : m_dpPlayers)
         {
@@ -525,7 +406,7 @@ void Replayer::onCompletedLoadingDemoPlayers()
         std::uint32_t dpid = m_demoPlayers[n]->dpId = m_dpIdsPrealloc[n];
         m_demoPlayersById[dpid] = m_demoPlayers[n];
         m_jdPlay->dpSetPlayerName(dpid, m_demoPlayers[n]->name.c_str());
-        qInfo() << "[Replayer] name:" << m_demoPlayers[n]->name.c_str() << "originalDpId:" << m_demoPlayers[n]->originalDpId << "dpId:" << dpid;
+        qInfo() << "[Replayer::onCompletedLoadingDemoPlayers] name:" << m_demoPlayers[n]->name.c_str() << "originalDpId:" << m_demoPlayers[n]->originalDpId << "dpId:" << dpid;
     }
 
     std::sort(m_demoPlayers.begin(), m_demoPlayers.end(), [](std::shared_ptr<DemoPlayer> a, std::shared_ptr<DemoPlayer> b)
@@ -539,11 +420,6 @@ void Replayer::onCompletedLoadingDemoPlayers()
         m_dpIdsPrealloc.pop_back();
     }
 
-    std::cout << "\ndemoplayers:\n";
-    for (const auto &demoPlayer: m_demoPlayers)
-    {
-        std::cout << demoPlayer->name << ":\tnumber=" << int(demoPlayer->number) << ", oid=" << demoPlayer->originalDpId << ", dpid=" << demoPlayer->dpId << std::endl;
-    }
     m_jdPlay->dpEnumPlayers();
 }
 
@@ -574,7 +450,7 @@ void Replayer::onLobbySystemMessage(std::uint32_t sourceDplayId, std::uint32_t o
     }
     case DPSYS_SETSESSIONDESC:
     {
-        qInfo() << "[Replayer::timerEvent] DPMSG session descrioption";
+        qInfo() << "[Replayer::timerEvent] DPMSG session description";
         break;
     }
     default:
@@ -623,14 +499,12 @@ void Replayer::onLobbyTaMessage(std::uint32_t sourceDplayId, std::uint32_t other
         case tapacket::SubPacketCode::PING_02:
         {
             tapacket::TPing ping(s);
-            //qInfo() << "[Replayer::parseTaPacket] ping. from=" << ping.from << "id=" << ping.id << "value=" << ping.value;
             ping.value = 1000000u + std::uint32_t(rand()) % 1000000u;
             this->send(otherDplayId, sourceDplayId, ping.asSubPacket());
             break;
         }
         case tapacket::SubPacketCode::UNIT_DATA_1A:
         {
-            //qInfo() << "[Replayer::onLobbyTaMessage] unit types sync";
             auto itWatcher = m_dpPlayers.find(sourceDplayId);
             if (itWatcher != m_dpPlayers.end())
             {
@@ -656,8 +530,10 @@ void Replayer::onLobbyTaMessage(std::uint32_t sourceDplayId, std::uint32_t other
                 {
                     itWatcher->second->unitSyncReceiveCount = unitData.u.statusAndLimit[0];
                 }
-
-                qInfo() << "[Replayer::onLobbyTaMessage] unitData: id,sub,crc,crc,status=" << unitData.id << ',' << (int)unitData.sub << ',' << unitData.u.crc << ',' << unitInfoCrc << ',' << unitData.u.statusAndLimit[0];
+                else if (unitData.sub == 0x09)
+                {
+                    qInfo() << "[Replayer::onLobbyTaMessage] unitData: id,sub,crc,crc,status=" << unitData.id << ',' << (int)unitData.sub << ',' << unitData.u.crc << ',' << unitInfoCrc << ',' << unitData.u.statusAndLimit[0];
+                }
             }
             break;
         }
@@ -701,13 +577,18 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
         {
             const UnitInfo* unitInfo = m_demoUnitInfoLinear[dpPlayer.unitSyncNextUnit];
             tapacket::TUnitData msg(unitInfo->id, unitInfo->limit, true);
-            qInfo() << "[Replayer::doSyncWatcher] SEND_UNITS" << dpPlayerId << ": n,id,limit,inUse="
-                << dpPlayer.unitSyncNextUnit << ',' << unitInfo->id << ',' << unitInfo->limit << ',' << unitInfo->inUse;
             this->send(hostDpId, dpPlayer.dpid, msg.asSubPacket());
             ++dpPlayer.unitSyncNextUnit;
             ++dpPlayer.unitSyncSendCount;
             if (dpPlayer.unitSyncNextUnit == m_demoUnitInfoLinear.size())
             {
+                //tapacket::TUnitData msg(unitInfo->id, unitInfo->limit, true);
+                //msg.sub = 9;
+                //msg.id = 0;
+                //msg.fill = 0;
+                //this->send(hostDpId, dpPlayer.dpid, msg.asSubPacket());
+
+                qInfo() << "[Replayer::doSyncWatcher] Sent all units - " << dpPlayer.unitSyncSendCount;
                 std::ostringstream ss;
                 ss << "*** Sent all units - " << dpPlayer.unitSyncSendCount;
                 this->say(hostDpId, ss.str());
@@ -720,15 +601,15 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::WAIT_RECEIVE_UNITS:
     {
-        qInfo() << "[Replayer::doSyncWatcher] WAIT_RECEIVE_UNITS" << dpPlayerId << ": unitSyncNextUnit,unitSyncReceiveCount=" << dpPlayer.unitSyncNextUnit << ',' << dpPlayer.unitSyncReceiveCount;
         ++dpPlayer.unitSyncNextUnit;
-        if (dpPlayer.unitSyncReceiveCount+1 >= dpPlayer.unitSyncSendCount)
+        if (dpPlayer.unitSyncReceiveCount + 1 >= dpPlayer.unitSyncSendCount)
         {
             dpPlayer.unitSyncSendCount = dpPlayer.unitSyncReceiveCount;
             dpPlayer.state = DpPlayerState::CHECK_ERRORS;
         }
-        if (dpPlayer.unitSyncNextUnit > 10u)
+        else if (dpPlayer.unitSyncNextUnit > 10u)
         {
+            qInfo() << "[Replayer::doSyncWatcher] Current ack status:" << dpPlayer.unitSyncReceiveCount << "of" << dpPlayer.unitSyncSendCount;
             std::ostringstream ss;
             ss << "*** Current ack status: " << dpPlayer.unitSyncReceiveCount << " of " << dpPlayer.unitSyncSendCount;
             this->say(hostDpId, ss.str());
@@ -739,15 +620,16 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::CHECK_ERRORS:
     {
-        qInfo() << "[replayer::doSyncWatcher] CHECK_ERRORS" << dpPlayerId << ": errorCount,ackCount=" << dpPlayer.unitSyncErrorCount << ',' << dpPlayer.unitSyncAckCount;
         if (dpPlayer.unitSyncErrorCount != 0u)
         {
+            qInfo() << "[Replayer::doSyncWatcher] CRC errors on" << dpPlayer.unitSyncErrorCount << "units!";
             std::ostringstream ss;
             ss << "*** You have CRC errors on " << dpPlayer.unitSyncErrorCount << " units!";
             this->say(hostDpId, ss.str());
         }
         if (dpPlayer.unitSyncAckCount < m_demoUnitInfo.size())
         {
+            qInfo() << "[Replayer::doSyncWatcher] You are missing" << m_demoUnitInfo.size() - dpPlayer.unitSyncAckCount << "of" << m_demoUnitInfo.size() << "units!";
             std::ostringstream ss;
             ss << "*** You are missing " << m_demoUnitInfo.size() - dpPlayer.unitSyncAckCount << " of " << m_demoUnitInfo.size() << " units!";
             this->say(hostDpId, ss.str());
@@ -759,7 +641,6 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::SEND_ACKS:
     {
-        qInfo() << "[replayer::doSyncWatcher] SEND_ACKS" << dpPlayerId;
         for (std::size_t n = 0u; n < UNITS_SYNC_PER_TICK; ++n)
         {
             const UnitInfo& unitInfo = *m_demoUnitInfoLinear[dpPlayer.unitSyncNextUnit];
@@ -769,26 +650,26 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
             ++dpPlayer.unitSyncSendCount;
             if (dpPlayer.unitSyncNextUnit == m_demoUnitInfo.size())
             {
+                qInfo() << "[Replayer::doSyncWatcher] Sent ack on all units -" << dpPlayer.unitSyncSendCount;
                 std::ostringstream ss;
                 ss << "*** Sent ack on all units - " << dpPlayer.unitSyncSendCount;
                 this->say(hostDpId, ss.str());
                 dpPlayer.unitSyncNextUnit = 0u;
                 dpPlayer.state = DpPlayerState::WAIT_ACKS;
-                dpPlayer.unitSyncNextUnit = 0u;
             }
         }
         break;
     }
     case DpPlayerState::WAIT_ACKS:
     {
-        qInfo() << "[replayer::doSyncWatcher] WAIT_ACKS" << ": unitSyncNextUnit=" << dpPlayer.unitSyncNextUnit;
         ++dpPlayer.unitSyncNextUnit;
         if (dpPlayer.unitSyncReceiveCount == dpPlayer.unitSyncSendCount)
         {
             dpPlayer.state = DpPlayerState::END_SYNC;
         }
-        if (dpPlayer.unitSyncNextUnit > 20u)
+        else if (dpPlayer.unitSyncNextUnit > 30u)
         {
+            qInfo() << "[replayer::doSyncWatcher] Current ack status:" << dpPlayer.unitSyncReceiveCount << "of" << dpPlayer.unitSyncSendCount;
             std::ostringstream ss;
             ss << "*** Current ack status: " << dpPlayer.unitSyncReceiveCount << " of " << dpPlayer.unitSyncSendCount;
             this->say(hostDpId, ss.str());
@@ -800,13 +681,12 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::END_SYNC:
     {
-        qInfo() << "[replayer::doSyncWatcher] END_SYNC" << dpPlayerId;
+        qInfo() << "[replayer::doSyncWatcher] Unit sync is complete";
         this->say(hostDpId, "*** Unit sync is complete");
         dpPlayer.state = DpPlayerState::WAIT_GO;
         break;
     }
     case DpPlayerState::WAIT_GO:
-        qInfo() << "[replayer::doSyncWatcher] WAIT_GO" << dpPlayerId;
         tapacket::TPlayerInfo playerInfo(dpPlayer.statusPacket);
         if (playerInfo.isClickedIn())
         {
@@ -868,7 +748,7 @@ bool Replayer::doLoad()
         }
     }
 
-    if (m_wallClockTicks == 20u)
+    if (m_wallClockTicks % 10u == 0u && m_wallClockTicks >= 20u)
     {
         for (const auto& demoPlayer : m_demoPlayers)
         {
@@ -898,7 +778,7 @@ bool Replayer::doLoad()
     return false;
 }
 
-void Replayer::onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t destDplayId, const std::uint8_t *_payload, int _payloadSize)
+void Replayer::onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t destDplayId, const std::uint8_t* _payload, int _payloadSize)
 {
     tapacket::bytestring payload((const std::uint8_t*)_payload, _payloadSize);
     {
@@ -920,9 +800,19 @@ void Replayer::onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t des
         }
     }
 
+    //std::ostringstream ss;
+    //ss << "[Replayer::onLoadingTaMessage] decompressed:\n";
+    //taflib::HexDump(payload.data(), payload.size(), ss);
+    //qInfo() << ss.str().c_str();
+
     std::vector<tapacket::bytestring> subpaks = tapacket::TPacket::unsmartpak(payload, true, true);
     for (const tapacket::bytestring& s : subpaks)
     {
+        //std::ostringstream ss;
+        //ss << "[Replayer::onLoadingTaMessage] subpak:\n";
+        //taflib::HexDump(s.data(), s.size(), ss);
+        //qInfo() << ss.str().c_str();
+
         unsigned expectedSize = tapacket::TPacket::getExpectedSubPacketSize(s);
         if (expectedSize == 0u || s.size() != expectedSize)
         {
@@ -934,17 +824,18 @@ void Replayer::onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t des
             continue;
         }
 
-        if (tapacket::SubPacketCode(s[0]) == tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C)
+        switch(tapacket::SubPacketCode(s[0]))
         {
+        case tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
+        case tapacket::SubPacketCode::START_15:
             auto it = m_dpPlayers.find(sourceDplayId);
             if (it != m_dpPlayers.end())
             {
-                //qInfo() << "[Replayer::onLoadingTaMessage] UNIT_STAT_AND_MOVE dpid=" << it->first;
                 it->second->state = DpPlayerState::PLAYING;
             }
             else
             {
-                //qInfo() << "[Replayer::onLoadingTaMessage] UNIT_STAT_AND_MOVE non-player dpid=" << it->first;
+                qWarning() << "[Replayer::onLoadingTaMessage] packet from" << sourceDplayId << ", but player is not found in m_players";
             }
         }
     }
@@ -971,7 +862,6 @@ bool Replayer::doPlay()
         m_targetTicksFractional -= unsigned(m_targetTicksFractional);
     }
 
-    //qInfo() << "[Replayer::doPlay] isPaused=" << m_isPaused << "pending=" << m_pendingGamePackets.size() << "m_targetTicks=" << m_targetTicks + m_targetTicksFractional << "m_demoTicks=" << m_demoTicks;
     for (; !m_isPaused && std::int32_t(m_targetTicks - m_demoTicks) > 0; m_pendingGamePackets.pop())
     {
         if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
@@ -980,15 +870,18 @@ bool Replayer::doPlay()
         }
         if (m_pendingGamePackets.empty())
         {
-            std::uint8_t pausePacket[] = { 0x19, 0x00, 0x01 };
-            tapacket::bytestring bs(pausePacket, sizeof(pausePacket));
-            this->sendUdp(m_demoPlayers[0]->dpId, 0, bs);
-            m_isPaused = true;
-            this->say(m_demoPlayers[0]->dpId, "Replay buffer is empty. Unpause to continue");
+            if (m_wallClockTicks - m_tickLastUserPauseEvent > AUTO_PAUSE_HOLDOFF_TICKS)
+            {
+                std::uint8_t pausePacket[] = { 0x19, 0x00, 0x01 };
+                tapacket::bytestring bs(pausePacket, sizeof(pausePacket));
+                this->sendUdp(m_demoPlayers[0]->dpId, 0, bs);
+                m_isPaused = true;
+                this->say(m_demoPlayers[0]->dpId, "Replay buffer is empty. Unpause to continue");
+            }
             break;
         }
 
-        tapacket::Packet &packet = m_pendingGamePackets.front().first;
+        tapacket::Packet& packet = m_pendingGamePackets.front().first;
         std::vector<tapacket::bytestring>& moves = m_pendingGamePackets.front().second;
         std::shared_ptr<DemoPlayer> sender;
         for (const auto& demoPlayer : m_demoPlayers)
@@ -1066,7 +959,7 @@ bool Replayer::doPlay()
             {
                 std::uint32_t originalDpId = *(std::uint32_t*) & move[1];
                 auto player = getDemoPlayerByOriginalDpId(originalDpId);
-                std::string msg((const char*)move.data()+9, move.size()-9);
+                std::string msg((const char*)move.data() + 9, move.size() - 9);
                 std::size_t leftBrack = msg.find_first_of('<', 0u);
                 std::size_t rightBrack = msg.find_last_of('>', std::string::npos);
                 if (leftBrack != std::string::npos && rightBrack != std::string::npos)
@@ -1140,7 +1033,7 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
             return;
         }
     }
-    
+
     if (tapacket::PacketCode(payload[0]) == tapacket::PacketCode::COMPRESSED)
     {
         payload = tapacket::TPacket::decompress(payload, 3);
@@ -1172,10 +1065,12 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
             if (s[1] == 0 && s[2] == 1u)
             {
                 m_isPaused = true;
+                m_tickLastUserPauseEvent = m_wallClockTicks;
             }
             else if (s[1] == 0 && s[2] != 1u)
             {
                 m_isPaused = false;
+                m_tickLastUserPauseEvent = m_wallClockTicks;
             }
             else
             {
@@ -1225,7 +1120,7 @@ void Replayer::createSonar(std::uint32_t receivingDpId, unsigned number)
     tapacket::bytestring bs(startBuildSonar, sizeof(startBuildSonar));
     *(std::uint16_t*)& bs[1] = m_demoUnitInfo.size();
     *(std::uint16_t*)& bs[3] = unitNumber;
-    *(std::uint16_t*)& bs[7] = number*0xa0 + 0x50;
+    *(std::uint16_t*)& bs[7] = number * 0xa0 + 0x50;
     send(benefactor->dpId, 0, bs);
 
     bs.assign(finishBuildSonar, sizeof(finishBuildSonar));
@@ -1236,73 +1131,4 @@ void Replayer::createSonar(std::uint32_t receivingDpId, unsigned number)
     *(std::uint16_t*)& bs[1] = unitNumber;
     *(std::uint32_t*)& bs[3] = receivingDpId;
     send(benefactor->dpId, 0, bs);
-}
-
-int doMain(int argc, char* argv[])
-{
-    const char* DEFAULT_DPLAY_REGISTERED_GAME_GUID = "{99797420-F5F5-11CF-9827-00A0241496C8}";
-    const char* DEFAULT_DPLAY_REGISTERED_GAME_PATH = "c:\\cavedog\\totala";
-
-    QCoreApplication app(argc, argv);
-    QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("0.14");
-
-    QCommandLineParser parser;
-    parser.setApplicationDescription("TA Replayer");
-    parser.addHelpOption();
-    parser.addVersionOption();
-    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", "c:\\temp\\tareplayer.log"));
-    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
-    parser.addOption(QCommandLineOption("demofile", "path to demo file", "demofile"));
-    parser.addOption(QCommandLineOption("addr", "Address of TA Replay Server", "addr"));
-    parser.addOption(QCommandLineOption("port", "Port of TA Replay Server", "port"));
-    parser.addOption(QCommandLineOption("gameid", "Game ID to request from Replay Server", "gameid"));
-    parser.process(app);
-
-    taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
-    qInstallMessageHandler(taflib::Logger::Log);
-
-    std::shared_ptr<std::istream> demoStream;
-    std::shared_ptr<tareplay::TaReplayClient> replayClient;
-    std::shared_ptr<Replayer> replayer;
-    if (parser.isSet("demofile"))
-    {
-        qInfo() << "Loading demo file:" << parser.value("demofile");
-        demoStream.reset(new std::ifstream(parser.value("demofile").toStdString().c_str(), std::ios::in | std::ios::binary));
-        replayer.reset(new Replayer(demoStream.get()));
-    }
-    else if (parser.isSet("addr") && parser.isSet("port") && parser.isSet("gameid"))
-    {
-        qInfo() << "connecting to replay server";
-        replayClient.reset(new tareplay::TaReplayClient(QHostAddress(parser.value("addr")), parser.value("port").toInt(), parser.value("gameid").toInt(), 0));
-        replayer.reset(new Replayer(replayClient->getReplayStream()));
-    }
-    else
-    {
-        throw std::runtime_error("[doMain] missing 'demofile' or 'addr','port','gameid' arguments");
-    }
-    replayer->hostGame(DEFAULT_DPLAY_REGISTERED_GAME_GUID, "TAReplayer", "127.0.0.1");
-
-    app.exec();
-    return 0;
-}
-
-int main(int argc, char* argv[])
-{
-    try
-    {
-        return doMain(argc, argv);
-    }
-    catch (std::exception & e)
-    {
-        std::cerr << "[main catch std::exception] " << e.what() << std::endl;
-        qWarning() << "[main catch std::exception]" << e.what();
-        return 1;
-    }
-    catch (...)
-    {
-        std::cerr << "[main catch ...] " << std::endl;
-        qWarning() << "[main catch ...]";
-        return 1;
-    }
 }

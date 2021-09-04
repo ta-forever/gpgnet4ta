@@ -42,8 +42,15 @@ TaLobby::TaLobby(
 
 void TaLobby::enableForwardToDemoCompiler(QString address, quint16 port, quint32 tafGameId)
 {
-    m_taDemoCompilerClient.reset(new tareplay::TaDemoCompilerClient(QHostAddress(address), port, tafGameId));
-    m_packetParser->subscribe(m_taDemoCompilerClient.data());
+    try
+    {
+        m_taDemoCompilerClient.reset(new tareplay::TaDemoCompilerClient(QHostAddress(address), port, tafGameId));
+        m_packetParser->subscribe(m_taDemoCompilerClient.data());
+    }
+    catch (const tareplay::TaDemoCompilerClient::ConnectionError&)
+    {
+        qWarning() << "[TaLobby::enableForwardToDemoCompiler] unable to connect to Demo Compiler";
+    }
 }
 
 

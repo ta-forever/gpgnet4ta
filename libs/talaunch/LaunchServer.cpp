@@ -9,10 +9,11 @@
 
 using namespace talaunch;
 
-static const int KEEPALIVE_TIMEOUT = 10;
+static const int TICK_RATE_MILLISEC = 1000;
 
-LaunchServer::LaunchServer(QHostAddress addr, quint16 port):
-    m_shutdownCounter(KEEPALIVE_TIMEOUT),
+LaunchServer::LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout):
+    m_keepAliveTimeout(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
+    m_shutdownCounter(keepAliveTimeout),
     m_loggedAConnection(false)
 {
     qInfo() << "[LaunchServer::LaunchServer] starting server on addr" << addr << "port" << port;
@@ -22,7 +23,7 @@ LaunchServer::LaunchServer(QHostAddress addr, quint16 port):
         qWarning() << "[LaunchServer::LaunchServer] launch server is not listening!";
     }
     QObject::connect(&m_tcpServer, &QTcpServer::newConnection, this, &LaunchServer::onNewConnection);
-    QObject::startTimer(1000);
+    QObject::startTimer(TICK_RATE_MILLISEC);
 }
 
 void LaunchServer::onNewConnection()
@@ -92,16 +93,20 @@ void LaunchServer::onReadyReadTcp()
             {
                 qInfo() << "[LaunchServer::onReadyReadTcp] received keepalive message" << sender->peerAddress() << "port" << sender->peerPort();
             }
-            m_shutdownCounter = KEEPALIVE_TIMEOUT;
+            m_shutdownCounter = m_keepAliveTimeout;
             return;
         }
         else if (args.size() >= 4 && args[0] == "/host")
         {
-            launchGame(args[1], args[2], args[3], true);
+            launchGame(args[1], args[2], args[3], true, false);
         }
         else if (args.size() >= 4 && args[0] == "/join")
         {
-            launchGame(args[1], args[2], args[3], false);
+            launchGame(args[1], args[2], args[3], false, false);
+        }
+        else if (args.size() >= 4 && args[0] == "/searchjoin")
+        {
+            launchGame(args[1], args[2], args[3], false, true);
         }
     }
     catch (const std::exception & e)
@@ -114,30 +119,42 @@ void LaunchServer::onReadyReadTcp()
     }
 }
 
-void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, bool asHost)
+void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, bool asHost, bool doSearch)
 {
     if (m_jdPlay)
     {
         return;
     }
 
-    if (asHost)
-    {
-        qInfo() << "host" << _guid << _player << _ipaddr;
-    }
-    else
-    {
-        qInfo() << "join" << _guid << _player << _ipaddr;
-    }
-
     std::string guid = _guid.toStdString();
     std::string player = _player.toStdString();
     std::string ipaddr = _ipaddr.toStdString();
 
-    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 3, false));
+    if (asHost)
+    {
+        qInfo() << "host" << guid.c_str() << player.c_str() << ipaddr.c_str();
+    }
+    else if (doSearch)
+    {
+        qInfo() << "searchjoin" << guid.c_str() << player.c_str() << ipaddr.c_str();
+    }
+    else
+    {
+        qInfo() << "join" << guid.c_str() << player.c_str() << ipaddr.c_str();
+    }
+
+    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 0, false));
     if (!m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), asHost, 10))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to initialise!";
+        m_jdPlay.reset();
+        notifyClients("FAIL");
+        emit gameFailedToLaunch(_guid);
+        return;
+    }
+    else if (!asHost && doSearch && !(m_jdPlay->searchOnce() || m_jdPlay->searchOnce()))
+    {
+        qWarning() << "[LaunchServer::launchGame] jdplay failed to find a game!";
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);

@@ -30,9 +30,10 @@ TaReplayServer::UserContext::UserContext(QTcpSocket* socket):
     gpgNetParser.reset(new gpgnet::GpgNetParse());
 }
 
-TaReplayServer::TaReplayServer(QString demoPathTemplate, QHostAddress addr, quint16 port, quint16 delaySeconds):
+TaReplayServer::TaReplayServer(QString demoPathTemplate, QHostAddress addr, quint16 port, quint16 delaySeconds, qint64 maxBytesPerUserPerSecond):
     m_demoPathTemplate(demoPathTemplate),
-    m_delaySeconds(delaySeconds)
+    m_delaySeconds(delaySeconds),
+    m_maxBytesPerUserPerSecond(maxBytesPerUserPerSecond)
 {
     qInfo() << "[TaReplayServer::TaReplayServer] starting server on addr" << addr << "port" << port;
     m_tcpServer.listen(addr, port);
@@ -104,13 +105,11 @@ void TaReplayServer::onReadyRead()
         auto itUserContext = m_users.find(sender);
         if (itUserContext == m_users.end())
         {
-            qWarning() << "[TaReplayServer::onReadyRead] received data from unknown user!";
-            return;
+            throw std::runtime_error("received data from unknown user!");
         }
         if (!itUserContext.value()->userDataStream)
         {
-            qCritical() << "[TaReplayServer::onReadyRead] user has null datastream!";
-            return;
+            throw std::runtime_error("null datastream!");
         }
         UserContext& userContext = *itUserContext.value().data();
 
@@ -122,17 +121,25 @@ void TaReplayServer::onReadyRead()
             if (cmd == TaReplayServerSubscribe::ID)
             {
                 TaReplayServerSubscribe msg(command);
-                QFileInfo demoFile(m_demoPathTemplate.arg(msg.gameId));
-                if (demoFile.exists() && demoFile.isFile())
+                QFileInfo tempDemoFile(m_demoPathTemplate.arg(msg.gameId) + ".part");
+                QFileInfo finalDemoFile(m_demoPathTemplate.arg(msg.gameId));
+                if (finalDemoFile.exists() && finalDemoFile.isFile())
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << demoFile.absoluteFilePath();
-                    userContext.demoFile.reset(new std::ifstream(demoFile.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << finalDemoFile.absoluteFilePath();
+                    userContext.demoFile.reset(new std::ifstream(finalDemoFile.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
+                    userContext.demoFile->seekg(msg.position);
+                    userContext.gameId = msg.gameId;
+                }
+                else if (tempDemoFile.exists() && tempDemoFile.isFile())
+                {
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << tempDemoFile.absoluteFilePath();
+                    userContext.demoFile.reset(new std::ifstream(tempDemoFile.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
                     userContext.demoFile->seekg(msg.position);
                     userContext.gameId = msg.gameId;
                 }
                 else
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND" << demoFile.absoluteFilePath();
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND" << finalDemoFile.absoluteFilePath();
                     sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
                 }
             }
@@ -165,10 +172,21 @@ void TaReplayServer::sendData(UserContext &user, TaReplayServerStatus status, QB
 
 void TaReplayServer::timerEvent(QTimerEvent* event)
 {
-    for (QSharedPointer<UserContext> userContext : m_users)
+    try
     {
-        updateFileSizeLog(*userContext);
-        serviceUser(*userContext);
+        for (QSharedPointer<UserContext> userContext : m_users)
+        {
+            updateFileSizeLog(*userContext);
+            serviceUser(*userContext);
+        }
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaReplayServer::timerEvent] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaReplayServer::timerEvent] general exception:";
     }
 }
 
@@ -179,18 +197,34 @@ void TaReplayServer::updateFileSizeLog(UserContext& user)
         user.demoFile->clear();
         int pos = user.demoFile->tellg();
         user.demoFile->seekg(0, std::ios_base::end);
-        user.demoFileSizeLog.enqueue(user.demoFile->tellg());
+        int size = user.demoFile->tellg();
         user.demoFile->seekg(pos, std::ios_base::beg);
         user.demoFile->clear();
+        user.demoFileSizeLog.enqueue(size);   //back
+
+        if (user.demoFileSizeLog.size() < m_delaySeconds && user.demoFileSizeLog.size() >= 10u)
+        {
+            // heuristic to backfill the size log at times before we started
+            int diff = user.demoFileSizeLog.back() - user.demoFileSizeLog.front();
+            int secs = user.demoFileSizeLog.size() - 1;
+
+            int initialFront = user.demoFileSizeLog.front();
+            for (int n = 1; n <= secs; ++n)
+            {
+                int sizeGuess = std::max(initialFront - n * diff / secs, 0);
+                user.demoFileSizeLog.push_front(sizeGuess);
+            }
+            qInfo() << "[TaReplayServer::updateFileSizeLog] heuristic backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "size=" << user.demoFileSizeLog.size();
+        }
     }
     else
     {
-        user.demoFileSizeLog.enqueue(0);
+        user.demoFileSizeLog.enqueue(0);    //back
     }
 
     while (user.demoFileSizeLog.size() > m_delaySeconds)
     {
-        user.demoFileSizeLog.dequeue();
+        user.demoFileSizeLog.dequeue();     //front
     }
 }
 
@@ -199,9 +233,12 @@ void TaReplayServer::serviceUser(UserContext& user)
     static const int CHUNK_SIZE = 1000;
     QByteArray data;
 
-    const int dataEscrowThreshold = user.demoFileSizeLog.head();
+    const int dataEscrowThreshold = user.demoFileSizeLog.size() >= m_delaySeconds
+        ? user.demoFileSizeLog.front()
+        : 0;
 
-    for(;;)
+    bool firstBytes = user.demoFile->tellg() == std::streampos(0);
+    while(user.userDataStream->device()->bytesToWrite() < m_maxBytesPerUserPerSecond)
     {
         const int maxBytesReveal = dataEscrowThreshold - user.demoFile->tellg();
         const int thisChunkSize = std::min(maxBytesReveal, CHUNK_SIZE);
@@ -223,4 +260,8 @@ void TaReplayServer::serviceUser(UserContext& user)
         sendData(user, TaReplayServerStatus::OK, data);
     }
 
+    if (firstBytes && user.userDataStream->device()->bytesToWrite() > 0)
+    {
+        qInfo() << "[TaReplayServer::serviceUser] sending first chunk of data to user: pointer,gameId,bytes" << QString("%1").arg(quint64(&user), 16, 16) << user.gameId << user.userDataStream->device()->bytesToWrite();
+    }
 }

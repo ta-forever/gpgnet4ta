@@ -18,6 +18,7 @@ namespace talaunch {
         QString m_gameGuid;
         QString m_gameAddress;
         bool m_isHost;
+        bool m_requireSearch;
 
     public:
         LaunchClient(QHostAddress addr, quint16 port);
@@ -26,6 +27,7 @@ namespace talaunch {
         void setGameGuid(QString gameGuid);
         void setAddress(QString address);
         void setIsHost(bool isHost);
+        void setRequireSearch(bool requireSearch);  // false (default) for playing game, true for joining replay.  I don't know why
 
         bool launch();
         bool isRunning();

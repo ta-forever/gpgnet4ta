@@ -51,7 +51,7 @@ void GpgNetClient::onReadyRead()
             QString cmd = serverCommand[0].toString();
             qInfo() << "[GpgNetClient::onReadyRead] gpgnet command received:" << cmd;
 
-            if (cmd == "CreateLobby")
+            if (cmd == CreateLobbyCommand::ID)
             {
                 CreateLobbyCommand clc;
                 clc.Set(serverCommand);
@@ -60,27 +60,27 @@ void GpgNetClient::onReadyRead()
                     clc.protocol, clc.localPort, clc.playerAlias, clc.playerRealName,
                     clc.playerId, clc.natTraversal);
             }
-            else if (cmd == "HostGame")
+            else if (cmd == HostGameCommand::ID)
             {
                 HostGameCommand hgc;
                 hgc.Set(serverCommand);
                 emit hostGame(hgc.mapName);
             }
-            else if (cmd == "JoinGame")
+            else if (cmd == JoinGameCommand::ID)
             {
                 JoinGameCommand jgc(serverCommand);
                 m_gpgnetPlayerIds[jgc.remotePlayerAlias] = jgc.remotePlayerId;
                 qInfo() << "[GpgNetClient::onReadyRead] join game: playername=" << jgc.remotePlayerAlias << "playerId=" << jgc.remotePlayerId;
                 emit joinGame(jgc.remoteHost, jgc.remotePlayerAlias, jgc.remotePlayerRealName, jgc.remotePlayerId);
             }
-            else if (cmd == "ConnectToPeer")
+            else if (cmd == ConnectToPeerCommand::ID)
             {
                 ConnectToPeerCommand ctp(serverCommand);
                 m_gpgnetPlayerIds[ctp.playerAlias] = ctp.playerId;
                 qInfo() << "[GpgNetClient::onReadyRead] connect to peer: playername=" << ctp.playerAlias << "playerId=" << ctp.playerId;
                 emit connectToPeer(ctp.host, ctp.playerAlias, ctp.playerRealName, ctp.playerId);
             }
-            else if (cmd == "DisconnectFromPeer")
+            else if (cmd == DisconnectFromPeerCommand::ID)
             {
                 DisconnectFromPeerCommand ctp(serverCommand);
                 qInfo() << "[GpgNetClient::onReadyRead] disconnect from peer: playerid=" << ctp.playerId;
@@ -158,13 +158,13 @@ void GpgNetClient::sendCreateLobby(int /* eg 0 */, int /* eg 0xb254 */, const ch
 
 void GpgNetClient::sendHostGame(QString mapName)
 {
-    sendCommand("HostGame", 1);
+    sendCommand(HostGameCommand::ID, 1);
     sendArgument(mapName.toUtf8());
 }
 
 void GpgNetClient::sendJoinGame(QString hostAndPort, QString remotePlayerName, int remotePlayerId)
 {
-    sendCommand("JoinGame", 3);
+    sendCommand(JoinGameCommand::ID, 3);
     sendArgument(remotePlayerName.toUtf8());
     sendArgument(remotePlayerId);
 }

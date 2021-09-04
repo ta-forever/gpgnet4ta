@@ -35,6 +35,8 @@ namespace tareplay {
             QMap<QPair<quint8, quint32>, QByteArray> unitData;      // keyed by sub,id
 
             std::shared_ptr<std::ostream> demoCompilation;
+            QString tempFileName;
+            QString finalFileName;
             int expiryCountdown;    // continuing messages from players keep this counter from expiring
         };
 
@@ -44,7 +46,7 @@ namespace tareplay {
         void closeExpiredGames();
         void timerEvent(QTimerEvent* event);
 
-        std::shared_ptr<std::ostream> commitHeaders(const GameContext &);
+        std::shared_ptr<std::ostream> commitHeaders(const GameContext& game, QString filename);
         void commitMove(const GameContext &, int playerNumber, const GameMoveMessage &);
 
         QString m_demoPathTemplate;

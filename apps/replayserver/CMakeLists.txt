@@ -1,5 +1,5 @@
 add_executable(replayserver
-    ReplayServer.cpp
+    replayserver.cpp
     )
 
 target_include_directories(replayserver 

@@ -11,7 +11,8 @@ LaunchClient::LaunchClient(QHostAddress addr, quint16 port) :
     m_gameGuid("{99797420-F5F5-11CF-9827-00A0241496C8}"),
     m_playerName("BILLYIDOL"),
     m_gameAddress("127.0.0.1"),
-    m_isHost(true)
+    m_isHost(true),
+    m_requireSearch(false)
 
 { 
     QObject::connect(&m_tcpSocket, &QTcpSocket::readyRead, this, &LaunchClient::onReadyReadTcp);
@@ -76,16 +77,24 @@ void LaunchClient::setIsHost(bool isHost)
     m_isHost = isHost;
 }
 
+void LaunchClient::setRequireSearch(bool requireSearch)
+{
+    m_requireSearch = requireSearch;
+}
+
 bool LaunchClient::launch()
 {
     connect(m_serverAddress, m_serverPort);
     if (m_tcpSocket.waitForConnected(3))
     {
-        QString args = QStringList({ m_isHost ? "/host" : "/join", m_gameGuid, m_playerName, m_gameAddress }).join(' ');
+        static const char* cmd[2][2] = {{ "/join", "/searchjoin"},
+                                        { "/host", "/host"}};
+
+        QString args = QStringList({ cmd[m_isHost][m_requireSearch], m_gameGuid, m_playerName, m_gameAddress }).join(' ');
         qInfo() << "[LaunchClient::launch]" << args;
         m_tcpSocket.write(args.toUtf8());
         m_tcpSocket.flush();
-        if (!m_tcpSocket.waitForReadyRead(10000))
+        if (!m_tcpSocket.waitForReadyRead(30000))
         {
             qInfo() << "[LaunchClient::launch] Did not receive a reply from server";
             m_state = State::FAIL;

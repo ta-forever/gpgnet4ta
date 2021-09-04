@@ -383,10 +383,10 @@ namespace jdplay {
         dpSessionDesc.dwFlags = 0;									// optional: DPSESSION_MIGRATEHOST
         dpSessionDesc.guidApplication = gameID;						// Game GUID
         dpSessionDesc.guidInstance = gameID;						// ID for the session instance
-        dpSessionDesc.lpszSessionName = L"Coopnet Session";			// name of the session
+        dpSessionDesc.lpszSessionName = L"TAF Game";                // name of the session
         dpSessionDesc.dwMaxPlayers = maxPlayers;					// Maximum # players allowed in session
         dpSessionDesc.dwCurrentPlayers = 0;							// Current # players in session (read only)
-        dpSessionDesc.lpszPassword = L"\0";							// password of the session (optional)
+        dpSessionDesc.lpszPassword = L"";                           // password of the session (optional)
         dpSessionDesc.dwReserved1 = 0;								// Reserved for future M$ use.
         dpSessionDesc.dwReserved2 = 0;
         dpSessionDesc.dwUser1 = 0;									// For use by the application

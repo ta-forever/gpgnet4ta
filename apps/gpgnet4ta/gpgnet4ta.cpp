@@ -536,7 +536,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GPGNet4TA");
-    QCoreApplication::setApplicationVersion("0.13.3");
+    QCoreApplication::setApplicationVersion("0.14");
     //app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
@@ -552,7 +552,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join.", "irc"));
     parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface.", "lobbybindaddress", "127.0.0.1"));
     parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options."));
-    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", "c:\\temp\\gpgnet4ta.log"));
+    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", ""));
     parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
     parser.addOption(QCommandLineOption("mean", "Player rating mean.", "mean"));
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
@@ -560,7 +560,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
-    parser.addOption(QCommandLineOption("tadcompilerurl", "host:port/gameid of TA Demo Compiler", "tadcompilerurl"));
+    parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -648,11 +648,11 @@ int doMain(int argc, char* argv[])
         HandleGameStatus handleGameStatus(ircForward.get(), ircChannel, lobby);
         lobby.connectGameEvents(handleGameStatus);
 
-        if (parser.isSet("tadcompilerurl"))
+        if (parser.isSet("democompilerurl"))
         {
             QString user, host, gameId;
             quint16 port;
-            SplitUserHostPortChannel(parser.value("tadcompilerurl"), user, host, port, gameId);
+            SplitUserHostPortChannel(parser.value("democompilerurl"), user, host, port, gameId);
             qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId;
             lobby.enableForwardToDemoCompiler(host, port, gameId.toInt());
         }

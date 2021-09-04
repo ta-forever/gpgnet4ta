@@ -1,18 +1,23 @@
-add_executable(tareplayer
+set(CMAKE_AUTOMOC ON)
+
+add_executable(replayer
+    replayer.cpp
+    TaReplayer.h
     TaReplayer.cpp
     )
 
-target_include_directories(tareplayer 
+target_include_directories(replayer 
     PUBLIC
     ${CMAKE_SOURCE_DIR}/libs
+    ${DIRECT_PLAY_INCLUDE_DIR}
     )
 
-target_link_directories(tareplayer
+target_link_directories(replayer
     PUBLIC
     ${DIRECT_PLAY_LIB_DIR}
     )
 
-target_link_libraries(tareplayer
+target_link_libraries(replayer
     gpgnet
     jdplay
     taflib
@@ -24,4 +29,4 @@ target_link_libraries(tareplayer
     ${DIRECT_PLAY_LIBS}
     )
 
-install(TARGETS tareplayer)
+install(TARGETS replayer)

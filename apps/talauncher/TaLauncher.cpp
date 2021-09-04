@@ -143,12 +143,25 @@ void UnableToLaunchMsgBox(taflib::MessageBoxThread& msgbox, QString guid)
 
 void GameExitedWithErrorMsgBox(taflib::MessageBoxThread& msgbox, quint32 exitCode)
 {
-    QString err = QString("Game exited with error code 0x%1 (%2)\n").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
-    switch (exitCode) {
-    case 0xffffffff: 
-        err += "Check that TotalA.exe isn't already running. If it is, please shut it down and rejoin the game in TAF (blue \"join\" button) to try again.";
-        break;
-    };
+    QString err = QString("TotalA.exe exited with error code 0x%1 (%2)\n").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
+    err +=
+        "\n"
+        "This is generally an issue with Total Annihilation and beyond\n"
+        "the control of TA Forever. Some basic things to check are:\n"
+        "- Is your game resolution set to 1024x768 or higher?\n"
+        "- Is TotalA.exe running already? (error code 0xffffffff (-1))\n"
+        "- Does your TA installation contain any corrupted .ufo files?\n"
+        "  If in doubt, clear them out.\n"
+        "- Are you missing TA_Features_2013.ccx? Many 3rd party maps\n"
+        "  require this file.\n"
+        "- Is the mod that you're playing installed correctly? From a\n"
+        "  clean Steam or GOG install, carefully follow the\n"
+        "  instructions for your mod for your OS version (Windows\n"
+        "  XP/7/8/10 etc)\n"
+        "\n"
+        "If the issue persists you might like to ask for help on any\n"
+        "of the TA community's fine discord servers.";
+
     QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
 }
 
@@ -240,10 +253,11 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("gameargs", "Command line arguments for game executable. (required for --registerdplay).", "args", DEFAULT_DPLAY_REGISTERED_GAME_ARGS));
     parser.addOption(QCommandLineOption("gameexe", "Game executable. (required for --registerdplay).", "exe", DEFAULT_DPLAY_REGISTERED_GAME_EXE));
     parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
-    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", "c:\\temp\\gpgnet4ta.log"));
+    parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", ""));
     parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
     parser.addOption(QCommandLineOption("uac", "request to elevate to admin."));
     parser.addOption(QCommandLineOption("alreadyuac", "indicate that app is running with admin privileges already."));
+    parser.addOption(QCommandLineOption("keepalivetimeout", "Number of seconds to stay alive without receiving keep alive messages over console.", "keepalivetimeout", "10"));
     parser.process(app);
 
     if (parser.isSet("uac") && !parser.isSet("alreadyuac"))
@@ -277,7 +291,7 @@ int doMain(int argc, char* argv[])
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(taflib::Logger::Log);
 
-    talaunch::LaunchServer launchServer(QHostAddress("127.0.0.1"), parser.value("bindport").toInt());
+    talaunch::LaunchServer launchServer(QHostAddress("127.0.0.1"), parser.value("bindport").toInt(), parser.value("keepalivetimeout").toInt());
     taflib::MessageBoxThread msgbox;
     QObject::connect(&launchServer, &talaunch::LaunchServer::quit, &app, &QCoreApplication::quit);
     QObject::connect(&launchServer, &talaunch::LaunchServer::gameFailedToLaunch, [&msgbox](QString guid) {

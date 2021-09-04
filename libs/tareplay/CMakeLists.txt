@@ -10,17 +10,14 @@ add_library(tareplay STATIC
     TaReplayServer.h
     TaReplayServer.cpp
     TaReplayServerMessages.h
-    TaReplayServerMessages.cpp
-    )
+    TaReplayServerMessages.cpp)
+
+target_include_directories(tareplay PUBLIC
+    ${CMAKE_SOURCE_DIR}/libs)
+
 
 target_link_libraries(tareplay
     gpgnet
     tapacket
     Qt5::Core
-    Qt5::Network
-    )
-
-target_include_directories(tareplay 
-    PUBLIC
-    ${CMAKE_SOURCE_DIR}/libs
-    ${CMAKE_CURRENT_SOURCE_DIR})
+    Qt5::Network)

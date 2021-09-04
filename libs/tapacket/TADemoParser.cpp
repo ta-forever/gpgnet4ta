@@ -19,6 +19,7 @@ bytestring RecordReader::operator()(std::istream *is)
     bytestring record;
     
     is->clear();
+    is->tellg();    // yeah I don't know.  linux/wine doesn't work without it ...
 
     if (m_state == State::READ_RECLEN1)
     {
@@ -75,10 +76,10 @@ bytestring RecordReader::operator()(std::istream *is)
     return record;
 }
 
-Parser::Parser()
+DemoParser::DemoParser()
 { }
 
-void Parser::load(Header &h)
+void DemoParser::load(Header &h)
 {
     bytestring data = m_recordReader(m_is);
     std::memcpy(h.magic, &data[0], sizeof(h.magic));
@@ -130,7 +131,7 @@ void Parser::load(Header &h)
     }
 }
 
-void Parser::load(ExtraHeader &eh)
+void DemoParser::load(ExtraHeader &eh)
 {
     bytestring data = m_recordReader(m_is);
     std::memcpy(&eh.numSectors, &data[0], sizeof(eh.numSectors));
@@ -142,14 +143,14 @@ void Parser::load(ExtraHeader &eh)
     }
 }
 
-void Parser::load(ExtraSector &es)
+void DemoParser::load(ExtraSector &es)
 {
     bytestring data = m_recordReader(m_is);
     std::memcpy(&es.sectorType, &data[0], sizeof(es.sectorType));
     es.data = data.substr(4);
 }
 
-void Parser::load(Player &p)
+void DemoParser::load(Player &p)
 {
     bytestring data = m_recordReader(m_is);
     p.color = data[0];
@@ -158,7 +159,7 @@ void Parser::load(Player &p)
     p.name = (char*)data.substr(3).c_str();
 }
 
-void Parser::load(PlayerStatusMessage &msg)
+void DemoParser::load(PlayerStatusMessage &msg)
 {
     bytestring data = m_recordReader(m_is);
     msg.number = data[0];
@@ -166,23 +167,18 @@ void Parser::load(PlayerStatusMessage &msg)
     TPacket::decrypt(data, 1u, checks[0], checks[1]);
     if (checks[0] != checks[1])
     {
-        std::cerr << "[Parser::load PlayerStatusMessage] checksum error" << std::endl;
+        std::cerr << "[DemoParser::load PlayerStatusMessage] checksum error" << std::endl;
         taflib::HexDump(data.data()+1, data.size()-1, std::cerr);
     }
     msg.statusMessage = TPacket::decompress(data.data()+1, data.size()-1, 3).substr(7);
-    if (msg.statusMessage[0] != 0x03)
-    {
-        std::cerr << "[Parser::load PlayerStatusMessage] decompression ran out of bytes!" << std::endl;
-        taflib::HexDump(msg.statusMessage.data(), msg.statusMessage.size(), std::cerr);
-    }
 }
 
-void Parser::load(UnitData &ud)
+void DemoParser::load(UnitData &ud)
 {
     ud.unitData = m_recordReader(m_is);
 }
 
-void Parser::load(Packet &p)
+void DemoParser::load(Packet &p)
 {
     bytestring data = m_recordReader(m_is);
     std::memcpy(&p.time, &data[0], sizeof(p.time));
@@ -190,7 +186,7 @@ void Parser::load(Packet &p)
     p.data = data.substr(3);
 }
 
-bool Parser::parse(std::istream *is, unsigned maxPaksToLoad)
+bool DemoParser::parse(std::istream *is, unsigned maxPaksToLoad)
 {
     m_is = is;
     if (!m_is)
@@ -217,12 +213,12 @@ bool Parser::parse(std::istream *is, unsigned maxPaksToLoad)
     }
 }
 
-int Parser::numTimesNewDataReceived() const
+int DemoParser::numTimesNewDataReceived() const
 {
     return m_numTimesNewDataReceived;
 }
 
-void Parser::doParse(unsigned maxPaksToLoad)
+void DemoParser::doParse(unsigned maxPaksToLoad)
 {
     if (!m_header)
     {

@@ -13,6 +13,7 @@ namespace tareplay {
         quint32 gameId;
         quint32 playerDpId;
 
+        static const char* const ID;
         HelloMessage();
         HelloMessage(QVariantList command);
         void set(QVariantList command);
@@ -24,6 +25,7 @@ namespace tareplay {
         quint16 maxUnits;
         QString mapName;
 
+        static const char* const ID;
         GameInfoMessage();
         GameInfoMessage(QVariantList command);
         void set(QVariantList command);
@@ -36,6 +38,7 @@ namespace tareplay {
         QString name;
         QByteArray statusMessage;
 
+        static const char* const ID;
         GamePlayerMessage();
         GamePlayerMessage(QVariantList command);
         void set(QVariantList command);
@@ -47,6 +50,7 @@ namespace tareplay {
         quint32 dplayId;
         quint8 number;
 
+        static const char* const ID;
         GamePlayerNumber();
         GamePlayerNumber(QVariantList command);
         void set(QVariantList command);
@@ -57,6 +61,7 @@ namespace tareplay {
     public:
         QVector<quint32> lockedInPlayers;
 
+        static const char* const ID;
         GamePlayerLoading();
         GamePlayerLoading(QVariantList command);
         void set(QVariantList command);
@@ -67,6 +72,7 @@ namespace tareplay {
     public:
         QByteArray unitData;
 
+        static const char* const ID;
         GameUnitDataMessage();
         GameUnitDataMessage(QVariantList command);
         void set(QVariantList command);
@@ -77,6 +83,7 @@ namespace tareplay {
     public:
         QByteArray moves;
 
+        static const char* const ID;
         GameMoveMessage();
         GameMoveMessage(QVariantList command);
         void set(QVariantList command);

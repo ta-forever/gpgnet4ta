@@ -35,7 +35,7 @@ namespace tapacket
     };
 
 
-    class Parser
+    class DemoParser
     {
         RecordReader m_recordReader;
         std::istream *m_is;
@@ -55,7 +55,7 @@ namespace tapacket
 
     public:
 
-        Parser();
+        DemoParser();
 
         virtual bool parse(std::istream *is, unsigned maxPaksToLoad);
         virtual int numTimesNewDataReceived() const;

@@ -28,7 +28,6 @@ target_include_directories(gpgnet4ta
 target_link_directories(gpgnet4ta
     PUBLIC
     ${LIBCOMMUNI_LIB_DIR}
-    ${DIRECT_PLAY_LIB_DIR}
     )
 
 target_link_libraries(gpgnet4ta
@@ -41,7 +40,6 @@ target_link_libraries(gpgnet4ta
     Qt5::Core
     Qt5::Network
     ${LIBCOMMUNI_LIBS_STATIC}
-    ${DIRECT_PLAY_LIBS}
     )
 
 install(TARGETS gpgnet4ta)

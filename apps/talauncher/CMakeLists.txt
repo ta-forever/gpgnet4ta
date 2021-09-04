@@ -1,5 +1,5 @@
 add_executable(talauncher
-    TaLauncher.cpp
+    talauncher.cpp
     )
 
 target_include_directories(talauncher 

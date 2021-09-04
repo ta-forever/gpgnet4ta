@@ -42,6 +42,7 @@ namespace tareplay {
         std::ofstream m_replayBufferOStream;
         std::ifstream m_replayBufferIStream;
         TaReplayServerStatus m_status;
+        QString m_tempFilename;
     };
 
 }

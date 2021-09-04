@@ -11,6 +11,9 @@ namespace tareplay {
     class TaDemoCompilerClient: public QObject, public tapacket::TaPacketHandler
     {
     public:
+        struct ConnectionError : public std::exception
+        { };
+
         TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId);
         ~TaDemoCompilerClient();
 

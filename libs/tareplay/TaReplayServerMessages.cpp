@@ -40,13 +40,10 @@ TaReplayServerData::TaReplayServerData(QVariantList command)
 void TaReplayServerData::set(QVariantList command)
 {
     QString cmd = command[0].toString();
-    qInfo() << "[TaReplayServerData::set] cmd=" << cmd;
     if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
     status = TaReplayServerStatus(command[1].toUInt());
-    qInfo() << "[TaReplayServerData::set] status=" << int(status);
     data = command[2].toByteArray();
-    qInfo() << "[TaReplayServerData::set] data=" << data.size();
 }
