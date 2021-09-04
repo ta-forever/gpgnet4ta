@@ -46,3 +46,12 @@ jobs:
           build-ubuntu-focal-x64/gpgnet4ta-ubuntu-focal-x64.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Docker image
+      uses: docker/build-push-action@v1.1.1
+      if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags')
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        repository: taforever/taf-gpgnet4ta
+        tag_with_ref: true
