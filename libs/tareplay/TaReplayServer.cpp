@@ -202,19 +202,18 @@ void TaReplayServer::updateFileSizeLog(UserContext& user)
         user.demoFile->clear();
         user.demoFileSizeLog.enqueue(size);   //back
 
-        if (user.demoFileSizeLog.size() < m_delaySeconds && user.demoFileSizeLog.size() >= 10u)
+        if (user.demoFileSizeLog.size() > 7u && user.demoFileSizeLog.size() < m_delaySeconds)
         {
             // heuristic to backfill the size log at times before we started
             int diff = user.demoFileSizeLog.back() - user.demoFileSizeLog.front();
             int secs = user.demoFileSizeLog.size() - 1;
-
             int initialFront = user.demoFileSizeLog.front();
-            for (int n = 1; n <= secs; ++n)
+            for (int n = 1; user.demoFileSizeLog.size() < m_delaySeconds; ++n)
             {
-                int sizeGuess = std::max(initialFront - n * diff / secs, 0);
+                int sizeGuess = std::max(initialFront - (n * diff / secs), 0);
                 user.demoFileSizeLog.push_front(sizeGuess);
             }
-            qInfo() << "[TaReplayServer::updateFileSizeLog] heuristic backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "size=" << user.demoFileSizeLog.size();
+            qInfo() << "[TaReplayServer::updateFileSizeLog] heuristic backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "backfill_seconds=" << user.demoFileSizeLog.size();
         }
     }
     else
