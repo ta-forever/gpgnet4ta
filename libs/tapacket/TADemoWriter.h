@@ -12,6 +12,7 @@ namespace tapacket
 
         void write(const Header&);
         void write(const ExtraHeader&);
+        void write(const ExtraSector&);
         void write(const Player&);
         void write(const PlayerStatusMessage&);
         void write(const UnitData&);

@@ -5,10 +5,11 @@
 
 using namespace tareplay;
 
-TaDemoCompilerClient::TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId) :
+TaDemoCompilerClient::TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId, QString playerPublicAddr) :
     m_taDemoCompilerAddress(taDemoCompilerAddress),
     m_taDemoCompilerPort(taDemoCompilerPort),
     m_tafGameId(tafGameId),
+    m_playerPublicAddr(playerPublicAddr),
     m_datastream(&m_tcpSocket),
     m_protocol(m_datastream),
     m_localPlayerDplayId(0u),
@@ -41,12 +42,13 @@ void TaDemoCompilerClient::setLocalPlayerName(QString name)
     m_localPlayerName = name;
 }
 
-void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId)
+void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId, QString playerPublicAddr)
 {
-    qInfo() << "[TaDemoCompilerClient::sendHello] gameid,dplayPlayerId" << gameId << dplayPlayerId;
-    m_protocol.sendCommand(HelloMessage::ID, 2);
+    qInfo() << "[TaDemoCompilerClient::sendHello] gameid,dplayPlayerId,playerPublicAddr" << gameId << dplayPlayerId << playerPublicAddr;
+    m_protocol.sendCommand(HelloMessage::ID, 3);
     m_protocol.sendArgument(gameId);
     m_protocol.sendArgument(dplayPlayerId);
+    m_protocol.sendArgument(playerPublicAddr.toUtf8());
 }
 
 void TaDemoCompilerClient::sendGameInfo(quint16 maxUnits, QString mapName)
@@ -125,7 +127,7 @@ void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, co
         else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
         {
             m_localPlayerDplayId = dplayId;
-            sendHello(m_tafGameId, dplayId);
+            sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
         }
     }
 }
@@ -152,7 +154,7 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
         {
             m_localPlayerDplayId = dplayId;
-            sendHello(m_tafGameId, dplayId);
+            sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
         }
     }
 }

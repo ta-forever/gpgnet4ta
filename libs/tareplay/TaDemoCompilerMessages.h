@@ -12,6 +12,7 @@ namespace tareplay {
     public:
         quint32 gameId;
         quint32 playerDpId;
+        QString playerPublicAddr;
 
         static const char* const ID;
         HelloMessage();

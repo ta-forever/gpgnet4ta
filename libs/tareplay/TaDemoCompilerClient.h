@@ -14,13 +14,13 @@ namespace tareplay {
         struct ConnectionError : public std::exception
         { };
 
-        TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId);
+        TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId, QString playerPublicAddr);
         ~TaDemoCompilerClient();
 
         void setHostPlayerName(QString name);
         void setLocalPlayerName(QString name);
 
-        void sendHello(quint32 gameId, quint32 dplayPlayerId);
+        void sendHello(quint32 gameId, quint32 dplayPlayerId, QString playerPublicAddr);
         void sendGameInfo(quint16 maxUnits, QString mapName);
         void sendGamePlayer(qint8 side, QString name, QByteArray statusMessage);
         void sendGamePlayerNumber(quint32 dplayId, quint8 number);
@@ -50,6 +50,7 @@ namespace tareplay {
         QHostAddress m_taDemoCompilerAddress;
         quint16 m_taDemoCompilerPort;
         quint32 m_tafGameId;
+        QString m_playerPublicAddr;
         QString m_localPlayerName;
         QString m_hostPlayerName;
         quint32 m_localPlayerDplayId;

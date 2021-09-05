@@ -1,5 +1,6 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
+#include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qpair.h>
@@ -22,6 +23,8 @@
 #include "TaDemoCompiler.h"
 
 using namespace tareplay;
+
+static const char* VERSION = "taf-0.14";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
@@ -144,9 +147,10 @@ void TaDemoCompiler::onReadyRead()
             else if (cmd == HelloMessage::ID)
             {
                 HelloMessage msg(command);
-                qInfo() << "[TaDemoCompiler::onReadyRead] received Hello from player" << msg.playerDpId << "in game" << msg.gameId;
+                qInfo() << "[TaDemoCompiler::onReadyRead] received Hello from player" << msg.playerPublicAddr << '/' << msg.playerDpId << "in game" << msg.gameId;
                 userContext.gameId = msg.gameId;
                 userContext.playerDpId = msg.playerDpId;
+                userContext.playerPublicAddr = msg.playerPublicAddr;
                 m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
             }
             else if (cmd == GameInfoMessage::ID)
@@ -261,15 +265,39 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     tad.write(header);
 
     tapacket::ExtraHeader extraHeader;
-    extraHeader.numSectors = 0u;
+    extraHeader.numSectors = 2 + header.numPlayers;
     tad.write(extraHeader);
+    {
+        tapacket::ExtraSector sector;
+        sector.sectorType = tapacket::ExtraSector::RECORDER_VERSION;
+        sector.data.assign((std::uint8_t*)VERSION, std::strlen(VERSION));
+        tad.write(sector);
+
+        sector.sectorType = tapacket::ExtraSector::DATE;
+        std::string dateString = QDateTime::currentDateTimeUtc().date().toString(Qt::ISODate).toStdString();
+        sector.data.assign((std::uint8_t*)dateString.data(), dateString.size());
+        tad.write(sector);
+
+        for (quint32 dpid : game.playersLockedIn)
+        {
+            UserContext& userContext = *game.players[dpid];
+            sector.sectorType = tapacket::ExtraSector::PLAYER_ADDR;
+            sector.data.clear();
+            sector.data.append(0x50, 0);    // count, value
+            std::string addr = userContext.playerPublicAddr.toStdString();
+            addr.append(1, 0);              // need a null terminator
+            std::transform(addr.begin(), addr.end(), addr.begin(), [](std::uint8_t x) { return x ^ 42; });
+            sector.data.append((std::uint8_t*)addr.data(), addr.size());
+            tad.write(sector);
+        }
+    }
 
     for (quint32 dpid : game.playersLockedIn)
     {
         if (game.players.contains(dpid) && game.players[dpid])
         {
-            UserContext &userContext = *game.players[dpid];
             tapacket::Player demoPlayer;
+            UserContext &userContext = *game.players[dpid];
             demoPlayer.number = demoPlayer.color = userContext.gamePlayerNumber;
             demoPlayer.name = userContext.gamePlayerInfo.name.toStdString();
             demoPlayer.side = userContext.gamePlayerInfo.side;

@@ -41,6 +41,14 @@ void TADemoWriter::write(const ExtraHeader& eh)
     writeRecord((char*)&eh.numSectors, sizeof(eh.numSectors));
 }
 
+void TADemoWriter::write(const ExtraSector& es)
+{
+    std::ostringstream ss;
+    ss.write((char*)&es.sectorType, sizeof(es.sectorType));
+    ss.write((char*)es.data.data(), es.data.size());
+    writeRecord(ss.str());
+}
+
 void TADemoWriter::write(const Player& p)
 {
     std::ostringstream ss;

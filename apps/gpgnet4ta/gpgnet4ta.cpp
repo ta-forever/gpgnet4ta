@@ -561,6 +561,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
     parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
+    parser.addOption(QCommandLineOption("publicaddr", "Player's public IP address for inclusion in the recorded demo", "publicaddr", "127.0.0.1"));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -653,8 +654,8 @@ int doMain(int argc, char* argv[])
             QString user, host, gameId;
             quint16 port;
             SplitUserHostPortChannel(parser.value("democompilerurl"), user, host, port, gameId);
-            qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId;
-            lobby.enableForwardToDemoCompiler(host, port, gameId.toInt());
+            qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId << "playerIp=" << parser.value("publicaddr");
+            lobby.enableForwardToDemoCompiler(host, port, gameId.toInt(), parser.value("publicaddr"));
         }
 
         if (ircForward)

@@ -23,7 +23,17 @@ namespace tapacket
 
     struct ExtraSector
     {
-        std::uint16_t sectorType;
+        enum TypeCode {
+            COMMENTS = 1,
+            CHAT = 2,
+            RECORDER_VERSION = 3,
+            DATE = 4,
+            RECORDER_CONTEXT = 5,
+            PLAYER_ADDR = 6,
+            MOD_ID = 7
+        };
+
+        std::uint32_t sectorType;
         bytestring data;           // upto 200000
     };
 

@@ -6,7 +6,8 @@ const char* const HelloMessage::ID = "Hello";
 
 HelloMessage::HelloMessage():
     gameId(0u),
-    playerDpId(0u)
+    playerDpId(0u),
+    playerPublicAddr("127.0.0.1")
 { }
 
 HelloMessage::HelloMessage(QVariantList command)
@@ -23,6 +24,7 @@ void HelloMessage::set(QVariantList command)
     }
     gameId = command[1].toUInt();
     playerDpId = command[2].toUInt();
+    playerPublicAddr = command[3].toString();
 }
 
 const char* const GameInfoMessage::ID = "GameInfo";

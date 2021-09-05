@@ -17,6 +17,7 @@ namespace tareplay {
 
             quint32 gameId;
             quint32 playerDpId;
+            QString playerPublicAddr;
             QSharedPointer<QDataStream> dataStream;
             gpgnet::GpgNetParse gpgNetParser;
             GamePlayerMessage gamePlayerInfo;
