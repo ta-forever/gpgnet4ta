@@ -146,21 +146,17 @@ void GameExitedWithErrorMsgBox(taflib::MessageBoxThread& msgbox, quint32 exitCod
     QString err = QString("TotalA.exe exited with error code 0x%1 (%2)\n").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
     err +=
         "\n"
-        "This is generally an issue with Total Annihilation and beyond\n"
-        "the control of TA Forever. Some basic things to check are:\n"
-        "- Is your game resolution set to 1024x768 or higher?\n"
-        "- Is TotalA.exe running already? (error code 0xffffffff (-1))\n"
-        "- Does your TA installation contain any corrupted .ufo files?\n"
-        "  If in doubt, clear them out.\n"
-        "- Are you missing TA_Features_2013.ccx? Many 3rd party maps\n"
-        "  require this file.\n"
-        "- Is the mod that you're playing installed correctly? From a\n"
-        "  clean Steam or GOG install, carefully follow the\n"
-        "  instructions for your mod for your OS version (Windows\n"
-        "  XP/7/8/10 etc)\n"
+        "Some common causes of issues are:\n"
+        "- Error code -1? Check that TotalA.exe isn't already running\n"
+        "- Error code 5, TAESC on Win7? Try delete aqrit.cfg/pdraw.dll\n"
+        "- Low game resolution? Try 1024x768 or higher\n"
+        "- Corrupted 3rd party .ufo files? If in doubt, clear them out\n"
+        "- Missing TA_Features_2013.ccx? Many 3rd party maps need it\n"
+        "- Incorrect installation? Carefully follow your mod's\n"
+        "  instructions for your OS version (Win XP/8/9/10 etc)\n"
         "\n"
         "If the issue persists you might like to ask for help on any\n"
-        "of the TA community's fine discord servers.";
+        "of the TA community's fine discord servers";
 
     QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
 }
