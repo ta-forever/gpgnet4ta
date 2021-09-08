@@ -5,8 +5,8 @@
 
 using namespace tareplay;
 
-TaDemoCompilerClient::TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, quint16 taDemoCompilerPort, quint32 tafGameId, QString playerPublicAddr) :
-    m_taDemoCompilerAddress(taDemoCompilerAddress),
+TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint16 taDemoCompilerPort, quint32 tafGameId, QString playerPublicAddr) :
+    m_taDemoCompilerHostName(taDemoCompilerHostName),
     m_taDemoCompilerPort(taDemoCompilerPort),
     m_tafGameId(tafGameId),
     m_playerPublicAddr(playerPublicAddr),
@@ -16,9 +16,9 @@ TaDemoCompilerClient::TaDemoCompilerClient(QHostAddress taDemoCompilerAddress, q
     m_hostDplayId(0u),
     m_ticks(-1)
 {
-    qInfo() << "[TaDemoCompilerClient::TaDemoCompilerClient] connecting to " << taDemoCompilerAddress.toString() << ":" << taDemoCompilerPort;
+    qInfo() << "[TaDemoCompilerClient::TaDemoCompilerClient] connecting to " << taDemoCompilerHostName << ":" << taDemoCompilerPort;
     m_datastream.setByteOrder(QDataStream::LittleEndian);
-    m_tcpSocket.connectToHost(m_taDemoCompilerAddress, m_taDemoCompilerPort);
+    m_tcpSocket.connectToHost(taDemoCompilerHostName, m_taDemoCompilerPort);
     if (!m_tcpSocket.waitForConnected(3000))
     {
         throw ConnectionError();

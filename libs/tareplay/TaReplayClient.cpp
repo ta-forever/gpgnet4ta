@@ -9,8 +9,8 @@
 
 using namespace tareplay;
 
-TaReplayClient::TaReplayClient(QHostAddress replayServerAddress, quint16 replayServerPort, quint32 tafGameId, quint32 position):
-    m_replayServerAddress(replayServerAddress),
+TaReplayClient::TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position):
+    m_replayServerHostName(replayServerHostName),
     m_replayServerPort(replayServerPort),
     m_tafGameId(tafGameId),
     m_position(position),
@@ -62,8 +62,8 @@ void TaReplayClient::connect()
 {
     if (!m_tcpSocket.isOpen())
     {
-        qInfo() << "[TaReplayClient::connect] connecting to replay server" << m_replayServerAddress << m_replayServerPort;
-        m_tcpSocket.connectToHost(m_replayServerAddress, m_replayServerPort);
+        qInfo() << "[TaReplayClient::connect] connecting to replay server" << m_replayServerHostName << m_replayServerPort;
+        m_tcpSocket.connectToHost(m_replayServerHostName, m_replayServerPort);
     }
 }
 

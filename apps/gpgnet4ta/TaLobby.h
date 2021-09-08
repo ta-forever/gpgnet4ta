@@ -34,7 +34,7 @@ class TaLobby : public QObject
 
 public:
     TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend);
-    void enableForwardToDemoCompiler(QString address, quint16 port, quint32 tafGameId, QString playerPublicAddr);
+    void enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId, QString playerPublicAddr);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
     quint32 getLocalPlayerDplayId();

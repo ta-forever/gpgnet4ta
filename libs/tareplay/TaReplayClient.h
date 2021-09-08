@@ -17,7 +17,7 @@ namespace tareplay {
     {
     public:
 
-        TaReplayClient(QHostAddress replayServerAddress, quint16 replayServerPort, quint32 tafGameId, quint32 position);
+        TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position);
         ~TaReplayClient();
 
         TaReplayServerStatus getStatus() const;
@@ -30,7 +30,7 @@ namespace tareplay {
         void sendSubscribe(quint32 gameId, quint32 position);
         void onReadyRead();
 
-        QHostAddress m_replayServerAddress;
+        QString m_replayServerHostName;
         quint16 m_replayServerPort;
         quint16 m_tafGameId;
         quint32 m_position;

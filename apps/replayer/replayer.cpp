@@ -77,11 +77,11 @@ int doMain(int argc, char* argv[])
     }
     else
     {
-        QString addr = demoUrl.host();
+        QString serverHostName = demoUrl.host();
         int port = demoUrl.port();
         int gameId = demoUrl.path().replace("/", "").toInt();
-        qInfo() << "[doMain] connecting to replay server addr,port,gameid" << addr << port << gameId;
-        replayClient.reset(new tareplay::TaReplayClient(QHostAddress(addr), port, gameId, 0));
+        qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId;
+        replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0));
         replayer.reset(new Replayer(replayClient->getReplayStream()));
     }
 
