@@ -29,6 +29,8 @@ namespace tareplay {
             QSharedPointer<gpgnet::GpgNetParse> gpgNetParser;
             QSharedPointer<std::istream> demoFile;
             QQueue<int> demoFileSizeLog;        // file size over the last 'delaySeconds'
+            unsigned timeAtStart;
+            unsigned sizeAtStart;
         };
 
         void sendData(UserContext &user, TaReplayServerStatus status, QByteArray data);

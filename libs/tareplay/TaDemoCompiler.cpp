@@ -328,6 +328,9 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     tad.write(unitData);
     tad.flush();
 
+    std::ofstream gameStartMarker(filename.toStdString() + ".meta");
+    gameStartMarker << QDateTime::currentDateTimeUtc().toTime_t() << ' ' << fs->tellp();
+
     return fs;
 }
 
@@ -381,6 +384,7 @@ void TaDemoCompiler::closeExpiredGames()
             qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing" << m_games[gameid].finalFileName;
             m_games[gameid].demoCompilation.reset();
             QFile::rename(m_games[gameid].tempFileName, m_games[gameid].finalFileName);
+            QFile::remove(m_games[gameid].tempFileName + ".meta");
         }
         m_games.remove(gameid);
     }

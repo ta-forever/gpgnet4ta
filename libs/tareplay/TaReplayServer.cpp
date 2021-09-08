@@ -1,5 +1,6 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
+#include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qpair.h>
@@ -23,7 +24,9 @@ using namespace tareplay;
 
 TaReplayServer::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
-    userDataStream(new QDataStream(socket))
+    userDataStream(new QDataStream(socket)),
+    timeAtStart(0u),
+    sizeAtStart(0u)
 {
     userDataStream->setByteOrder(QDataStream::ByteOrder::LittleEndian);
     userDataStreamProtol.reset(new gpgnet::GpgNetSend(*userDataStream));
@@ -121,25 +124,23 @@ void TaReplayServer::onReadyRead()
             if (cmd == TaReplayServerSubscribe::ID)
             {
                 TaReplayServerSubscribe msg(command);
-                QFileInfo tempDemoFile(m_demoPathTemplate.arg(msg.gameId) + ".part");
-                QFileInfo finalDemoFile(m_demoPathTemplate.arg(msg.gameId));
-                if (finalDemoFile.exists() && finalDemoFile.isFile())
+                QFileInfo fileInfo;
+                for (QString fn : { m_demoPathTemplate.arg(msg.gameId) + ".part", m_demoPathTemplate.arg(msg.gameId) })
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << finalDemoFile.absoluteFilePath();
-                    userContext.demoFile.reset(new std::ifstream(finalDemoFile.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
-                    userContext.demoFile->seekg(msg.position);
-                    userContext.gameId = msg.gameId;
+                    fileInfo.setFile(fn);
+                    if (fileInfo.exists() && fileInfo.isFile())
+                    {
+                        qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << fileInfo.absoluteFilePath();
+                        userContext.demoFile.reset(new std::ifstream(fileInfo.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
+                        userContext.demoFile->seekg(msg.position);
+                        userContext.gameId = msg.gameId;
+                        std::ifstream((fileInfo.absoluteFilePath().toStdString() + ".meta").c_str()) >> userContext.timeAtStart >> userContext.sizeAtStart;
+                        break;
+                    }
                 }
-                else if (tempDemoFile.exists() && tempDemoFile.isFile())
+                if (!fileInfo.exists() || !fileInfo.isFile())
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << tempDemoFile.absoluteFilePath();
-                    userContext.demoFile.reset(new std::ifstream(tempDemoFile.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
-                    userContext.demoFile->seekg(msg.position);
-                    userContext.gameId = msg.gameId;
-                }
-                else
-                {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND" << finalDemoFile.absoluteFilePath();
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND" << msg.gameId;
                     sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
                 }
             }
@@ -202,18 +203,32 @@ void TaReplayServer::updateFileSizeLog(UserContext& user)
         user.demoFile->clear();
         user.demoFileSizeLog.enqueue(size);   //back
 
-        if (user.demoFileSizeLog.size() > 7u && user.demoFileSizeLog.size() < m_delaySeconds)
+        if (user.demoFileSizeLog.size() < m_delaySeconds)
         {
-            // heuristic to backfill the size log at times before we started
-            int diff = user.demoFileSizeLog.back() - user.demoFileSizeLog.front();
-            int secs = user.demoFileSizeLog.size() - 1;
-            int initialFront = user.demoFileSizeLog.front();
-            for (int n = 1; user.demoFileSizeLog.size() < m_delaySeconds; ++n)
+            if (user.demoFileSizeLog.size() > 0u && user.timeAtStart > 0u && user.sizeAtStart > 0u && user.demoFileSizeLog.back() >= user.sizeAtStart)
             {
-                int sizeGuess = std::max(initialFront - (n * diff / secs), 0);
-                user.demoFileSizeLog.push_front(sizeGuess);
+                int diff = user.demoFileSizeLog.back() - user.sizeAtStart;
+                int secs = std::max(int(unsigned(QDateTime::currentDateTimeUtc().toTime_t())) - int(user.timeAtStart), 1);
+                int initialFront = user.demoFileSizeLog.front();
+                for (int n = 1; user.demoFileSizeLog.size() < m_delaySeconds; ++n)
+                {
+                    int sizeGuess = std::max(initialFront - (n * diff / secs), int(user.sizeAtStart));
+                    user.demoFileSizeLog.push_front(sizeGuess);
+                }
+                qInfo() << "[TaReplayServer::updateFileSizeLog] interpolated backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "backfill_seconds=" << user.demoFileSizeLog.size();
             }
-            qInfo() << "[TaReplayServer::updateFileSizeLog] heuristic backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "backfill_seconds=" << user.demoFileSizeLog.size();
+            else if (user.demoFileSizeLog.size() > 7u)
+            {
+                int diff = user.demoFileSizeLog.back() - user.demoFileSizeLog.front();
+                int secs = user.demoFileSizeLog.size() - 1;
+                int initialFront = user.demoFileSizeLog.front();
+                for (int n = 1; user.demoFileSizeLog.size() < m_delaySeconds; ++n)
+                {
+                    int sizeGuess = std::max(initialFront - (n * diff / secs), 0);
+                    user.demoFileSizeLog.push_front(sizeGuess);
+                }
+                qInfo() << "[TaReplayServer::updateFileSizeLog] extrapolated backfill. front=" << user.demoFileSizeLog.front() << "back=" << user.demoFileSizeLog.back() << "backfill_seconds=" << user.demoFileSizeLog.size();
+            }
         }
     }
     else
