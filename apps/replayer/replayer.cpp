@@ -1,6 +1,7 @@
 #include "TaReplayer.h"
 
 #include "taflib/Logger.h"
+#include "taflib/MessageBoxThread.h"
 #include "talaunch/LaunchClient.h"
 #include "tareplay/TaReplayClient.h"
 
@@ -12,6 +13,13 @@
 #include <QtCore/qtimer.h>
 
 #include <iostream>
+#include <windows.h>
+
+void GameNotFoundMessageBox(taflib::MessageBoxThread& msgbox)
+{
+    QString err = "TAF Replay Server responded GAME NOT FOUND. Either the players are using an outdated version of TAF, or their games failed to connect to the TAF Demo Recorder. Suggest you find a different game to watch, or go play one yourself.";
+    QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
+}
 
 int doMain(int argc, char* argv[])
 {
@@ -48,6 +56,7 @@ int doMain(int argc, char* argv[])
     std::shared_ptr<std::istream> demoStream;
     std::shared_ptr<tareplay::TaReplayClient> replayClient;
     std::shared_ptr<Replayer> replayer;
+    taflib::MessageBoxThread msgbox;
 
     if (parser.isSet("launchserverport"))
     {
@@ -83,6 +92,10 @@ int doMain(int argc, char* argv[])
         qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId;
         replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0));
         replayer.reset(new Replayer(replayClient->getReplayStream()));
+        QObject::connect(replayClient.get(), &tareplay::TaReplayClient::gameNotFound, [&app, &msgbox]() {
+            QObject::connect(&msgbox, &taflib::MessageBoxThread::userAcknowledged, &app, QCoreApplication::quit);
+            GameNotFoundMessageBox(msgbox);
+        });
     }
 
 

@@ -117,6 +117,10 @@ void TaReplayClient::onReadyRead()
                     m_replayBufferOStream.write(msg.data.data(), msg.data.size());
                     m_position += msg.data.size();
                 }
+                else if (msg.status == TaReplayServerStatus::GAME_NOT_FOUND)
+                {
+                    emit gameNotFound();
+                }
                 else
                 {
                     qWarning() << "[TaReplayClient::onReadyRead] server replied status" << int(msg.status);

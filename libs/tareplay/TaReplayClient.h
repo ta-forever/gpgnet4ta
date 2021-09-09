@@ -15,13 +15,17 @@ namespace tareplay {
 
     class TaReplayClient: public QObject
     {
-    public:
+        Q_OBJECT
 
+    public:
         TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position);
         ~TaReplayClient();
 
         TaReplayServerStatus getStatus() const;
         std::istream* getReplayStream();
+
+    signals:
+        void gameNotFound();
 
     private:
         void timerEvent(QTimerEvent* event);

@@ -24,6 +24,9 @@ namespace taflib {
         MessageBoxThread();
         ~MessageBoxThread();
 
+    signals:
+        void userAcknowledged(int userSelection);
+
     public slots:
 
         void onMessage(QString title, QString content, unsigned int flags);

@@ -25,7 +25,8 @@ void MessageBoxThread::onMessage(QString title, QString content, unsigned int fl
     {
         std::string _title = title.toStdString();
         std::string _content = content.toStdString();
-        MessageBox(NULL, _content.c_str(), _title.c_str(), flags);
+        int result = MessageBox(NULL, _content.c_str(), _title.c_str(), flags);
+        emit userAcknowledged(result);
     }
     catch (const std::exception & e)
     {

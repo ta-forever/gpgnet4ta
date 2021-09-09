@@ -1,3 +1,5 @@
+set(CMAKE_AUTOMOC ON)
+
 add_library(tareplay STATIC
     TaDemoCompiler.h
     TaDemoCompiler.cpp

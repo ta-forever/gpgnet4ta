@@ -10,7 +10,6 @@
 #include "gpgnet/GpgNetClient.h"
 #include "taflib/ConsoleReader.h"
 #include "taflib/Logger.h"
-#include "taflib/MessageBoxThread.h"
 #include "taflib/Watchdog.h"
 #include "tafnet/TafnetGameNode.h"
 #include "tapacket/TADemoParser.h"

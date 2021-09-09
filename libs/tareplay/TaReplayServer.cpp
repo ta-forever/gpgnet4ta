@@ -177,8 +177,11 @@ void TaReplayServer::timerEvent(QTimerEvent* event)
     {
         for (QSharedPointer<UserContext> userContext : m_users)
         {
-            updateFileSizeLog(*userContext);
-            serviceUser(*userContext);
+            if (userContext && userContext->demoFile)
+            {
+                updateFileSizeLog(*userContext);
+                serviceUser(*userContext);
+            }
         }
     }
     catch (const std::exception & e)
