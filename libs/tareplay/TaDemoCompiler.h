@@ -5,7 +5,7 @@ namespace tareplay {
     class TaDemoCompiler: public QObject
     {
     public:
-        TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port);
+        TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize);
         ~TaDemoCompiler();
 
     private:
@@ -51,6 +51,7 @@ namespace tareplay {
         void commitMove(const GameContext &, int playerNumber, const GameMoveMessage &);
 
         QString m_demoPathTemplate;
+        quint32 m_minDemoSize;
         QTcpServer m_tcpServer;
         QMap<QTcpSocket*, QSharedPointer<UserContext> > m_players;
         QMap<quint32, GameContext> m_games;

@@ -5,6 +5,9 @@
 
 using namespace gpgnet;
 
+static const quint32 MAX_RECORD_SIZE = 10000u;
+static const quint32 MAX_NUM_ARGS = 10u;
+
 GpgNetParse::RecordReader::RecordReader():
     m_progress(0)
 { }
@@ -67,6 +70,10 @@ void GpgNetParse::ByteArrayRecordReader::reset()
 const QByteArray& GpgNetParse::ByteArrayRecordReader::get(QDataStream& is)
 {
     quint32 size = m_size.getInt(is);
+    if (size > MAX_RECORD_SIZE)
+    {
+        throw std::runtime_error("[GpgNetParse::ByteArrayRecordRecordReader] record exceeds MAX_RECORD_SIZE");
+    }
     m_data.setSize(size);
     return m_data.get(is);
 }
@@ -79,6 +86,11 @@ QVariantList GpgNetParse::GetCommand(QDataStream& is)
     commandAndArgs.append(command);
 
     quint32 numArgs = m_numArgs.getInt(is);
+    if (numArgs > MAX_NUM_ARGS)
+    {
+        throw std::runtime_error("[GpgNetParse::GetCommand] number of arguments exceeds MAX_NUM_ARGS");
+    }
+
     for (unsigned nArg = 0u; nArg < numArgs; ++nArg)
     {
         if (m_argTypes.size() == nArg)
@@ -122,34 +134,3 @@ void GpgNetParse::reset()
     m_argTypes.clear();
     m_args.clear();
 }
-
-/*
-QVariantList GpgNetParse::GetCommand()
-{
-    QVariantList commandAndArgs;
-
-    QByteArray command = GetByteArray(m_is);
-    quint32 numArgs = GetInt(m_is);
-    commandAndArgs.append(command);
-
-    for (unsigned n = 0; n < numArgs; ++n)
-    {
-        quint8 argType = GetByte(m_is);
-        if (argType == 0)
-        {
-            quint32 arg = GetInt(m_is);
-            commandAndArgs.append(arg);
-        }
-        else if (argType == 1)
-        {
-            QByteArray arg = GetByteArray(m_is);
-            commandAndArgs.append(arg);
-        }
-        else
-        {
-            throw std::runtime_error("unexpected argument type");
-        }
-    }
-    return commandAndArgs;
-}
-*/

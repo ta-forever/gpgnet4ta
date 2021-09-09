@@ -40,6 +40,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("port", "port on which to listen for demo data.", "port", "15000"));
     parser.addOption(QCommandLineOption("livedelaysecs", "Number of seconds to delay the live replay by", "livedelaysecs", "300"));
     parser.addOption(QCommandLineOption("maxsendrate", "Maximum bytes per user per second to send replay data. (1hr, 8 player ESC game ~20MB)", "maxsendrate", "30000"));
+    parser.addOption(QCommandLineOption("mindemosize", "Discard demos smaller than this number of bytes", "mindemosize", "100000"));
     parser.addOption(QCommandLineOption("compiler", "run the TA Demo Compiler Server"));
     parser.addOption(QCommandLineOption("replayer", "run the TA Demo Replay Server"));
     parser.process(app);
@@ -53,7 +54,7 @@ int doMain(int argc, char* argv[])
     quint16 port = parser.value("port").toInt();
     if (parser.isSet("compiler"))
     {
-        compiler.reset(new TaDemoCompiler(parser.value("demofile"), host, port++));
+        compiler.reset(new TaDemoCompiler(parser.value("demofile"), host, port++, parser.value("mindemosize").toUInt()));
     }
     if (parser.isSet("replayer"))
     {

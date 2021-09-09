@@ -40,8 +40,9 @@ TaDemoCompiler::GameContext::GameContext() :
     expiryCountdown(GAME_EXPIRY_TICKS)
 { }
 
-TaDemoCompiler::TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port):
-    m_demoPathTemplate(demoPathTemplate)
+TaDemoCompiler::TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize):
+    m_demoPathTemplate(demoPathTemplate),
+    m_minDemoSize(minDemoSize)
 {
     qInfo() << "[TaDemoCompiler::TaDemoCompiler] starting server on addr" << addr << "port" << port;
     m_tcpServer.listen(addr, port);
@@ -67,11 +68,14 @@ void TaDemoCompiler::onNewConnection()
 {
     try
     {
-        QTcpSocket* socket = m_tcpServer.nextPendingConnection();
-        qInfo() << "accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
-        QObject::connect(socket, &QTcpSocket::readyRead, this, &TaDemoCompiler::onReadyRead);
-        QObject::connect(socket, &QTcpSocket::stateChanged, this, &TaDemoCompiler::onSocketStateChanged);
-        m_players[socket].reset(new UserContext(socket));
+        while (m_tcpServer.hasPendingConnections())
+        {
+            QTcpSocket* socket = m_tcpServer.nextPendingConnection();
+            qInfo() << "accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
+            QObject::connect(socket, &QTcpSocket::readyRead, this, &TaDemoCompiler::onReadyRead);
+            QObject::connect(socket, &QTcpSocket::stateChanged, this, &TaDemoCompiler::onSocketStateChanged);
+            m_players[socket].reset(new UserContext(socket));
+        }
     }
     catch (const std::exception & e)
     {
@@ -107,9 +111,9 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
 
 void TaDemoCompiler::onReadyRead()
 {
+    QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
     try
     {
-        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
         auto itUserContext = m_players.find(sender);
         if (itUserContext == m_players.end())
         {
@@ -127,7 +131,7 @@ void TaDemoCompiler::onReadyRead()
             QVariantList command = userContext.gpgNetParser.GetCommand(*userContext.dataStream);
             QString cmd = command[0].toString();
 
-            if (cmd == "Move")
+            if (cmd == GameMoveMessage::ID)
             {
                 auto itGame = m_games.find(userContext.gameId);
                 if (itGame != m_games.end())
@@ -229,6 +233,11 @@ void TaDemoCompiler::onReadyRead()
     catch (const std::exception & e)
     {
         qWarning() << "[TaDemoCompiler::onReadyRead] exception:" << e.what();
+        if (sender)
+        {
+            qWarning() << "[TaDemoCompiler::onReadyRead] closing users connection ...";
+            sender->close();
+        }
     }
     catch (...)
     {
@@ -381,10 +390,20 @@ void TaDemoCompiler::closeExpiredGames()
     {
         if (m_games[gameid].demoCompilation)
         {
-            qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing" << m_games[gameid].finalFileName;
-            m_games[gameid].demoCompilation.reset();
-            QFile::rename(m_games[gameid].tempFileName, m_games[gameid].finalFileName);
-            QFile::remove(m_games[gameid].tempFileName + ".meta");
+            if (m_games[gameid].demoCompilation->tellp() >= m_minDemoSize)
+            {
+                qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing" << m_games[gameid].finalFileName;
+                m_games[gameid].demoCompilation.reset();
+                QFile::rename(m_games[gameid].tempFileName, m_games[gameid].finalFileName);
+                QFile::remove(m_games[gameid].tempFileName + ".meta");
+            }
+            else
+            {
+                qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired and is too small. Deleting" << m_games[gameid].finalFileName;
+                m_games[gameid].demoCompilation.reset();
+                QFile::remove(m_games[gameid].tempFileName);
+                QFile::remove(m_games[gameid].tempFileName + ".meta");
+            }
         }
         m_games.remove(gameid);
     }

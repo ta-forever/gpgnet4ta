@@ -102,9 +102,9 @@ void TaReplayServer::onSocketStateChanged(QAbstractSocket::SocketState socketSta
 
 void TaReplayServer::onReadyRead()
 {
+    QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
     try
     {
-        QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
         auto itUserContext = m_users.find(sender);
         if (itUserContext == m_users.end())
         {
@@ -157,6 +157,11 @@ void TaReplayServer::onReadyRead()
     catch (const std::exception & e)
     {
         qWarning() << "[TaReplayServer::onReadyRead] exception:" << e.what();
+        if (sender)
+        {
+            qWarning() << "[TaReplayServer::onReadyRead] closing users connection ...";
+            sender->close();
+        }
     }
     catch (...)
     {
