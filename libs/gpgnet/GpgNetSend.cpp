@@ -14,7 +14,14 @@ void GpgNetSend::sendCommand(QString command, int argumentCount)
 
 void GpgNetSend::sendArgument(QByteArray arg)
 {
-    m_os << quint8(1) << arg;
+    if (arg.isNull())
+    {
+        m_os << quint8(1) << QByteArray("");
+    }
+    else
+    {
+        m_os << quint8(1) << arg;
+    }
 }
 
 void GpgNetSend::sendArgument(int arg)

@@ -2,6 +2,8 @@
 
 #include <QtCore/qsharedpointer.h>
 
+#include <sstream>
+
 
 using namespace gpgnet;
 
@@ -72,7 +74,9 @@ const QByteArray& GpgNetParse::ByteArrayRecordReader::get(QDataStream& is)
     quint32 size = m_size.getInt(is);
     if (size > MAX_RECORD_SIZE)
     {
-        throw std::runtime_error("[GpgNetParse::ByteArrayRecordRecordReader] record exceeds MAX_RECORD_SIZE");
+        std::ostringstream ss;
+        ss << "[GpgNetParse::ByteArrayRecordRecordReader] record exceeds MAX_RECORD_SIZE. size=" << size;
+        throw std::runtime_error(ss.str());
     }
     m_data.setSize(size);
     return m_data.get(is);
@@ -88,6 +92,8 @@ QVariantList GpgNetParse::GetCommand(QDataStream& is)
     quint32 numArgs = m_numArgs.getInt(is);
     if (numArgs > MAX_NUM_ARGS)
     {
+        std::ostringstream ss;
+        ss << "[GpgNetParse::GetCommand] number of arguments exceeds MAX_NUM_ARGS. numArgs=" << numArgs;
         throw std::runtime_error("[GpgNetParse::GetCommand] number of arguments exceeds MAX_NUM_ARGS");
     }
 
