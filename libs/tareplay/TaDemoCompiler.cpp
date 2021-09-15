@@ -24,7 +24,7 @@
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14";
+static const char* VERSION = "taf-0.14.1";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
@@ -227,9 +227,7 @@ void TaDemoCompiler::onReadyRead()
         }
     }
     catch (const gpgnet::GpgNetParse::DataNotReady &)
-    {
-        qInfo() << "[TaDemoCompiler::onReadyRead] waiting for more data";
-    }
+    { }
     catch (const std::exception & e)
     {
         qWarning() << "[TaDemoCompiler::onReadyRead] exception:" << e.what();
@@ -247,18 +245,32 @@ void TaDemoCompiler::onReadyRead()
 
 std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& game, QString filename)
 {
-    qInfo() << "[TaDemoCompiler::onReadyRead] creating new demo compilation" << filename;
+    qInfo() << "[TaDemoCompiler::commitHeaders] creating new demo compilation" << filename;
 
-    for (int numPlayer = 0; numPlayer < game.playersLockedIn.size(); ++numPlayer)
+    QVector<quint32> knownLockedInPlayers;
+    for (quint32 dpid : game.playersLockedIn)
     {
-        quint32 dpid = game.playersLockedIn[numPlayer];
+        if (game.players.contains(dpid) && !game.players[dpid].isNull())
+        {
+            qInfo() << "[TaDemoCompiler::commitHeaders] known locked-in player:" << dpid;
+            knownLockedInPlayers.push_back(dpid);
+        }
+        else
+        {
+            qInfo() << "[TaDemoCompiler::commitHeaders] unknown locked-in player will be ignored:" << dpid;
+        }
+    }
+
+    for (int numPlayer = 0; numPlayer < knownLockedInPlayers.size(); ++numPlayer)
+    {
+        quint32 dpid = knownLockedInPlayers[numPlayer];
         if (game.players.contains(dpid) && !game.players[dpid].isNull())
         {
             game.players[dpid]->gamePlayerNumber = numPlayer + 1;
         }
         else
         {
-            qWarning() << "[TaDemoCompiler::onReadyRead] player" << dpid << "not known in game" << game.gameId;
+            qWarning() << "[TaDemoCompiler::commitHeaders] player" << dpid << "not known in game" << game.gameId;
         }
     }
 
@@ -268,7 +280,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     tapacket::Header header;
     std::strcpy(header.magic, "TA Demo");
     header.version = 5u;
-    header.numPlayers = game.playersLockedIn.size();
+    header.numPlayers = knownLockedInPlayers.size();
     header.maxUnits = game.header.maxUnits;
     header.mapName = game.header.mapName.toStdString();
     tad.write(header);
@@ -287,13 +299,17 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         sector.data.assign((std::uint8_t*)dateString.data(), dateString.size());
         tad.write(sector);
 
-        for (quint32 dpid : game.playersLockedIn)
+        for (quint32 dpid : knownLockedInPlayers)
         {
-            UserContext& userContext = *game.players[dpid];
             sector.sectorType = tapacket::ExtraSector::PLAYER_ADDR;
             sector.data.clear();
             sector.data.append(0x50, 0);    // count, value
-            std::string addr = userContext.playerPublicAddr.toStdString();
+            std::string addr;
+            if (game.players.contains(dpid) && game.players[dpid])
+            {
+                UserContext& userContext = *game.players[dpid];
+                addr = userContext.playerPublicAddr.toStdString();
+            }
             addr.append(1, 0);              // need a null terminator
             std::transform(addr.begin(), addr.end(), addr.begin(), [](std::uint8_t x) { return x ^ 42; });
             sector.data.append((std::uint8_t*)addr.data(), addr.size());
@@ -301,7 +317,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         }
     }
 
-    for (quint32 dpid : game.playersLockedIn)
+    for (quint32 dpid : knownLockedInPlayers)
     {
         if (game.players.contains(dpid) && game.players[dpid])
         {
@@ -314,7 +330,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         }
     }
 
-    for (quint32 dpid : game.playersLockedIn)
+    for (quint32 dpid : knownLockedInPlayers)
     {
         if (game.players.contains(dpid) && game.players[dpid])
         {
