@@ -6,6 +6,7 @@
 
 #include <dplay.h>
 #include <sstream>
+#include <cmath>
 
 #ifdef min
 #undef min
@@ -878,6 +879,10 @@ bool Replayer::doPlay()
                 m_isPaused = true;
                 this->say(m_demoPlayers[0]->dpId, "Replay buffer is empty. Unpause to continue");
             }
+            else
+            {
+                m_playBackSpeed = std::max(m_playBackSpeed, 10u);
+            }
             break;
         }
 
@@ -937,6 +942,7 @@ bool Replayer::doPlay()
                 auto rejectee = getDemoPlayerByOriginalDpId(originalDpId);
                 if (rejectee)
                 {
+                    qInfo() << sender->name.c_str() << fromId << "rejected" << rejectee->name.c_str() << originalDpId;
                     say(sender->dpId, sender->name + " rejected " + rejectee->name);
                 }
                 filteredMoves += move;
@@ -946,11 +952,16 @@ bool Replayer::doPlay()
             case tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
             {
                 std::uint32_t ticks = *(std::uint32_t*) & move[3];
-                m_demoTicks = sender->ticks = ticks;
+                std::uint32_t demoTicks = sender->ticks = ticks;
                 for (const auto& demoPlayer : m_demoPlayers)
                 {
-                    m_demoTicks = std::min(m_demoTicks, demoPlayer->ticks);
+                    // sync with the the most lagged player that is actually progressing
+                    if (demoPlayer->ticks > m_demoTicks)
+                    {
+                        demoTicks = std::min(demoTicks, demoPlayer->ticks);
+                    }
                 }
+                m_demoTicks = demoTicks;
                 filteredMoves += move;
                 break;
             }
@@ -1075,6 +1086,7 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
             else
             {
                 m_playBackSpeed = s[2];
+                m_playBackSpeed = 0.5 + std::pow(10.0, m_playBackSpeed / 10.0);
             }
             break;
         }
