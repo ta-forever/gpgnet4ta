@@ -90,9 +90,7 @@ void GpgNetClient::onReadyRead()
         }
     }
     catch (const gpgnet::GpgNetParse::DataNotReady &)
-    {
-        qInfo() << "[GpgNetClient::onReadyRead] waiting for more data";
-    }
+    { }
     catch (std::exception &e)
     {
         qWarning() << "[GpgNetClient::onReadyRead] exception" << e.what();

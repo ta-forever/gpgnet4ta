@@ -19,7 +19,7 @@ Logger::Logger(const std::string& filename, Verbosity verbosity) :
         m_ostream = m_optionalLogFile.get();
     }
 
-    QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+    QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
     ostream() << std::endl;
     ostream() << datetime.toStdString() << " -------------- BEGIN LOG --------------" << std::endl;
 }
@@ -50,35 +50,35 @@ void Logger::LogToFile(QtMsgType type, const QMessageLogContext& context, const 
     case QtDebugMsg:
         if (m_verbosity >= Verbosity::DEBUG)
         {
-            QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+            QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
             ostream() << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Debug] " << msg.toStdString() << std::endl;
         }
         break;
     case QtInfoMsg:
         if (m_verbosity >= Verbosity::INFO)
         {
-            QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+            QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
             ostream() << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Info] " << msg.toStdString() << std::endl;
         }
         break;
     case QtCriticalMsg:
         if (m_verbosity >= Verbosity::CRITICAL)
         {
-            QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+            QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
             ostream() << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Critical] " << msg.toStdString() << std::endl;
         }
         break;
     case QtWarningMsg:
         if (m_verbosity >= Verbosity::WARNING)
         {
-            QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+            QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
             ostream() << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Warning] " << msg.toStdString() << std::endl;
         }
         break;
     case QtFatalMsg:
         if (m_verbosity >= Verbosity::FATAL)
         {
-            QString datetime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss");
+            QString datetime = QDateTime::currentDateTimeUtc().toString("yyyy.MM.dd hh:mm:ss");
             ostream() << datetime.toStdString() << " [" << QThread::currentThreadId() << ":Fatal] " << msg.toStdString() << std::endl;
         }
         abort();

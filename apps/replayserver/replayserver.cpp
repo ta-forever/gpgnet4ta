@@ -27,7 +27,7 @@ int doMain(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("ReplayServer");
-    QCoreApplication::setApplicationVersion("0.14");
+    QCoreApplication::setApplicationVersion("0.14.1");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replay Server");
@@ -47,6 +47,11 @@ int doMain(int argc, char* argv[])
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(taflib::Logger::Log);
+
+    //TafLobbyClient tafLobbyClient("taforever.com", 8001);
+    //tafLobbyClient.connectToHost();
+    //app.exec();
+    //return 0;
 
     std::shared_ptr<TaDemoCompiler> compiler;
     std::shared_ptr<TaReplayServer> replayServer;

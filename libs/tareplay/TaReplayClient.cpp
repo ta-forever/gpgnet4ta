@@ -134,9 +134,7 @@ void TaReplayClient::onReadyRead()
         m_replayBufferOStream.flush();
     }
     catch (const gpgnet::GpgNetParse::DataNotReady &)
-    {
-        qInfo() << "[TaReplayClient::onReadyRead] waiting for more data";
-    }
+    { }
     catch (const std::exception & e)
     {
         qWarning() << "[TaReplayClient::onReadyRead] exception:" << e.what();
