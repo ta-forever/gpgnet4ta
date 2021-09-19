@@ -16,7 +16,17 @@ namespace tareplay {
         TaReplayServer(QString demoPathTemplate, QHostAddress addr, quint16 port, quint16 delaySeconds, qint64 maxBytesPerUserPerSecond);
         ~TaReplayServer();
 
+        // @param delaySeconds -ve to disable replay altogether
+        void setGameInfo(quint32 gameId, int delaySeconds, QString state);
+
     private:
+
+        struct GameInfo
+        {
+            quint32 gameId;
+            int delaySeconds;
+            QString state;
+        };
 
         struct UserContext
         {
@@ -48,6 +58,7 @@ namespace tareplay {
         qint64 m_maxBytesPerUserPerSecond;
         QTcpServer m_tcpServer;
         QMap<QTcpSocket*, QSharedPointer<UserContext> > m_users;
+        QMap<quint32, GameInfo> m_gameInfo;
     };
 
 }

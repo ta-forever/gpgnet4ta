@@ -15,8 +15,7 @@ TaReplayClient::TaReplayClient(QString replayServerHostName, quint16 replayServe
     m_tafGameId(tafGameId),
     m_position(position),
     m_socketStream(&m_tcpSocket),
-    m_gpgNetSerialiser(m_socketStream),
-    m_status(TaReplayServerStatus::CONNECTING)
+    m_gpgNetSerialiser(m_socketStream)
 {
     QTemporaryFile tmpfile(QDir::tempPath() + QString("/taf-replay-%1").arg(tafGameId) + ".XXXXXX.tad");
     tmpfile.open();
@@ -74,7 +73,6 @@ void TaReplayClient::onSocketStateChanged(QAbstractSocket::SocketState socketSta
         if (socketState == QAbstractSocket::UnconnectedState)
         {
             qWarning() << "[TaReplayClient::onSocketStateChanged] socket disconnected";
-            m_status = TaReplayServerStatus::CONNECTING;
         }
         else if (socketState == QAbstractSocket::ConnectedState)
         {
@@ -117,13 +115,9 @@ void TaReplayClient::onReadyRead()
                     m_replayBufferOStream.write(msg.data.data(), msg.data.size());
                     m_position += msg.data.size();
                 }
-                else if (msg.status == TaReplayServerStatus::GAME_NOT_FOUND)
-                {
-                    emit gameNotFound();
-                }
                 else
                 {
-                    qWarning() << "[TaReplayClient::onReadyRead] server replied status" << int(msg.status);
+                    emit gameNotFound(msg.status);
                 }
             }
             else
@@ -143,11 +137,6 @@ void TaReplayClient::onReadyRead()
     {
         qWarning() << "[TaReplayClient::onReadyRead] general exception:";
     }
-}
-
-TaReplayServerStatus TaReplayClient::getStatus() const
-{
-    return m_status;
 }
 
 std::istream* TaReplayClient::getReplayStream()

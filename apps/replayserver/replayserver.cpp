@@ -1,5 +1,6 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
+#include <QtCore/qcryptographichash.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qpair.h>
@@ -20,6 +21,9 @@
 #include "tareplay/TaDemoCompilerMessages.h"
 #include "tareplay/TaReplayServer.h"
 #include "tareplay/TaDemoCompiler.h"
+
+#include "TafLobbyClient.h"
+#include "TafHwIdGenerator.h"
 
 using namespace tareplay;
 
@@ -43,15 +47,25 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("mindemosize", "Discard demos smaller than this number of bytes", "mindemosize", "100000"));
     parser.addOption(QCommandLineOption("compiler", "run the TA Demo Compiler Server"));
     parser.addOption(QCommandLineOption("replayer", "run the TA Demo Replay Server"));
+    parser.addOption(QCommandLineOption("lobbyserver", "Connect to lobby server to retrieve game information eg lobby.taforever.com:8001", "lobbyserver", ""));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(taflib::Logger::Log);
 
-    //TafLobbyClient tafLobbyClient("taforever.com", 8001);
-    //tafLobbyClient.connectToHost();
-    //app.exec();
-    //return 0;
+    TafLobbyClient tafLobbyClient(QCoreApplication::applicationName(), QCoreApplication::applicationVersion());
+    if (!parser.value("lobbyserver").isEmpty() && qEnvironmentVariableIsSet("RS_USERNAME") && qEnvironmentVariableIsSet("RS_PASSWORD"))
+    {
+        QStringList hostAndPort = parser.value("lobbyserver").split(':');
+        tafLobbyClient.connectToHost(hostAndPort[0], hostAndPort[1].toInt());
+        QObject::connect(&tafLobbyClient, &TafLobbyClient::session, [&tafLobbyClient](quint64 sessionId) {
+            QString uid = "0"; // TafHwIdGenerator("C:/Program Files/TA Forever Client/natives/faf-uid.exe").get(sessionId);
+            QString username = qgetenv("RS_USERNAME");
+            QString password = qgetenv("RS_PASSWORD");
+            password = QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256).toHex();
+            tafLobbyClient.sendHello(sessionId, uid, "0.0.0.0", username, password);
+        });
+    }
 
     std::shared_ptr<TaDemoCompiler> compiler;
     std::shared_ptr<TaReplayServer> replayServer;
@@ -70,6 +84,10 @@ int doMain(int argc, char* argv[])
             parser.value("livedelaysecs").toUInt(),
             parser.value("maxsendrate").toInt()
         ));
+
+        QObject::connect(&tafLobbyClient, &TafLobbyClient::gameInfo, [replayServer](TafLobbyGameInfo gameInfo) {
+            replayServer->setGameInfo(gameInfo.id, gameInfo.replayDelaySeconds, gameInfo.state);
+        });
     }
 
     app.exec();

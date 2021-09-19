@@ -21,11 +21,10 @@ namespace tareplay {
         TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position);
         ~TaReplayClient();
 
-        TaReplayServerStatus getStatus() const;
         std::istream* getReplayStream();
 
     signals:
-        void gameNotFound();
+        void gameNotFound(TaReplayServerStatus status);
 
     private:
         void timerEvent(QTimerEvent* event);
@@ -45,7 +44,6 @@ namespace tareplay {
         gpgnet::GpgNetParse m_gpgNetParser;
         std::ofstream m_replayBufferOStream;
         std::ifstream m_replayBufferIStream;
-        TaReplayServerStatus m_status;
         QString m_tempFilename;
     };
 

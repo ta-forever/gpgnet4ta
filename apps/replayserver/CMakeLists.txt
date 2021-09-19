@@ -1,5 +1,13 @@
+set(CMAKE_AUTOMOC ON)
+
 add_executable(replayserver
     replayserver.cpp
+    TafLobbyClient.h
+    TafLobbyClient.cpp
+    TafLobbyJsonProtocol.h
+    TafLobbyJsonProtocol.cpp
+    TafHwIdGenerator.h
+    TafHwIdGenerator.cpp
     )
 
 target_include_directories(replayserver 

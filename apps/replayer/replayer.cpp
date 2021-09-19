@@ -17,7 +17,13 @@
 
 void GameNotFoundMessageBox(taflib::MessageBoxThread& msgbox)
 {
-    QString err = "TAF Replay Server responded GAME NOT FOUND. Either the players are using an outdated version of TAF, or their games failed to connect to the TAF Demo Recorder. Suggest you find a different game to watch, or go play one yourself.";
+    QString err = "TAF Replay Server responded GAME NOT FOUND. Either the players are using an outdated version of TAF, or their games failed to connect to the TAF Demo Recorder. TAF suggests you find a different game to watch, or go play one yourself.";
+    QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
+}
+
+void LiveReplayDisabledMessageBox(taflib::MessageBoxThread& msgbox)
+{
+    QString err = "TAF Replay Server responded LIVE REPLAY DISABLED. The host has disabled live replay for this game because their underpants are too tight. TAF suggests you find a different game to watch, or go play one yourself.";
     QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
 }
 
@@ -92,9 +98,10 @@ int doMain(int argc, char* argv[])
         qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId;
         replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0));
         replayer.reset(new Replayer(replayClient->getReplayStream()));
-        QObject::connect(replayClient.get(), &tareplay::TaReplayClient::gameNotFound, [&app, &msgbox]() {
+        QObject::connect(replayClient.get(), &tareplay::TaReplayClient::gameNotFound, [&app, &msgbox](tareplay::TaReplayServerStatus status) {
             QObject::connect(&msgbox, &taflib::MessageBoxThread::userAcknowledged, &app, QCoreApplication::quit);
-            GameNotFoundMessageBox(msgbox);
+            if (status == tareplay::TaReplayServerStatus::GAME_NOT_FOUND) GameNotFoundMessageBox(msgbox);
+            if (status == tareplay::TaReplayServerStatus::LIVE_REPLAY_DISABLED) LiveReplayDisabledMessageBox(msgbox);
         });
     }
 

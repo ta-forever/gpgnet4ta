@@ -31,7 +31,7 @@ void ConsoleReader::onNewConnection()
         QTcpSocket* socket = m_tcpServer.nextPendingConnection();
         if (!m_loggedAConnection)
         {
-            qInfo() << "accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
+            qInfo() << "[ConsoleReader::onNewConnection] accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
         }
         QObject::connect(socket, &QTcpSocket::readyRead, this, &ConsoleReader::onReadyReadTcp);
         QObject::connect(socket, &QTcpSocket::stateChanged, this, &ConsoleReader::onSocketStateChanged);

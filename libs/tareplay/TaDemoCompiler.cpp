@@ -71,7 +71,7 @@ void TaDemoCompiler::onNewConnection()
         while (m_tcpServer.hasPendingConnections())
         {
             QTcpSocket* socket = m_tcpServer.nextPendingConnection();
-            qInfo() << "accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
+            qInfo() << "[TaDemoCompiler::onNewConnection] accepted connection from" << socket->peerAddress() << "port" << socket->peerPort();
             QObject::connect(socket, &QTcpSocket::readyRead, this, &TaDemoCompiler::onReadyRead);
             QObject::connect(socket, &QTcpSocket::stateChanged, this, &TaDemoCompiler::onSocketStateChanged);
             m_players[socket].reset(new UserContext(socket));

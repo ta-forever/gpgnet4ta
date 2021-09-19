@@ -233,6 +233,10 @@ void TafnetNode::onResendTimer()
                     int nRepeats = m_resendRates[peerPlayerId].get(true);
                     sendMessage(peerPlayerId, data.action, seq, data.buf->data(), data.buf->size(), nRepeats);
                 }
+                if (maxResendAtOnce == 5)
+                {
+                    qInfo() << "[TafnetNode::onResendTimer] ACK timeout on player" << peerPlayerId << "seq" << seq;
+                }
                 if (--maxResendAtOnce <= 0)
                 {
                     break;

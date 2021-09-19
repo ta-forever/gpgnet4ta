@@ -23,7 +23,8 @@ namespace tareplay {
     {
         CONNECTING = 0,
         OK = 1,
-        GAME_NOT_FOUND = 2
+        GAME_NOT_FOUND = 2,
+        LIVE_REPLAY_DISABLED = 3
     };
 
     class TaReplayServerData
@@ -40,3 +41,5 @@ namespace tareplay {
     };
 
 }
+
+Q_DECLARE_METATYPE(tareplay::TaReplayServerStatus)

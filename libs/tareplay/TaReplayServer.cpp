@@ -63,6 +63,23 @@ TaReplayServer::~TaReplayServer()
     }
 }
 
+void TaReplayServer::setGameInfo(quint32 gameId, int delaySeconds, QString state)
+{
+    if (state.compare("ended", Qt::CaseInsensitive) == 0)
+    {
+        qInfo() << "[TaReplayServer::setGameInfo] removing game" << gameId << "because state ENDED";
+        m_gameInfo.remove(gameId);
+    }
+    else
+    {
+        qInfo() << "[TaReplayServer::setGameInfo] updating game" << gameId << "info. delay,state=" << delaySeconds << state;
+        GameInfo& gameInfo = m_gameInfo[gameId];
+        gameInfo.gameId = gameId;
+        gameInfo.delaySeconds = delaySeconds;
+        gameInfo.state = state;
+    }
+}
+
 void TaReplayServer::onNewConnection()
 {
     try
@@ -143,14 +160,20 @@ void TaReplayServer::onReadyRead()
             if (cmd == TaReplayServerSubscribe::ID)
             {
                 TaReplayServerSubscribe msg(command);
-                int replayDelaySeconds = m_delaySeconds;
+                int replayDelaySeconds = m_gameInfo.contains(msg.gameId) ? m_gameInfo.value(msg.gameId).delaySeconds : m_delaySeconds;
+                if (replayDelaySeconds < 0)
+                {
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] denying replay since replay is disabled for game" << msg.gameId;
+                    sendData(userContext, TaReplayServerStatus::LIVE_REPLAY_DISABLED, QByteArray());
+                    continue;
+                }
                 QFileInfo fileInfo;
                 for (QString fn : { m_demoPathTemplate.arg(msg.gameId) + ".part", m_demoPathTemplate.arg(msg.gameId) })
                 {
                     fileInfo.setFile(fn);
                     if (replayDelaySeconds >= 0 && fileInfo.exists() && fileInfo.isFile())
                     {
-                        qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << fileInfo.absoluteFilePath();
+                        qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] filename=" << fileInfo.absoluteFilePath() << "with delay" << replayDelaySeconds;
                         userContext.demoFile.reset(new std::ifstream(fileInfo.absoluteFilePath().toStdString().c_str(), std::ios::in | std::ios::binary));
                         userContext.demoFile->seekg(msg.position);
                         userContext.gameId = msg.gameId;
