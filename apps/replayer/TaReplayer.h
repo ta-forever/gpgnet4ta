@@ -92,6 +92,11 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::istream* m_demoDataStream;
     bool m_launch;
 
+    // multiplier for m_playBackSpeed
+    // is reduced in response to depleted m_pendingGamePackets buffer
+    // keeps the replay running smoothly when replay catches up to live
+    double m_rateControl;
+
     std::vector<std::uint32_t> m_dpIdsPrealloc;
     tapacket::Header m_header;
     std::vector<std::shared_ptr<DemoPlayer> > m_demoPlayers;

@@ -24,6 +24,7 @@ Replayer::Replayer(std::istream* demoDataStream) :
     m_targetTicks(0u),
     m_targetTicksFractional(0.0),
     m_playBackSpeed(10u),
+    m_rateControl(1.0),
     m_state(ReplayState::LOADING_DEMO_PLAYERS),
     m_isPaused(false),
     m_tickLastUserPauseEvent(0u),
@@ -856,34 +857,28 @@ bool Replayer::doPlay()
         }
     }
 
-    if (!m_isPaused)
+    if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
-        m_targetTicksFractional += double(m_playBackSpeed) / 10.0 * WALL_TO_GAME_TICK_RATIO;
+        m_targetTicksFractional += m_rateControl * double(m_playBackSpeed) / 10.0 * WALL_TO_GAME_TICK_RATIO;
         m_targetTicks += m_targetTicksFractional;
         m_targetTicksFractional -= unsigned(m_targetTicksFractional);
     }
 
-    for (; !m_isPaused && std::int32_t(m_targetTicks - m_demoTicks) > 0; m_pendingGamePackets.pop())
+    if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
+    {
+        this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
+    }
+
+    // as long as we're able to keep buffer full, m_rateControl tends towards 1.0
+    m_rateControl *= 0.97;
+    m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD ? 0.0 : 0.03;
+    m_rateControl = std::max(m_rateControl, 0.5);
+
+    for (; !m_isPaused && std::int32_t(m_targetTicks - m_demoTicks) > 0 && !m_pendingGamePackets.empty(); m_pendingGamePackets.pop())
     {
         if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
         {
             this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
-        }
-        if (m_pendingGamePackets.empty())
-        {
-            if (m_wallClockTicks - m_tickLastUserPauseEvent > AUTO_PAUSE_HOLDOFF_TICKS)
-            {
-                std::uint8_t pausePacket[] = { 0x19, 0x00, 0x01 };
-                tapacket::bytestring bs(pausePacket, sizeof(pausePacket));
-                this->sendUdp(m_demoPlayers[0]->dpId, 0, bs);
-                m_isPaused = true;
-                this->say(m_demoPlayers[0]->dpId, "Replay buffer is empty. Unpause to continue");
-            }
-            else
-            {
-                m_playBackSpeed = std::max(m_playBackSpeed, 10u);
-            }
-            break;
         }
 
         tapacket::Packet& packet = m_pendingGamePackets.front().first;
