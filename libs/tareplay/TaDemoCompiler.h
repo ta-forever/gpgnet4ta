@@ -8,6 +8,8 @@ namespace tareplay {
         TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize);
         ~TaDemoCompiler();
 
+        void sendStopRecordingToAllInGame(quint32 gameId);
+
     private:
 
         struct UserContext
@@ -20,6 +22,7 @@ namespace tareplay {
             QString playerPublicAddr;
             QSharedPointer<QDataStream> dataStream;
             gpgnet::GpgNetParse gpgNetParser;
+            QSharedPointer<gpgnet::GpgNetSend> gpgNetSerialiser;
             GamePlayerMessage gamePlayerInfo;
             int gamePlayerNumber;   // 1..10
         };

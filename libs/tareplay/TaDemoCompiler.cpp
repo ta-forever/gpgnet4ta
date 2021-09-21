@@ -33,6 +33,7 @@ TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     dataStream(new QDataStream(socket))
 {
     dataStream->setByteOrder(QDataStream::ByteOrder::LittleEndian);
+    gpgNetSerialiser.reset(new gpgnet::GpgNetSend(*dataStream));
 }
 
 TaDemoCompiler::GameContext::GameContext() :
@@ -214,6 +215,10 @@ void TaDemoCompiler::onReadyRead()
                         itGame->tempFileName = itGame->finalFileName + ".part";
                         itGame->demoCompilation = commitHeaders(itGame.value(), itGame->tempFileName);
                     }
+                    if (!itGame->demoCompilation)
+                    {
+                        //sendStopRecordingToAllInGame(itGame->gameId);
+                    }
                 }
             }
             else
@@ -245,6 +250,7 @@ void TaDemoCompiler::onReadyRead()
 
 std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& game, QString filename)
 {
+    std::shared_ptr<std::ostream> fs;
     qInfo() << "[TaDemoCompiler::commitHeaders] creating new demo compilation" << filename;
 
     QVector<quint32> knownLockedInPlayers;
@@ -257,8 +263,14 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         }
         else
         {
-            qInfo() << "[TaDemoCompiler::commitHeaders] unknown locked-in player will be ignored:" << dpid;
+            qInfo() << "[TaDemoCompiler::commitHeaders] unknown locked-in player" << dpid;
         }
+    }
+
+    if (knownLockedInPlayers.size() != game.playersLockedIn.size())
+    {
+        qWarning() << "[TaDemoCompiler::commitHeaders] cannot compile demo because some players failed to register";
+        return fs;
     }
 
     for (int numPlayer = 0; numPlayer < knownLockedInPlayers.size(); ++numPlayer)
@@ -274,7 +286,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         }
     }
 
-    std::shared_ptr<std::ostream> fs(new std::ofstream(filename.toStdString(), std::ios::binary));
+    fs.reset(new std::ofstream(filename.toStdString(), std::ios::binary));
     tapacket::TADemoWriter tad(fs.get());
 
     tapacket::Header header;
@@ -422,5 +434,20 @@ void TaDemoCompiler::closeExpiredGames()
             }
         }
         m_games.remove(gameid);
+    }
+}
+
+void TaDemoCompiler::sendStopRecordingToAllInGame(quint32 gameId)
+{
+    if (m_games.contains(gameId))
+    {
+        for (auto userContext : m_games.value(gameId).players.values())
+        {
+            if (userContext && userContext->gpgNetSerialiser)
+            {
+                qInfo() << "[TaDemoCompiler::sendStopRecordingToAllInGame] gameId:" << gameId << "playerDpId:" << userContext->playerDpId << "ip:" << userContext->playerPublicAddr;
+                userContext->gpgNetSerialiser->sendCommand(StopRecording::ID, 0);
+            }
+        }
     }
 }

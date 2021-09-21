@@ -159,3 +159,22 @@ void GameMoveMessage::set(QVariantList command)
     }
     moves = command[1].toByteArray();
 }
+
+const char* const StopRecording::ID = "StopRecording";
+
+StopRecording::StopRecording()
+{ }
+
+StopRecording::StopRecording(QVariantList command)
+{
+    set(command);
+}
+
+void StopRecording::set(QVariantList command)
+{
+    QString cmd = command[0].toString();
+    if (cmd.compare(ID))
+    {
+        throw std::runtime_error("Unexpected command");
+    }
+}

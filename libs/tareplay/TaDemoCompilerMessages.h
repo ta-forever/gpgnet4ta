@@ -90,4 +90,13 @@ namespace tareplay {
         void set(QVariantList command);
     };
 
+    class StopRecording
+    {
+    public:
+        static const char* const ID;
+        StopRecording();
+        StopRecording(QVariantList command);
+        void set(QVariantList command);
+    };
+
 }
