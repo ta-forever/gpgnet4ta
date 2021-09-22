@@ -849,13 +849,15 @@ bool Replayer::doPlay()
     std::uint32_t fromId, toId;
     std::uint32_t bytesReceived = sizeof(buffer);
 
-    while (m_jdPlay->dpReceive(buffer, bytesReceived, fromId, toId))
+    if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
     {
-        if (toId == m_demoPlayers[0]->dpId && m_demoPlayersById.count(fromId) == 0u)
-        {
-            onPlayingTaMessage(fromId, toId, buffer, bytesReceived);
-        }
+        this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
     }
+
+    // as long as we're able to keep buffer at least quarter full, m_rateControl increases to 1.0
+    m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD/4 ? -0.015 : 0.015;
+    m_rateControl = std::max(m_rateControl, 0.5);
+    m_rateControl = std::min(m_rateControl, 1.0);
 
     if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
@@ -864,21 +866,24 @@ bool Replayer::doPlay()
         m_targetTicksFractional -= unsigned(m_targetTicksFractional);
     }
 
-    if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
+    for (;; m_pendingGamePackets.pop())
     {
-        this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
-    }
+        while (m_jdPlay->dpReceive(buffer, bytesReceived, fromId, toId))
+        {
+            if (toId == m_demoPlayers[0]->dpId && m_demoPlayersById.count(fromId) == 0u)
+            {
+                onPlayingTaMessage(fromId, toId, buffer, bytesReceived);
+            }
+        }
 
-    // as long as we're able to keep buffer full, m_rateControl tends towards 1.0
-    m_rateControl *= 0.97;
-    m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD ? 0.0 : 0.03;
-    m_rateControl = std::max(m_rateControl, 0.5);
-
-    for (; !m_isPaused && std::int32_t(m_targetTicks - m_demoTicks) > 0 && !m_pendingGamePackets.empty(); m_pendingGamePackets.pop())
-    {
         if (m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD)
         {
             this->parse(m_demoDataStream, NUM_PAKS_TO_PRELOAD);
+        }
+
+        if (m_isPaused || std::int32_t(m_targetTicks - m_demoTicks) <= 0 || m_pendingGamePackets.empty())
+        {
+            break;
         }
 
         tapacket::Packet& packet = m_pendingGamePackets.front().first;
