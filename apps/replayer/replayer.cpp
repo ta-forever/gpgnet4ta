@@ -35,7 +35,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("0.14.1");
+    QCoreApplication::setApplicationVersion("0.14.2");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replayer");

@@ -90,12 +90,24 @@ namespace tareplay {
         void set(QVariantList command);
     };
 
-    class StopRecording
+    class StopRecordingMessage
     {
     public:
         static const char* const ID;
-        StopRecording();
-        StopRecording(QVariantList command);
+        StopRecordingMessage();
+        StopRecordingMessage(QVariantList command);
+        void set(QVariantList command);
+    };
+
+    class ReconnectMessage
+    {
+    public:
+        quint32 gameId;
+        quint32 playerDpId;
+
+        static const char* const ID;
+        ReconnectMessage();
+        ReconnectMessage(QVariantList command);
         void set(QVariantList command);
     };
 

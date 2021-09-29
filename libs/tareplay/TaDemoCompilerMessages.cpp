@@ -160,21 +160,44 @@ void GameMoveMessage::set(QVariantList command)
     moves = command[1].toByteArray();
 }
 
-const char* const StopRecording::ID = "StopRecording";
+const char* const StopRecordingMessage::ID = "StopRecording";
 
-StopRecording::StopRecording()
+StopRecordingMessage::StopRecordingMessage()
 { }
 
-StopRecording::StopRecording(QVariantList command)
+StopRecordingMessage::StopRecordingMessage(QVariantList command)
 {
     set(command);
 }
 
-void StopRecording::set(QVariantList command)
+void StopRecordingMessage::set(QVariantList command)
 {
     QString cmd = command[0].toString();
     if (cmd.compare(ID))
     {
         throw std::runtime_error("Unexpected command");
     }
+}
+
+const char* const ReconnectMessage::ID = "Reconnect";
+
+ReconnectMessage::ReconnectMessage():
+    gameId(0u),
+    playerDpId(0u)
+{ }
+
+ReconnectMessage::ReconnectMessage(QVariantList command)
+{
+    set(command);
+}
+
+void ReconnectMessage::set(QVariantList command)
+{
+    QString cmd = command[0].toString();
+    if (cmd.compare(ID))
+    {
+        throw std::runtime_error("Unexpected command");
+    }
+    gameId = command[1].toUInt();
+    playerDpId = command[2].toUInt();
 }

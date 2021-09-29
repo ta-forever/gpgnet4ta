@@ -21,11 +21,11 @@ namespace tareplay {
         void setLocalPlayerName(QString name);
 
         void sendHello(quint32 gameId, quint32 dplayPlayerId, QString playerPublicAddr);
+        void sendReconnect(quint32 gameId, quint32 dplayPlayerId);
         void sendGameInfo(quint16 maxUnits, QString mapName);
         void sendGamePlayer(qint8 side, QString name, QByteArray statusMessage);
         void sendGamePlayerNumber(quint32 dplayId, quint8 number);
         void sendGamePlayerLoading(QSet<quint32> lockedInPlayers);
-
         void sendUnitData(QByteArray unitData);
 
         // TADR file format requires:
@@ -45,6 +45,9 @@ namespace tareplay {
             std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource,
             const char* encrypted, int sizeEncrypted,
             const std::vector<tapacket::bytestring>& subpaks);
+
+        void timerEvent(QTimerEvent* event);
+        void onSocketStateChanged(QAbstractSocket::SocketState socketState);
 
         QTcpSocket m_tcpSocket;
         QString m_taDemoCompilerHostName;

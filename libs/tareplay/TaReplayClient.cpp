@@ -59,7 +59,7 @@ void TaReplayClient::timerEvent(QTimerEvent* event)
 
 void TaReplayClient::connect()
 {
-    if (!m_tcpSocket.isOpen())
+    if (m_tcpSocket.state() == QAbstractSocket::UnconnectedState)
     {
         qInfo() << "[TaReplayClient::connect] connecting to replay server" << m_replayServerHostName << m_replayServerPort;
         m_tcpSocket.connectToHost(m_replayServerHostName, m_replayServerPort);
@@ -77,6 +77,7 @@ void TaReplayClient::onSocketStateChanged(QAbstractSocket::SocketState socketSta
         else if (socketState == QAbstractSocket::ConnectedState)
         {
             qInfo() << "[TaReplayClient::onSocketStateChanged] socket connected";
+            m_socketStream.resetStatus();
             sendSubscribe(m_tafGameId, m_position);
         }
     }

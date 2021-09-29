@@ -16,18 +16,65 @@ TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint
     m_hostDplayId(0u),
     m_ticks(-1)
 {
-    qInfo() << "[TaDemoCompilerClient::TaDemoCompilerClient] connecting to " << taDemoCompilerHostName << ":" << taDemoCompilerPort;
     m_datastream.setByteOrder(QDataStream::LittleEndian);
-    m_tcpSocket.connectToHost(taDemoCompilerHostName, m_taDemoCompilerPort);
-    if (!m_tcpSocket.waitForConnected(3000))
-    {
-        throw ConnectionError();
-    }
+    QObject::connect(&m_tcpSocket, &QTcpSocket::stateChanged, this, &TaDemoCompilerClient::onSocketStateChanged);
+
+    qInfo() << "[TaDemoCompilerClient::TaDemoCompilerClient] connecting to " << m_taDemoCompilerHostName << ":" << m_taDemoCompilerPort;
+    m_tcpSocket.connectToHost(m_taDemoCompilerHostName, m_taDemoCompilerPort);
+    startTimer(1000);
 }
 
 TaDemoCompilerClient::~TaDemoCompilerClient()
 {
     m_tcpSocket.close();
+}
+
+void TaDemoCompilerClient::timerEvent(QTimerEvent* event)
+{
+    try
+    {
+        if (m_tcpSocket.state() == QAbstractSocket::UnconnectedState && !m_taDemoCompilerHostName.isEmpty() && m_taDemoCompilerPort > 0)
+        {
+            qInfo() << "[TaDemoCompilerClient::timerEvent] connecting to " << m_taDemoCompilerHostName << ":" << m_taDemoCompilerPort;
+            m_tcpSocket.connectToHost(m_taDemoCompilerHostName, m_taDemoCompilerPort);
+        }
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaDemoCompilerClient::timerEvent] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaDemoCompilerClient::timerEvent] general exception:";
+    }
+}
+
+void TaDemoCompilerClient::onSocketStateChanged(QAbstractSocket::SocketState socketState)
+{
+    try
+    {
+        if (socketState == QAbstractSocket::UnconnectedState)
+        {
+            qWarning() << "[TaDemoCompilerClient::onSocketStateChanged] socket disconnected";
+        }
+        else if (socketState == QAbstractSocket::ConnectedState)
+        {
+            qInfo() << "[TaDemoCompilerClient::onSocketStateChanged] socket connected";
+            m_datastream.resetStatus();
+            if (m_tafGameId > 0u && m_localPlayerDplayId > 0u)
+            {
+                sendReconnect(m_tafGameId, m_localPlayerDplayId);
+            }
+        }
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaDemoCompilerClient::onSocketStateChanged] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaDemoCompilerClient::onSocketStateChanged] general exception:";
+    }
 }
 
 void TaDemoCompilerClient::setHostPlayerName(QString name)
@@ -49,6 +96,14 @@ void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId, QStr
     m_protocol.sendArgument(gameId);
     m_protocol.sendArgument(dplayPlayerId);
     m_protocol.sendArgument(playerPublicAddr.toUtf8());
+}
+
+void TaDemoCompilerClient::sendReconnect(quint32 gameId, quint32 dplayPlayerId)
+{
+    qInfo() << "[TaDemoCompilerClient::sendReconnect] gameid,dplayPlayerId" << gameId << dplayPlayerId;
+    m_protocol.sendCommand(ReconnectMessage::ID, 2);
+    m_protocol.sendArgument(gameId);
+    m_protocol.sendArgument(dplayPlayerId);
 }
 
 void TaDemoCompilerClient::sendGameInfo(quint16 maxUnits, QString mapName)
@@ -129,6 +184,11 @@ void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, co
             m_localPlayerDplayId = dplayId;
             sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
         }
+        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0,16)) == 0)
+        {
+            qInfo() << "[TaDemoCompilerClient::onDplaySuperEnumPlayerReply] demo compiler doesn't understand how to deal with AIs. Not forwarding Hello for" << name.c_str();
+            //sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+        }
     }
 }
 
@@ -155,6 +215,11 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         {
             m_localPlayerDplayId = dplayId;
             sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+        }
+        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0, 16)) == 0)
+        {
+            qInfo() << "[TaDemoCompilerClient::onDplayCreateOrForwardPlayer] demo compiler doesn't understand how to deal with AIs. Not forwarding Hello for" << name.c_str();
+            //sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
         }
     }
 }

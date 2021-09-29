@@ -24,7 +24,7 @@
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14.1";
+static const char* VERSION = "taf-0.14.2";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
@@ -96,6 +96,7 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
         {
             QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
             qInfo() << "[TaDemoCompiler::onSocketStateChanged] peer disconnected" << sender->peerAddress() << "port" << sender->peerPort();
+            sender->disconnect();
             m_players.remove(sender);
             sender->deleteLater();
         }
@@ -158,6 +159,25 @@ void TaDemoCompiler::onReadyRead()
                 userContext.playerPublicAddr = msg.playerPublicAddr;
                 m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
             }
+            else if (cmd == ReconnectMessage::ID)
+            {
+                ReconnectMessage msg(command);
+                if (m_games.contains(msg.gameId) && m_games[msg.gameId].players.contains(msg.playerDpId))
+                {
+                    qInfo() << "[TaDemoCompiler::onReadyRead] received Reconnect from dplayId" << msg.playerDpId << "in game" << msg.gameId;
+                    QSharedPointer<UserContext> oldContext = m_games[msg.gameId].players[msg.playerDpId];
+                    userContext.gameId = msg.gameId;
+                    userContext.playerDpId = msg.playerDpId;
+                    userContext.playerPublicAddr = oldContext->playerPublicAddr;
+                    userContext.gamePlayerInfo = oldContext->gamePlayerInfo;
+                    userContext.gamePlayerNumber = oldContext->gamePlayerNumber;
+                    m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
+                }
+                else
+                {
+                    qWarning() << "[TaDemoCompiler::onReadyRead] received Reconnect from unknown player dplayId" << msg.playerDpId << "in game" << msg.gameId;
+                }
+            }
             else if (cmd == GameInfoMessage::ID)
             {
                 GameContext& game = m_games[userContext.gameId];
@@ -186,6 +206,18 @@ void TaDemoCompiler::onReadyRead()
                     game.expiryCountdown = GAME_EXPIRY_TICKS;
                     if (ud.sub == 2 || ud.sub == 3 || ud.sub == 9)
                     {
+                        qInfo() << QString("[TaDemoCompiler::onReadyRead][GameUnitDataMessage] gameId:%1, dpid:%2, ipaddr:%3, pktid:%4, sub:%5, fill:%6, id:%7, status:%8, limit:%9, crc:%10, raw:%11")
+                            .arg(game.gameId)
+                            .arg(userContext.playerDpId, 10, 10)
+                            .arg(userContext.playerPublicAddr, 15)
+                            .arg(int(ud.pktid), 2, 16, QChar('0'))
+                            .arg(ud.sub, 1, 16)
+                            .arg(ud.fill, 0, 16)
+                            .arg(ud.id, 8, 16, QChar('0'))
+                            .arg(ud.u.statusAndLimit[0], 4, 16, QChar('0'))
+                            .arg(ud.u.statusAndLimit[1], 4, 16, QChar('0'))
+                            .arg(ud.u.crc, 8, 16, QChar('0'))
+                            .arg(QString(msg.unitData.toHex()));
                         game.unitData[QPair<quint8, quint32>(ud.sub, ud.id)] = msg.unitData;
                     }
                     else if (ud.sub == 0)
@@ -446,7 +478,7 @@ void TaDemoCompiler::sendStopRecordingToAllInGame(quint32 gameId)
             if (userContext && userContext->gpgNetSerialiser)
             {
                 qInfo() << "[TaDemoCompiler::sendStopRecordingToAllInGame] gameId:" << gameId << "playerDpId:" << userContext->playerDpId << "ip:" << userContext->playerPublicAddr;
-                userContext->gpgNetSerialiser->sendCommand(StopRecording::ID, 0);
+                userContext->gpgNetSerialiser->sendCommand(StopRecordingMessage::ID, 0);
             }
         }
     }

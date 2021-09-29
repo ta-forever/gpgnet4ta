@@ -855,9 +855,9 @@ bool Replayer::doPlay()
     }
 
     // as long as we're able to keep buffer at least quarter full, m_rateControl increases to 1.0
-    m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD/4 ? -0.015 : 0.015;
+    m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD/4 ? -0.005 : 0.005;
     m_rateControl = std::max(m_rateControl, 0.5);
-    m_rateControl = std::min(m_rateControl, 1.0);
+    m_rateControl = std::min(m_rateControl, 1.1);
 
     if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
@@ -910,6 +910,10 @@ bool Replayer::doPlay()
             {
             case tapacket::SubPacketCode::CHAT_05:
                 filteredMoves += move;
+                break;
+
+            case tapacket::SubPacketCode::GIVE_UNIT_14:
+                // Yankspanker replayer filters this in Tsavefile.unsmartpak, the direct method of retrieving paks from savefile for feeding to game
                 break;
 
             case tapacket::SubPacketCode::SPEED_19:
@@ -977,7 +981,7 @@ bool Replayer::doPlay()
                 {
                     msg[leftBrack] = '[';
                     msg[rightBrack] = ']';
-                    say(player->dpId, msg);
+                    //say(player->dpId, msg);
                 }
                 // do not feed
                 break;

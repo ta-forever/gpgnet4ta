@@ -26,6 +26,13 @@ namespace tareplay {
             quint32 gameId;
             int delaySeconds;
             QString state;
+
+            // for purpose of monitoring file size versus time
+            // not the same instance as UserContext so no need to restore file position
+            QSharedPointer<std::istream> demoFile;
+
+            // the last delaySeconds worth of file sizes in bytes;
+            QSharedPointer<QQueue<int> > demoFileSizeLog;
         };
 
         struct UserContext
@@ -38,10 +45,6 @@ namespace tareplay {
             QSharedPointer<gpgnet::GpgNetSend> userDataStreamProtol;
             QSharedPointer<gpgnet::GpgNetParse> gpgNetParser;
             QSharedPointer<std::istream> demoFile;
-            QQueue<int> demoFileSizeLog;        // file size over the last 'delaySeconds'
-            unsigned timeAtStart;
-            unsigned sizeAtStart;
-            int delaySeconds;
         };
 
         void sendData(UserContext &user, TaReplayServerStatus status, QByteArray data);
@@ -50,8 +53,9 @@ namespace tareplay {
         void onSocketStateChanged(QAbstractSocket::SocketState socketState);
         void onReadyRead();
         void timerEvent(QTimerEvent* event);
-        void updateFileSizeLog(UserContext& user);
+        void updateFileSizeLog(GameInfo& gameInfo);
         void serviceUser(UserContext& user);
+        std::istream* findReplayFileForGame(quint32 gameId);
 
         QString m_demoPathTemplate;
         quint16 m_delaySeconds;
