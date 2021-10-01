@@ -38,6 +38,12 @@
 
 using namespace std;
 
+#define SET_LAST_ERROR(msg) { \
+    std::ostringstream ss; \
+    ss << msg; \
+    lastError = ss.str(); \
+}
+
 namespace jdplay {
 
     inline BSTR _ConvertStringToBSTR(const char* pSrc)
@@ -183,6 +189,10 @@ namespace jdplay {
         }
     }
 
+    std::string JDPlay::getLastError()
+    {
+        return lastError;
+    }
 
     bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers) {
 
@@ -205,10 +215,7 @@ namespace jdplay {
         ::SysFreeString(lpoleguid);
 
         if (hr != S_OK) {
-            if (debug) {
-                cout << "initialize() - ERROR: invalid GUID" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("initialize() - ERROR: invalid GUID");
             return false;
         }
 
@@ -229,10 +236,7 @@ namespace jdplay {
             hr = CoInitialize(NULL);
 
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "initialize() - ERROR: failed to initialize COM" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR("initialize() - ERROR: failed to initialize COM");
                 return false;
             }
 
@@ -245,28 +249,17 @@ namespace jdplay {
             hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&lpDP);
 
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "initialize() - ERROR: failed to initialize DirectPlay" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR("initialize() - ERROR: failed to initialize DirectPlay");
                 return false;
             }
 
             CoUninitialize();  // unregister the COM
 
-            if (debug) {
-                cout << "initialize() - initialized DirectPlay and deinitialized COM" << endl;
-                fflush(stdout);
-            }
-
             // creating lobby object
             hr = DirectPlayLobbyCreate(NULL, &old_lpDPLobby, NULL, NULL, 0);
 
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to create lobby object" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to create lobby object");
                 return false;
             }
 
@@ -274,10 +267,7 @@ namespace jdplay {
             hr = old_lpDPLobby->QueryInterface(IID_IDirectPlayLobby3, (LPVOID*)&lpDPLobby);
 
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to get new lobby interface" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to get new lobby interface");
                 return false;
             }
         }
@@ -288,22 +278,22 @@ namespace jdplay {
             LPDIRECTPLAY dp1;
             hr = DPlayWrapper().directPlayCreate(&guid, &dp1, NULL);
             if (hr != S_OK) {
-                std::cout << std::hex << hr << " unable to create DirectPlay" << std::endl;
+                SET_LAST_ERROR(std::hex << hr << " unable to create DirectPlay");
                 return false;
             }
             hr = dp1->QueryInterface(IID_IDirectPlay3, (LPVOID*)&lpDP);
             if (hr != S_OK) {
-                std::cout << std::hex << hr << " unable to get DirectPlay3" << std::endl;
+                SET_LAST_ERROR(std::hex << hr << " unable to get DirectPlay3");
                 return false;
             }
             hr = DPlayWrapper().directPlayLobbyCreate(NULL, &old_lpDPLobby, NULL, NULL, 0);
             if (hr != S_OK) {
-                std::cout << std::hex << hr << " unable to create DirectPlayLobby" << std::endl;
+                SET_LAST_ERROR(std::hex << hr << " unable to create DirectPlayLobby");
                 return false;
             }
             hr = old_lpDPLobby->QueryInterface(IID_IDirectPlayLobby3, (LPVOID*)&lpDPLobby);
             if (hr != S_OK) {
-                std::cout << std::hex << hr << " unable to get DirectPlayLobby3" << std::endl;
+                SET_LAST_ERROR(std::hex << hr << " unable to get DirectPlayLobby3");
                 return false;
             }
         }
@@ -312,16 +302,8 @@ namespace jdplay {
         hr = old_lpDPLobby->Release();
 
         if (hr != S_OK) {
-            if (debug) {
-                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to release old lobby interface" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to release old lobby interface");
             return false;
-        }
-
-        if (debug) {
-            cout << "initialize() - lobby initialized" << endl;
-            fflush(stdout);
         }
 
         // fill in data for address
@@ -342,10 +324,7 @@ namespace jdplay {
         hr = lpDPLobby->CreateCompoundAddress(address, 2, NULL, &addressSize);
 
         if (hr != S_OK && hr != DPERR_BUFFERTOOSMALL) {
-            if (debug) {
-                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to get size for CompoundAddress" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to get size for CompoundAddress");
             return false;
         }
 
@@ -355,10 +334,7 @@ namespace jdplay {
         hr = lpDPLobby->CreateCompoundAddress(address, 2, lpConnection, &addressSize);
 
         if (hr != S_OK) {
-            if (debug) {
-                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to create CompoundAddress" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to create CompoundAddress");
             return false;
         }
 
@@ -366,16 +342,8 @@ namespace jdplay {
         hr = lpDP->InitializeConnection(lpConnection, 0);
 
         if (hr != S_OK) {
-            if (debug) {
-                cout << "initialize() - ERROR[" << getDPERR(hr) << "]: failed to initialize TCP connection" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to initialize TCP connection");
             return false;
-        }
-
-        if (debug) {
-            cout << "initialize() - TCP connection initialized" << endl;
-            fflush(stdout);
         }
 
         // populate session description ******************************************************************
@@ -408,11 +376,6 @@ namespace jdplay {
             dpConn.dwFlags = DPLCONNECTION_JOINSESSION;
         }
 
-        if (debug) {
-            cout << "initialize() - session info configured" << endl;
-            fflush(stdout);
-        }
-
         // set other vars
         if (isHost) {
             sessionFlags = DPOPEN_CREATE;
@@ -424,12 +387,6 @@ namespace jdplay {
         }
 
         isInitialized = true;
-
-        if (debug) {
-            cout << "-- initialize()" << endl;
-            fflush(stdout);
-        }
-
         return true;
     }
 
@@ -440,19 +397,8 @@ namespace jdplay {
     void JDPlay::updatePlayerName(const char* playerNameA) {
         FromAnsi(playerNameA, dpName.lpszShortName, 256);
         FromAnsi(playerNameA, dpName.lpszLongName, 256);
-
-        if (debug) {
-            cout << "updatePlayerName() - playername set to \"" << playerNameA << "\"" << endl;
-            cout << "-- updatePlayerName()" << endl;
-            fflush(stdout);
-        }
     }
     bool JDPlay::searchOnce() {
-        if (debug) {
-            cout << "++ searchOnce()" << endl;
-            fflush(stdout);
-        }
-
         HRESULT hr;
 
         if (!isHost()) {
@@ -463,20 +409,12 @@ namespace jdplay {
 
                 hr = lpDP->EnumSessions(&dpSessionDesc, 0, EnumSessionsCallback, NULL, 0);
                 if (hr != S_OK) {
-                    if (debug) {
-                        cout << endl << "searchOnce() - ERROR[" << getDPERR(hr) << "]: failed to enumerate sessions" << endl;
-                        fflush(stdout);
-                    }
+                    SET_LAST_ERROR("searchOnce() - ERROR[" << getDPERR(hr) << "]: failed to enumerate sessions");
                     return false;
                 }
 
                 if (!foundLobby) {
-                    if (debug) {
-                        cout << "searchOnce() - no session found" << endl;
-                        cout << "-- searchOnce()" << endl;
-                        fflush(stdout);
-                    }
-
+                    SET_LAST_ERROR("searchOnce() - no session found");
                     return false;
                 }
             }
@@ -485,42 +423,15 @@ namespace jdplay {
 
                 hr = lpDP->Open(&dpSessionDesc, sessionFlags | DPOPEN_RETURNSTATUS);
                 if (hr != S_OK) {
-                    if (debug) {
-                        cout << "searchOnce() - ERROR[" << getDPERR(hr) << "]: failed to open DirectPlay session" << endl;
-                        fflush(stdout);
-                    }
+                    SET_LAST_ERROR("searchOnce() - ERROR[" << getDPERR(hr) << "]: failed to open DirectPlay session");
                     return false;
                 }
 
                 lpDPIsOpen = true;
-
-                // create player *******************************************************************************
-                //hr = lpDP->CreatePlayer(&dPid, &dpName, NULL, NULL, 0, playerFlags);
-
-                //if(hr != S_OK){
-                //	if(debug){
-                //		cout << "searchOnce() - ERROR[" << getDPERR(hr) << "]: failed to create local player" << endl;
-                //		fflush(stdout);
-                //	}
-                //	return false;
-                //}
-
-                //if(debug){
-                //	cout << "searchOnce() - session opened and player initialized" << endl;
-                //	fflush(stdout);
-                //}
             }
         }
         else {
-            if (debug) {
-                cout << "searchOnce() - skipping session search, not needed because hosting" << endl;
-                fflush(stdout);
-            }
-        }
-
-        if (debug) {
-            cout << "-- searchOnce()" << endl;
-            fflush(stdout);
+            // searchOnce() - skipping session search, not needed because hosting
         }
 
         return true;
@@ -528,16 +439,8 @@ namespace jdplay {
 
     bool JDPlay::launch(bool startGame) {
 
-        if (debug) {
-            cout << "++ launch()" << endl;
-            fflush(stdout);
-        }
-
         if (!isInitialized) {
-            if (debug) {
-                cout << "launch() - WARNING: JDPlay has to be initialized before launching!" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("launch() - WARNING: JDPlay has to be initialized before launching!");
             return false;
         }
 
@@ -562,25 +465,14 @@ namespace jdplay {
         hr = lpDPLobby->RunApplication(0, &appID, &dpConn, 0);
 
         if (hr != S_OK) {
-            if (debug) {
-                cout << "launch() - ERROR[" << getDPERR(hr) << "]: failed to launch the game, maybe it's not installed properly" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("launch() - ERROR[" << getDPERR(hr) << "]: failed to launch the game, maybe it's not installed properly");
             return false;
-        }
-
-        if (debug) {
-            cout << "launch() - game started, ProcessID = " << appID << endl;
-            fflush(stdout);
         }
 
         // wait until game exits ***********************************************************************
         HANDLE appHandle = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, appID);
         if (appHandle == NULL) {
-            if (debug) {
-                cout << "launch() - ERROR: failed to open game process" << endl;
-                fflush(stdout);
-            }
+            SET_LAST_ERROR("launch() - ERROR: failed to open game process");
             return false;
         }
         processHandle = appHandle;
@@ -597,18 +489,15 @@ namespace jdplay {
     {
         HRESULT hr;
 
+        SET_LAST_ERROR("");
         if (dplay)
         {
             hr = dplay->EnumSessions(&dpSessionDesc, 0, &EnumSessionsCallback, NULL, 0);
             if (S_OK != hr)
             {
-                cout << "EnumSessions:" << getDPERR(hr) << endl;
+                SET_LAST_ERROR("EnumSessions:" << getDPERR(hr));
             }
             //hr = lpDP->EnumGroups(&dpSessionDesc.guidInstance, enumPlayersCallback, NULL, 0);
-            //if (S_OK != hr)
-            //{
-            //    cout << "EnumGroups:" << getDPERR(hr) << endl;
-            //}
         }
         else if (lpDP)
         {
@@ -619,13 +508,13 @@ namespace jdplay {
             hr = CoInitialize(NULL);
             if (S_OK != hr)
             {
-                cout << "CoInitialize:" << getDPERR(hr) << endl;
+                SET_LAST_ERROR("CoInitialize:" << getDPERR(hr));
             }
             hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&dplay);
             CoUninitialize();  // unregister the COM
             if (S_OK != hr)
             {
-                cout << "CoCreateInstance:" << getDPERR(hr) << endl;
+                SET_LAST_ERROR(getLastError() << "\nCoCreateInstance:" << getDPERR(hr));
             }
             pollSessionStatus(dplay);
             dplay->Close();
@@ -647,10 +536,6 @@ namespace jdplay {
 
 
     void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD) {
-        if (debug) {
-            cout << "++ updateFoundSessionDescription(" << lpFoundSD << ")" << endl;
-            fflush(stdout);
-        }
 
         static int validateCount = -1;
 
@@ -824,33 +709,22 @@ namespace jdplay {
     {
         HRESULT hr;
 
+        SET_LAST_ERROR("");
         if (lpDP) {
-
             if (lpDPIsOpen) {
                 hr = lpDP->Close();		//close dplay interface
                 if (hr != S_OK) {
-                    if (debug) {
-                        cout << "deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to close DirectPlay interface" << endl;
-                        fflush(stdout);
-                    }
+                    SET_LAST_ERROR("deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to close DirectPlay interface");
                 }
                 lpDPIsOpen = false;
             }
 
             hr = lpDP->Release();	//release dplay interface
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release DirectPlay interface" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR(getLastError() << "\ndeInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release DirectPlay interface");
             }
 
             lpDP = NULL;  // set to NULL, safe practice here
-
-            if (debug) {
-                cout << "deInitialize() - DirectPlay deinitialized" << endl;
-                fflush(stdout);
-            }
         }
     }
 
@@ -858,38 +732,20 @@ namespace jdplay {
     {
         HRESULT hr;
 
+        SET_LAST_ERROR("");
         if (lpDPLobby) {
 
             hr = lpDPLobby->Release(); //release lobby
             if (hr != S_OK) {
-                if (debug) {
-                    cout << "deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release lobby interface" << endl;
-                    fflush(stdout);
-                }
+                SET_LAST_ERROR("deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release lobby interface");
             }
             lpDPLobby = NULL;
-
-            if (debug) {
-                cout << "deInitialize() - lobby deinitialized" << endl;
-                fflush(stdout);
-            }
         }
     }
 
     void JDPlay::deInitialize() {
-        if (debug) {
-            cout << "++ deInitialize()" << endl;
-            fflush(stdout);
-        }
-
         releaseDirectPlay();
         releaseLobby();
-
-        if (debug) {
-            cout << "-- deInitialize()" << endl;
-            fflush(stdout);
-        }
-
         isInitialized = false;
     }
 

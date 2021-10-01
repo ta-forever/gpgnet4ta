@@ -146,7 +146,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 0, false));
     if (!m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), asHost, 10))
     {
-        qWarning() << "[LaunchServer::launchGame] jdplay failed to initialise!";
+        qWarning() << "[LaunchServer::launchGame] jdplay failed to initialise!" << m_jdPlay->getLastError().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);
@@ -154,7 +154,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     }
     else if (!asHost && doSearch && !(m_jdPlay->searchOnce() || m_jdPlay->searchOnce()))
     {
-        qWarning() << "[LaunchServer::launchGame] jdplay failed to find a game!";
+        qWarning() << "[LaunchServer::launchGame] jdplay failed to find a game!" << m_jdPlay->getLastError().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);
@@ -162,7 +162,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     }
     else if (!m_jdPlay->launch(true))
     {
-        qWarning() << "[LaunchServer::launchGame] jdplay failed to launch!";
+        qWarning() << "[LaunchServer::launchGame] jdplay failed to launch!" << m_jdPlay->getLastError().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);

@@ -50,6 +50,7 @@ namespace jdplay {
         bool lpDPIsOpen;
         std::string enumCallbackSessionName;
         std::string enumCallbackSessionPassword;
+        std::string lastError;
 
         LPDIRECTPLAY3 lpDP;		// directplay interface pointer
         LPDIRECTPLAYLOBBY3	lpDPLobby;	// lobby interface pointer
@@ -68,6 +69,7 @@ namespace jdplay {
         JDPlay(const char* playerName, int searchValidationCount, bool debug);
         ~JDPlay();
 
+        std::string getLastError();
         void updatePlayerName(const char* playerName);
         bool initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers);
         bool searchOnce();
