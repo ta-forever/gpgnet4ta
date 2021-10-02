@@ -1,5 +1,6 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcommandlineparser.h>
+#include <QtCore/qcryptographichash.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qobject.h>
@@ -288,6 +289,9 @@ void TaDemoCompiler::onReadyRead()
                 {
                     if (game.gameId == msg.gameId || msg.gameId == 0)
                     {
+                        int enabledUnitCount = 0;
+                        int unitCount = 0;
+                        QCryptographicHash md5(QCryptographicHash::Md5);
                         for (auto it = game.unitData.begin(); it != game.unitData.end(); ++it)
                         {
                             tapacket::TUnitData ud(tapacket::bytestring((std::uint8_t*)it.value().data(), it.value().size()));
@@ -301,8 +305,19 @@ void TaDemoCompiler::onReadyRead()
                                     .arg(ud.u.statusAndLimit[1], 4, 16, QChar('0'))
                                     .arg(ud.u.crc, 8, 16, QChar('0'))
                                     .arg(QString(it.value().toHex()));
+                                if (ud.u.statusAndLimit[0] == 0x0101 && game.unitData.contains(QPair<quint8,quint32>(0x02,ud.id)))
+                                {
+                                    const QByteArray& x02 = game.unitData[QPair<quint8, quint32>(0x02, ud.id)];
+                                    tapacket::TUnitData udx02(tapacket::bytestring((std::uint8_t*)x02.data(), x02.size()));
+                                    ++enabledUnitCount;
+                                    quint32 datum = ud.id + udx02.u.crc;
+                                    md5.addData((const char*)&datum, sizeof(datum));
+                                }
+                                ++unitCount;
                             }
                         }
+                        qInfo() << enabledUnitCount << "units enabled of" << unitCount << "total";
+                        qInfo() << "Enabled units MD5:" << md5.result().toHex();
                     }
                 }
             }
