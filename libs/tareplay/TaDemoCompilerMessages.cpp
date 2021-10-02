@@ -7,7 +7,7 @@ const char* const HelloMessage::ID = "Hello";
 HelloMessage::HelloMessage():
     gameId(0u),
     playerDpId(0u),
-    playerPublicAddr("127.0.0.1")
+    playerName("127.0.0.1")
 { }
 
 HelloMessage::HelloMessage(QVariantList command)
@@ -24,7 +24,7 @@ void HelloMessage::set(QVariantList command)
     }
     gameId = command[1].toUInt();
     playerDpId = command[2].toUInt();
-    playerPublicAddr = command[3].toString();
+    playerName = command[3].toString();
 }
 
 const char* const GameInfoMessage::ID = "GameInfo";
@@ -200,4 +200,25 @@ void ReconnectMessage::set(QVariantList command)
     }
     gameId = command[1].toUInt();
     playerDpId = command[2].toUInt();
+}
+
+const char* const DebugDumpRequestMessage::ID = "Debug";
+
+DebugDumpRequestMessage::DebugDumpRequestMessage():
+    gameId(0)
+{ }
+
+DebugDumpRequestMessage::DebugDumpRequestMessage(QVariantList command)
+{
+    set(command);
+}
+
+void DebugDumpRequestMessage::set(QVariantList command)
+{
+    QString cmd = command[0].toString();
+    if (cmd.compare(ID))
+    {
+        throw std::runtime_error("Unexpected command");
+    }
+    gameId = command[1].toUInt();
 }

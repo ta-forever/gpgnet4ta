@@ -5,11 +5,10 @@
 
 using namespace tareplay;
 
-TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint16 taDemoCompilerPort, quint32 tafGameId, QString playerPublicAddr) :
+TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint16 taDemoCompilerPort, quint32 tafGameId) :
     m_taDemoCompilerHostName(taDemoCompilerHostName),
     m_taDemoCompilerPort(taDemoCompilerPort),
     m_tafGameId(tafGameId),
-    m_playerPublicAddr(playerPublicAddr),
     m_datastream(&m_tcpSocket),
     m_protocol(m_datastream),
     m_localPlayerDplayId(0u),
@@ -18,6 +17,7 @@ TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint
 {
     m_datastream.setByteOrder(QDataStream::LittleEndian);
     QObject::connect(&m_tcpSocket, &QTcpSocket::stateChanged, this, &TaDemoCompilerClient::onSocketStateChanged);
+    QObject::connect(&m_tcpSocket, &QTcpSocket::readyRead, this, &TaDemoCompilerClient::onReadyRead);
 
     qInfo() << "[TaDemoCompilerClient::TaDemoCompilerClient] connecting to " << m_taDemoCompilerHostName << ":" << m_taDemoCompilerPort;
     m_tcpSocket.connectToHost(m_taDemoCompilerHostName, m_taDemoCompilerPort);
@@ -77,6 +77,25 @@ void TaDemoCompilerClient::onSocketStateChanged(QAbstractSocket::SocketState soc
     }
 }
 
+void TaDemoCompilerClient::onReadyRead()
+{
+    QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
+    try
+    {
+        // server just sends ping messages in an effort to keep connection alive while staging
+        // we don't need to reply
+        sender->readAll();
+    }
+    catch (const std::exception & e)
+    {
+        qWarning() << "[TaDemoCompilerClient::onReadyRead] exception:" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaDemoCompilerClient::onReadyRead] general exception:";
+    }
+}
+
 void TaDemoCompilerClient::setHostPlayerName(QString name)
 {
     qInfo() << "[TaDemoCompilerClient::setHostPlayerName]" << name;
@@ -89,13 +108,13 @@ void TaDemoCompilerClient::setLocalPlayerName(QString name)
     m_localPlayerName = name;
 }
 
-void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId, QString playerPublicAddr)
+void TaDemoCompilerClient::sendHello(quint32 gameId, quint32 dplayPlayerId, QString playerName)
 {
-    qInfo() << "[TaDemoCompilerClient::sendHello] gameid,dplayPlayerId,playerPublicAddr" << gameId << dplayPlayerId << playerPublicAddr;
+    qInfo() << "[TaDemoCompilerClient::sendHello] gameid,dplayPlayerId,playerName" << gameId << dplayPlayerId << playerName;
     m_protocol.sendCommand(HelloMessage::ID, 3);
     m_protocol.sendArgument(gameId);
     m_protocol.sendArgument(dplayPlayerId);
-    m_protocol.sendArgument(playerPublicAddr.toUtf8());
+    m_protocol.sendArgument(playerName.toUtf8());
 }
 
 void TaDemoCompilerClient::sendReconnect(quint32 gameId, quint32 dplayPlayerId)
@@ -160,6 +179,13 @@ void TaDemoCompilerClient::sendMoves(QByteArray moves)
     m_protocol.sendArgument(moves);
 }
 
+void TaDemoCompilerClient::sendDebugRequest(quint32 gameId)
+{
+    qInfo() << "[TaDemoCompilerClient::sendDebugRequest]";
+    m_protocol.sendCommand(DebugDumpRequestMessage::ID, 1);
+    m_protocol.sendArgument(gameId);
+}
+
 void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std::string& name, tapacket::DPAddress* , tapacket::DPAddress* )
 {
     if (dplayId > 0u && !name.empty())
@@ -182,7 +208,7 @@ void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, co
         else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
         {
             m_localPlayerDplayId = dplayId;
-            sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+            sendHello(m_tafGameId, dplayId, m_localPlayerName);
         }
         else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0,16)) == 0)
         {
@@ -214,7 +240,7 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
         {
             m_localPlayerDplayId = dplayId;
-            sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+            sendHello(m_tafGameId, dplayId, m_localPlayerName);
         }
         else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0, 16)) == 0)
         {

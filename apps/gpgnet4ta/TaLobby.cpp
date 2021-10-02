@@ -40,9 +40,9 @@ TaLobby::TaLobby(
 }
 
 
-void TaLobby::enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId, QString playerPublicAddr)
+void TaLobby::enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId)
 {
-    m_taDemoCompilerClient.reset(new tareplay::TaDemoCompilerClient(hostName, port, tafGameId, playerPublicAddr));
+    m_taDemoCompilerClient.reset(new tareplay::TaDemoCompilerClient(hostName, port, tafGameId));
     m_packetParser->subscribe(m_taDemoCompilerClient.data());
 }
 

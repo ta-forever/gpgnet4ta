@@ -225,7 +225,7 @@ void TAPacketParser::parseDplayDeletePlayer(const DPHeader *header, const char *
 void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, bool isLocalSource, const char *_payload, int _payloadSize, const std::string & context)
 {
     taflib::Watchdog wd("TAPacketParser::parseTaPacket", 100);
-    if (otherDplayId == 0u && m_taDuplicateDetection.isLikelyDuplicate(sourceDplayId, otherDplayId, _payload, _payloadSize))
+    if (m_progressTicks > 0u && otherDplayId == 0u && m_taDuplicateDetection.isLikelyDuplicate(sourceDplayId, otherDplayId, _payload, _payloadSize))
     {
         return;
     }

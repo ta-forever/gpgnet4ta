@@ -146,3 +146,22 @@ void DisconnectFromPeerCommand::Set(QVariantList command)
     }
     playerId = command[1].toInt();
 }
+
+const char* const PingMessage::ID = "Ping";
+
+PingMessage::PingMessage()
+{ }
+
+PingMessage::PingMessage(QVariantList qvl)
+{
+    Set(qvl);
+}
+
+void PingMessage::Set(QVariantList command)
+{
+    QString cmd = command[0].toString();
+    if (cmd.compare(ID))
+    {
+        throw std::runtime_error("Unexpected command");
+    }
+}

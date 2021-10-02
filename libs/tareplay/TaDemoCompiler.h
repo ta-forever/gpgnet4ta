@@ -16,10 +16,11 @@ namespace tareplay {
         {
             UserContext() { }
             UserContext(QTcpSocket* socket);
+            QString ipAddr();
 
             quint32 gameId;
             quint32 playerDpId;
-            QString playerPublicAddr;
+            QString playerName;
             QSharedPointer<QDataStream> dataStream;
             gpgnet::GpgNetParse gpgNetParser;
             QSharedPointer<gpgnet::GpgNetSend> gpgNetSerialiser;
@@ -48,6 +49,7 @@ namespace tareplay {
         void onSocketStateChanged(QAbstractSocket::SocketState socketState);
         void onReadyRead();
         void closeExpiredGames();
+        void pingUsers();
         void timerEvent(QTimerEvent* event);
 
         std::shared_ptr<std::ostream> commitHeaders(const GameContext& game, QString filename);
@@ -58,6 +60,7 @@ namespace tareplay {
         QTcpServer m_tcpServer;
         QMap<QTcpSocket*, QSharedPointer<UserContext> > m_players;
         QMap<quint32, GameContext> m_games;
+        quint32 m_timerCounter;
     };
 
 }

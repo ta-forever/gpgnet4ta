@@ -17,7 +17,7 @@
 
 void GameNotFoundMessageBox(taflib::MessageBoxThread& msgbox)
 {
-    QString err = "TAF Replay Server responded GAME NOT FOUND. Either the players are using an outdated version of TAF, or their games failed to connect to the TAF Demo Recorder. TAF suggests you find a different game to watch, or go play one yourself.";
+    QString err = "TAF Replay Server responded GAME NOT FOUND. This is typically because the game includes AI players. TAF suggests you find a different game to watch, or go play one yourself.";
     QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
 }
 
@@ -35,7 +35,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("0.14.2");
+    QCoreApplication::setApplicationVersion("0.14.3");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replayer");

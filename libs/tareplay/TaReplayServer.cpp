@@ -84,6 +84,7 @@ void TaReplayServer::onNewConnection()
         while (m_tcpServer.hasPendingConnections())
         {
             QTcpSocket* socket = m_tcpServer.nextPendingConnection();
+            socket->setSocketOption(QAbstractSocket::KeepAliveOption, 1);
             if (m_users.contains(socket))
             {
                 qWarning() << "[TaReplayServer::onNewConnection] accepted connection from a socket thats already connected?? pointer" << socket;
@@ -163,8 +164,9 @@ void TaReplayServer::onReadyRead()
                     sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
                     continue;
                 }
+                const GameInfo& game = m_gameInfo[msg.gameId];
 
-                int replayDelaySeconds = m_gameInfo[msg.gameId].delaySeconds;
+                int replayDelaySeconds = game.delaySeconds;
                 if (replayDelaySeconds < 0)
                 {
                     qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] denying replay since replay is disabled for game" << msg.gameId;
@@ -180,14 +182,23 @@ void TaReplayServer::onReadyRead()
                     continue;
                 }
 
-                if (m_gameInfo[msg.gameId].demoFileSizeLog.isNull())
+                if (game.demoFileSizeLog.isNull())
                 {
                     qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: no size log" << msg.gameId;
                     sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
                     continue;
                 }
 
-                qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] gameId=" << msg.gameId << "with delay" << replayDelaySeconds;
+                if (game.demoFileSizeLog->size() > game.delaySeconds)
+                {
+                    std::streamoff seekPos = std::min(unsigned(msg.position), unsigned(game.demoFileSizeLog->front()));
+                    userContext.demoFile->seekg(seekPos, std::ios::beg);
+                }
+
+                 qInfo()
+                     << "[TaReplayServer::onReadyRead][SUBSCRIBE] gameId=" << msg.gameId << "position=" << msg.position
+                     << "log.size=" << game.demoFileSizeLog->size() << "game.delay=" << game.delaySeconds
+                     << "demofile.tellg=" << userContext.demoFile->tellg();
                 userContext.gameId = msg.gameId;
             }
             else
@@ -323,6 +334,7 @@ void TaReplayServer::serviceUser(UserContext& user)
     }
     else
     {
+        // including demoFileSizeLog smaller than delaySeconds
         return;
     }
 

@@ -69,4 +69,12 @@ namespace gpgnet
         void Set(QVariantList command);
     };
 
+    struct PingMessage
+    {
+        static const char* const ID;
+        PingMessage();
+        PingMessage(QVariantList qvl);
+        void Set(QVariantList command);
+    };
+
 }

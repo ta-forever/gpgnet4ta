@@ -535,7 +535,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GPGNet4TA");
-    QCoreApplication::setApplicationVersion("0.14.2");
+    QCoreApplication::setApplicationVersion("0.14.3");
     //app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
@@ -560,11 +560,23 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
     parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
-    parser.addOption(QCommandLineOption("publicaddr", "Player's public IP address for inclusion in the recorded demo", "publicaddr", "127.0.0.1"));
+    parser.addOption(QCommandLineOption("democompilerdebugreq", "host:port/gameid of TA Demo Compiler to issue debug req to", "democompilerdebugreq"));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(taflib::Logger::Log);
+
+    if (parser.isSet("democompilerdebugreq"))
+    {
+        QString user, host;
+        QString gameId = "0";
+        quint16 port;
+        SplitUserHostPortChannel(parser.value("democompilerdebugreq"), user, host, port, gameId);
+        tareplay::TaDemoCompilerClient demoCompiler(host, port, gameId.toInt());
+        QTimer::singleShot(3000, [&demoCompiler, gameId]() { demoCompiler.sendDebugRequest(gameId.toInt()); });
+        app.exec();
+        return 0;
+    }
 
     if (!QFileInfo(parser.value("gamepath")).isDir())
     {
@@ -653,8 +665,8 @@ int doMain(int argc, char* argv[])
             QString user, host, gameId;
             quint16 port;
             SplitUserHostPortChannel(parser.value("democompilerurl"), user, host, port, gameId);
-            qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId << "playerIp=" << parser.value("publicaddr");
-            lobby.enableForwardToDemoCompiler(host, port, gameId.toInt(), parser.value("publicaddr"));
+            qInfo() << "[main] enabling forward to TA Demo Compiler on host=" << host << "port=" << port << "gameId=" << gameId;
+            lobby.enableForwardToDemoCompiler(host, port, gameId.toInt());
         }
 
         if (ircForward)

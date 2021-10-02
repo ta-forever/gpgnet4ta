@@ -12,7 +12,7 @@ namespace tareplay {
     public:
         quint32 gameId;
         quint32 playerDpId;
-        QString playerPublicAddr;
+        QString playerName;
 
         static const char* const ID;
         HelloMessage();
@@ -108,6 +108,17 @@ namespace tareplay {
         static const char* const ID;
         ReconnectMessage();
         ReconnectMessage(QVariantList command);
+        void set(QVariantList command);
+    };
+
+    class DebugDumpRequestMessage
+    {
+    public:
+        quint32 gameId;
+
+        static const char* const ID;
+        DebugDumpRequestMessage();
+        DebugDumpRequestMessage(QVariantList command);
         void set(QVariantList command);
     };
 
