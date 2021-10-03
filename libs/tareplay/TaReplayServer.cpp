@@ -28,7 +28,8 @@ static const int CHUNK_SIZE = 1000;
 
 TaReplayServer::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
-    userDataStream(new QDataStream(socket))
+    userDataStream(new QDataStream(socket)),
+    enableLogWarn(true)
 {
     userDataStream->setByteOrder(QDataStream::ByteOrder::LittleEndian);
     userDataStreamProtol.reset(new gpgnet::GpgNetSend(*userDataStream));
@@ -160,7 +161,7 @@ void TaReplayServer::onReadyRead()
                 TaReplayServerSubscribe msg(command);
                 if (!m_gameInfo.contains(msg.gameId))
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: no entry in m_gameInfo" << msg.gameId;
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: no entry in m_gameInfo" << msg.gameId << "position:" << msg.position;
                     sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
                     continue;
                 }
@@ -169,7 +170,7 @@ void TaReplayServer::onReadyRead()
                 int replayDelaySeconds = game.delaySeconds;
                 if (replayDelaySeconds < 0)
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] denying replay since replay is disabled for game" << msg.gameId;
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] denying replay since replay is disabled for game" << msg.gameId << "position:" << msg.position;
                     sendData(userContext, TaReplayServerStatus::LIVE_REPLAY_DISABLED, QByteArray());
                     continue;
                 }
@@ -177,15 +178,21 @@ void TaReplayServer::onReadyRead()
                 userContext.demoFile.reset(findReplayFileForGame(msg.gameId));
                 if (userContext.demoFile.isNull() || !userContext.demoFile->good())
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: bad / not found replay file" << msg.gameId;
-                    sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: bad / not found replay file" << msg.gameId << "position:" << msg.position;
+                    if (msg.position == 0)
+                    {
+                        sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
+                    }
                     continue;
                 }
 
                 if (game.demoFileSizeLog.isNull())
                 {
-                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: no size log" << msg.gameId;
-                    sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
+                    qInfo() << "[TaReplayServer::onReadyRead][SUBSCRIBE] GAME NOT FOUND: no size log" << msg.gameId << "position:" << msg.position;
+                    if (msg.position == 0)
+                    {
+                        sendData(userContext, TaReplayServerStatus::GAME_NOT_FOUND, QByteArray());
+                    }
                     continue;
                 }
 
@@ -311,12 +318,20 @@ void TaReplayServer::serviceUser(UserContext& user)
 
     if (user.demoFile.isNull())
     {
-        qWarning() << "[TaReplayServer::serviceUser] user's demoFile for gameid" << user.gameId << "is null!";
+        if (user.enableLogWarn)
+        {
+            user.enableLogWarn = false;
+            qWarning() << "[TaReplayServer::serviceUser] user's demoFile for gameid" << user.gameId << "is null!";
+        }
         return;
     }
     else if (m_gameInfo.contains(user.gameId) && m_gameInfo[user.gameId].demoFileSizeLog.isNull())
     {
-        qWarning() << "[TaReplayServer::serviceUser] filesizelog for gameid" << user.gameId << "is null";
+        if (user.enableLogWarn)
+        {
+            user.enableLogWarn = false;
+            qWarning() << "[TaReplayServer::serviceUser] filesizelog for gameid" << user.gameId << "is null";
+        }
         return;
     }
     else if (m_gameInfo.contains(user.gameId) && m_gameInfo[user.gameId].demoFileSizeLog->isEmpty())

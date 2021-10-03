@@ -45,6 +45,7 @@ namespace tareplay {
             QSharedPointer<gpgnet::GpgNetSend> userDataStreamProtol;
             QSharedPointer<gpgnet::GpgNetParse> gpgNetParser;
             QSharedPointer<std::istream> demoFile;
+            bool enableLogWarn;
         };
 
         void sendData(UserContext &user, TaReplayServerStatus status, QByteArray data);
