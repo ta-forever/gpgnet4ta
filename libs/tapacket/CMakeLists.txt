@@ -12,6 +12,8 @@ add_library(tapacket STATIC
     TestPackets.cpp
     TPacket.h
     TPacket.cpp
+    UnitDataRepo.h
+    UnitDataRepo.cpp
     )
 
 target_include_directories(tapacket 

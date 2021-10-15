@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tapacket/UnitDataRepo.h"
+
 namespace tareplay {
 
     class TaDemoCompiler: public QObject
@@ -32,12 +34,13 @@ namespace tareplay {
         struct GameContext
         {
             GameContext();
+            QString getUnitDataHash() const;
 
             quint32 gameId;
             GameInfoMessage header;
             QMap<quint32, QSharedPointer<UserContext> > players;    // keyed by Dplay ID
             QVector<quint32> playersLockedIn;                       // those that actually progressed to loading
-            QMap<QPair<quint8, quint32>, QByteArray> unitData;      // keyed by sub,id
+            tapacket::UnitDataRepo unitData;
 
             std::shared_ptr<std::ostream> demoCompilation;
             QString tempFileName;

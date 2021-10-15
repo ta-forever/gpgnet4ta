@@ -749,6 +749,10 @@ std::string TPlayerInfo::getMapName()
     return (const char*)fill1;
 }
 
+std::uint32_t TPlayerInfo::getMapHash()
+{
+    return *(std::uint32_t*)&data3[0];
+}
 
 TIdent2::TIdent2()
 { 

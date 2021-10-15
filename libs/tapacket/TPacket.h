@@ -96,6 +96,7 @@ namespace tapacket
         std::int8_t getSide();
         std::uint8_t getSlotNumber();
         std::string getMapName();
+        std::uint32_t getMapHash();
                                         //record        +typecode   +smartpak
         std::uint8_t fill1[139];        //0             //1         //8  
         std::uint16_t width;            //139           //140       //147

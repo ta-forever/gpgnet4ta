@@ -3,6 +3,8 @@
 #include <QtCore/qcryptographichash.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qjsonobject.h>
+#include <QtCore/qjsondocument.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qpair.h>
 #include <QtCore/qmap.h>
@@ -26,7 +28,7 @@
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14.3";
+static const char* VERSION = "taf-0.14.4";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
@@ -56,6 +58,15 @@ TaDemoCompiler::GameContext::GameContext() :
     gameId(0u),
     expiryCountdown(GAME_EXPIRY_TICKS)
 { }
+
+QString TaDemoCompiler::GameContext::getUnitDataHash() const
+{
+    QCryptographicHash md5(QCryptographicHash::Md5);
+    unitData.hash([&md5](std::uint32_t datum) {
+        md5.addData((const char*)&datum, sizeof(datum));
+    });
+    return md5.result().toHex();
+}
 
 TaDemoCompiler::TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize):
     m_demoPathTemplate(demoPathTemplate),
@@ -223,31 +234,9 @@ void TaDemoCompiler::onReadyRead()
                 if (itGame != m_games.end())
                 {
                     GameUnitDataMessage msg(command);
-                    tapacket::TUnitData ud(tapacket::bytestring((std::uint8_t*)msg.unitData.data(), msg.unitData.size()));
                     GameContext& game = itGame.value();
+                    game.unitData.add(tapacket::bytestring((std::uint8_t*)msg.unitData.data(), msg.unitData.size()));
                     game.expiryCountdown = GAME_EXPIRY_TICKS;
-                    if (ud.sub == 2 || ud.sub == 3 || ud.sub == 9)
-                    {
-                        if (ud.sub == 3 && game.unitData.contains(QPair<quint8, quint32>(ud.sub, ud.id)))
-                        {
-                            // hack to be removed once clients are on >= 0.14.3
-                            QByteArray& bs = game.unitData[QPair<quint8, quint32>(ud.sub, ud.id)];
-                            tapacket::TUnitData oldUd(tapacket::bytestring((std::uint8_t*)bs.data(), bs.size()));
-                            if (oldUd.u.statusAndLimit[0] != 0x0101)
-                            {
-                                bs = msg.unitData;
-                            }
-                        }
-                        else
-                        {
-                            game.unitData[QPair<quint8, quint32>(ud.sub, ud.id)] = msg.unitData;
-                        }
-                    }
-                    else if (ud.sub == 0)
-                    {
-                        qInfo() << "[TaDemoCompiler::onReadyRead] player" << userContext.playerDpId << "reset unit data for game" << game.gameId;
-                        game.unitData.clear();
-                    }
                 }
             }
             else if (cmd == GamePlayerLoading::ID)
@@ -291,10 +280,10 @@ void TaDemoCompiler::onReadyRead()
                     {
                         int enabledUnitCount = 0;
                         int unitCount = 0;
-                        QCryptographicHash md5(QCryptographicHash::Md5);
-                        for (auto it = game.unitData.begin(); it != game.unitData.end(); ++it)
+                        const auto& units = game.unitData.get();
+                        for (auto it = units.begin(); it != units.end(); ++it)
                         {
-                            tapacket::TUnitData ud(tapacket::bytestring((std::uint8_t*)it.value().data(), it.value().size()));
+                            tapacket::TUnitData ud(it->second.data());
                             if (ud.sub == 0x03)
                             {
                                 qInfo() << QString("gameId:%1, sub:%2, id:%3, status:%4, limit:%5, crc:%6, raw:%7")
@@ -304,20 +293,16 @@ void TaDemoCompiler::onReadyRead()
                                     .arg(ud.u.statusAndLimit[0], 4, 16, QChar('0'))
                                     .arg(ud.u.statusAndLimit[1], 4, 16, QChar('0'))
                                     .arg(ud.u.crc, 8, 16, QChar('0'))
-                                    .arg(QString(it.value().toHex()));
-                                if (ud.u.statusAndLimit[0] == 0x0101 && game.unitData.contains(QPair<quint8,quint32>(0x02,ud.id)))
+                                    .arg(QString(QByteArray((const char*)it->second.data(), it->second.size()).toHex()));
+                                auto key02 = tapacket::UnitDataRepo::SubAndId(0x02, ud.id);
+                                if (ud.u.statusAndLimit[0] == 0x0101 && units.count(key02) > 0u)
                                 {
-                                    const QByteArray& x02 = game.unitData[QPair<quint8, quint32>(0x02, ud.id)];
-                                    tapacket::TUnitData udx02(tapacket::bytestring((std::uint8_t*)x02.data(), x02.size()));
                                     ++enabledUnitCount;
-                                    quint32 datum = ud.id + udx02.u.crc;
-                                    md5.addData((const char*)&datum, sizeof(datum));
                                 }
                                 ++unitCount;
                             }
                         }
-                        qInfo() << enabledUnitCount << "units enabled of" << unitCount << "total";
-                        qInfo() << "Enabled units MD5:" << md5.result().toHex();
+                        qInfo() << "Enabled units MD5:" << game.getUnitDataHash();
                     }
                 }
             }
@@ -441,6 +426,9 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
         }
     }
 
+    quint32 taMapHash;          // to later bung into meta.json
+    std::uint8_t taVersionMajor = 0;
+    std::uint8_t taVersionMinor = 0;
     for (quint32 dpid : knownLockedInPlayers)
     {
         if (game.players.contains(dpid) && game.players[dpid])
@@ -449,6 +437,15 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
             demoPlayer.number = game.players[dpid]->gamePlayerNumber;
             const QByteArray& playerStatus = game.players[dpid]->gamePlayerInfo.statusMessage;
             demoPlayer.statusMessage = tapacket::bytestring((std::uint8_t*)playerStatus.data(), playerStatus.size());
+
+            tapacket::TPlayerInfo playerInfo(demoPlayer.statusMessage);
+            if (playerInfo.getMapName() == header.mapName)
+            {
+                taMapHash = playerInfo.getMapHash();
+                taVersionMajor = playerInfo.versionMajor;
+                taVersionMinor = playerInfo.versionMinor;
+            }
+
             demoPlayer.statusMessage = tapacket::TPacket::trivialSmartpak(demoPlayer.statusMessage, 0xffffffff);
             demoPlayer.statusMessage = tapacket::TPacket::compress(demoPlayer.statusMessage);
             tapacket::TPacket::encrypt(demoPlayer.statusMessage);
@@ -457,15 +454,23 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     }
 
     tapacket::UnitData unitData;
-    for (const auto& ud : game.unitData)
+    for (const auto& ud : game.unitData.get())
     {
-        unitData.unitData += tapacket::bytestring((std::uint8_t*)ud.data(), ud.size());
+        unitData.unitData += ud.second;
     }
     tad.write(unitData);
     tad.flush();
 
-    std::ofstream gameStartMarker(filename.toStdString() + ".meta");
-    gameStartMarker << QDateTime::currentDateTimeUtc().toTime_t() << ' ' << fs->tellp();
+    QJsonObject jo;
+    jo.insert("gameId", int(game.gameId));
+    jo.insert("unitsHash", game.getUnitDataHash());
+    jo.insert("taVersionMajor", int(taVersionMajor));
+    jo.insert("taVersionMinor", int(taVersionMinor));
+    jo.insert("mapName", header.mapName.c_str());
+    jo.insert("taMapHash", QString("%1").arg(taMapHash, 8, 16, QChar('0')));
+
+    std::ofstream meta(filename.toStdString() + ".json");
+    meta << QJsonDocument(jo).toJson().toStdString();
 
     return fs;
 }
@@ -527,14 +532,12 @@ void TaDemoCompiler::closeExpiredGames()
                 qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired. closing" << m_games[gameid].finalFileName;
                 m_games[gameid].demoCompilation.reset();
                 QFile::rename(m_games[gameid].tempFileName, m_games[gameid].finalFileName);
-                QFile::remove(m_games[gameid].tempFileName + ".meta");
             }
             else
             {
                 qInfo() << "[TaDemoCompiler::closeExpiredGames] game" << gameid << "has expired and is too small. Deleting" << m_games[gameid].finalFileName;
                 m_games[gameid].demoCompilation.reset();
                 QFile::remove(m_games[gameid].tempFileName);
-                QFile::remove(m_games[gameid].tempFileName + ".meta");
             }
         }
         m_games.remove(gameid);

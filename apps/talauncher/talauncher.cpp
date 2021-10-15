@@ -237,7 +237,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TALauncher");
-    QCoreApplication::setApplicationVersion("0.14.3");
+    QCoreApplication::setApplicationVersion("0.14.4");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Total Annihilation launch-to-lobby server");
