@@ -323,9 +323,10 @@ namespace jdplay {
         // this method will return DPERR_BUFFERTOOSMALL, that is not an error
         hr = lpDPLobby->CreateCompoundAddress(address, 2, NULL, &addressSize);
 
-        if (hr != S_OK && hr != DPERR_BUFFERTOOSMALL) {
-            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to get size for CompoundAddress");
-            return false;
+        if (addressSize == 0) { //hr != S_OK && hr != DPERR_BUFFERTOOSMALL) {
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to get size for CompoundAddress. addressSize=" << addressSize);
+            addressSize = 1000;
+            //return false;
         }
 
         lpConnection = GlobalAllocPtr(GHND, addressSize);  // allocating mem

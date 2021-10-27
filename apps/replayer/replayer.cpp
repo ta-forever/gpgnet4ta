@@ -12,6 +12,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcryptographichash.h>
 #include <QtCore/qfileinfo.h>
+#include <QtCore/qjsonarray.h>
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qurl.h>
@@ -37,20 +38,51 @@ void LiveReplayDisabledMessageBox(taflib::MessageBoxThread& msgbox)
 class DemoInfoParser : public tapacket::DemoParser
 {
 public:
-    DemoInfoParser():
+    DemoInfoParser(bool verbose):
+        m_verbose(verbose),
         m_mapHash(0u)
     { }
 
     virtual void handle(const tapacket::Header& header)
     {
         m_mapName = QString::fromStdString(header.mapName);
+        if (m_verbose)
+        {
+            qInfo() << "magic=" << header.magic <<
+                "mapName=" << header.mapName.c_str() <<
+                "maxUnits=" << header.maxUnits <<
+                "numPlayers=" << int(header.numPlayers) <<
+                "version=" << header.version;
+        }
     }
 
     virtual void handle(const tapacket::Player& player, int n, int ofTotal)
-    { }
+    {
+        QJsonObject p;
+        p.insert("name", QString::fromLatin1(player.name.c_str()));
+        p.insert("side", player.getSide());
+        p.insert("number", int(player.number));
+        m_players.append(p);
+
+        if (m_verbose)
+        {
+            qInfo() << "Player: color=" << int(player.color) <<
+                "name=" << player.name.c_str() <<
+                "number=" << int(player.number) <<
+                "side=" << int(player.side);
+        }
+    }
 
     virtual void handle(const tapacket::ExtraSector& es, int n, int ofTotal)
-    { }
+    {
+        if (m_verbose)
+        {
+            std::ostringstream ss;
+            taflib::HexDump(es.data.data(), es.data.size(), ss);
+            qInfo() << "ExtraSector: " << int(es.sectorType);
+            qInfo() << ss.str().c_str();
+        }
+    }
 
     virtual void handle(const tapacket::PlayerStatusMessage& msg, std::uint32_t dplayid, int n, int ofTotal)
     {
@@ -60,6 +92,13 @@ public:
             m_mapHash = playerInfo.getMapHash();
             m_versionMajor = playerInfo.versionMajor;
             m_versionMinor = playerInfo.versionMinor;
+        }
+        if (m_verbose)
+        {
+            std::ostringstream ss;
+            taflib::HexDump(msg.statusMessage.data(), msg.statusMessage.size(), ss);
+            qInfo() << "PlayerStatus:" << int(msg.number);
+            qInfo() << ss.str().c_str();
         }
     }
 
@@ -77,7 +116,14 @@ public:
     }
 
     virtual void handle(const tapacket::Packet& packet, const std::vector<tapacket::bytestring>& unpaked, std::size_t n)
-    { }
+    {
+        if (m_verbose)
+        {
+            qInfo() << "t:" << packet.time << ", "
+                << "sender:" << int(packet.sender) << ", "
+                << "data:" << QByteArray((const char*)packet.data.data(), packet.data.size()).toHex();
+        }
+    }
 
     QByteArray getUnitDataFingerPrint()
     {
@@ -97,16 +143,53 @@ public:
         json.insert("modHash", QString(getUnitDataFingerPrint().toHex()));
         json.insert("taVersionMajor", m_versionMajor);
         json.insert("taVersionMinor", m_versionMinor);
+        json.insert("players", m_players);
+
         return json;
     }
 
 private:
+    bool m_verbose;
     tapacket::UnitDataRepo m_units;
+    QJsonArray m_players;
     QString m_mapName;
     quint32 m_mapHash;
     quint8 m_versionMajor;
     quint8 m_versionMinor;
 };
+
+void doDemoInfo(QString _demoUrl, bool verbose, int numPaksToRead)
+{
+    QUrl demoUrl = QUrl::fromUserInput(_demoUrl);
+    if (!demoUrl.isValid())
+    {
+        throw std::runtime_error("[doDemoInfo] invalid --demourl '" + _demoUrl.toStdString() + "'");
+    }
+    else if (!demoUrl.isLocalFile())
+    {
+        throw std::runtime_error("[doDemoInfo] invalid --demourl '" + _demoUrl.toStdString() + "'.  Must be a local file!");
+    }
+    else
+    {
+
+        QFileInfo fileInfo(demoUrl.toLocalFile());
+        if (!fileInfo.exists() || !fileInfo.isFile())
+        {
+            throw std::runtime_error("[doDemoInfo] file not found '" + demoUrl.toLocalFile().toStdString() + "'");
+        }
+        QByteArray localFile = QFile::encodeName(demoUrl.toLocalFile());
+        localFile += '\0';
+        std::ifstream ifs(localFile.data(), std::ios::in | std::ios::binary);
+        if (!ifs.good())
+        {
+            throw std::runtime_error(std::string("[doDemoInfo] error reading file '") + localFile.data() + "'");
+        }
+        DemoInfoParser demoInfoParser(verbose);
+        demoInfoParser.parse(&ifs, numPaksToRead);
+        QByteArray jsonData = QJsonDocument(demoInfoParser.toJson(QString::fromLatin1(localFile))).toJson();
+        std::cout.write(jsonData.data(), jsonData.size());
+    }
+}
 
 int doMain(int argc, char* argv[])
 {
@@ -116,7 +199,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("0.14.4");
+    QCoreApplication::setApplicationVersion("0.14.6");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replayer");
@@ -129,39 +212,13 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("playername", "What does the watcher want to call him/herself?", "playername", "BILLY_IDOL"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport"));
     parser.addOption(QCommandLineOption("info", "Just print out some info about the demo and exit"));
+    parser.addOption(QCommandLineOption("detail", "Print out detailed information about the replay"));
     parser.process(app);
 
-    if (parser.isSet("info"))
+    if (parser.isSet("info") || parser.isSet("detail"))
     {
-        QUrl demoUrl = QUrl::fromUserInput(parser.value("demourl"));
-        if (!demoUrl.isValid())
-        {
-            throw std::runtime_error("[doMain] invalid --demourl '" + parser.value("demourl").toStdString() + "'");
-        }
-        else if (!demoUrl.isLocalFile())
-        {
-            throw std::runtime_error("[doMain] invalid --demourl '" + parser.value("demourl").toStdString() + "'.  Must be a local file!");
-        }
-        else
-        {
-
-            QFileInfo fileInfo(demoUrl.toLocalFile());
-            if (!fileInfo.exists() || !fileInfo.isFile())
-            {
-                throw std::runtime_error("[doMain] file not found '" + demoUrl.toLocalFile().toStdString() + "'");
-            }
-            QByteArray localFile = QFile::encodeName(demoUrl.toLocalFile());
-            localFile += '\0';
-            std::ifstream ifs(localFile.data(), std::ios::in | std::ios::binary);
-            if (!ifs.good())
-            {
-                throw std::runtime_error(std::string("[doMain] error reading file '") + localFile.data() + "'");
-            }
-            DemoInfoParser demoInfoParser;
-            demoInfoParser.parse(&ifs, 100);
-            std::cout << QString(QJsonDocument(demoInfoParser.toJson(localFile.data())).toJson()).toStdString() << std::endl;
-            return 0;
-        }
+        doDemoInfo(parser.value("demourl"), parser.isSet("detail"), 100);
+        return 0;
     }
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));

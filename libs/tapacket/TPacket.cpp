@@ -204,6 +204,64 @@ bytestring TPacket::decompress(const std::uint8_t *data, const unsigned len, con
     return result;
 }
 
+std::string TPacket::toString(SubPacketCode spc)
+{
+    switch (spc)
+    {
+    case SubPacketCode::ZERO_00: return "ZERO_00";
+    case SubPacketCode::PING_02: return "PING_02";
+    case SubPacketCode::UNK_03: return "UNK_03";
+    case SubPacketCode::CHAT_05: return "CHAT_05";
+    case SubPacketCode::PAD_ENCRYPT_06: return "PAD_ENCRYPT";
+    case SubPacketCode::UNK_07: return "UNK_07";
+    case SubPacketCode::LOADING_STARTED_08:  return "LOADING_STARTED";
+    case SubPacketCode::UNIT_BUILD_STARTED_09: return "UNIT_BUILD_STARTED_09";
+    case SubPacketCode::UNK_0A: return "UNK_0A";
+    case SubPacketCode::UNIT_TAKE_DAMAGE_0B:return "UNIT_TAKE_DAMAGE_0B";
+    case SubPacketCode::UNIT_KILLED_0C: return "UNIT_KILLED_0C";
+    case SubPacketCode::WEAPON_FIRED_0D: return "WEAPON_FIRED_0D";
+    case SubPacketCode::AREA_OF_EFFECT_0E: return "AREA_OF_EFFECT_0E";
+    case SubPacketCode::FEATURE_ACTION_0F: return "FEATURE_ACTION_0F";
+    case SubPacketCode::UNIT_START_SCRIPT_10: return "UNIT_START_SCRIPT_10";
+    case SubPacketCode::UNIT_STATE_11: return "UNIT_STATE_11";
+    case SubPacketCode::UNIT_BUILD_FINISHED_12: return "UNIT_BUILD_FINISHED_12";
+    case SubPacketCode::GIVE_UNIT_14: return "GIVE_UNIT_14";
+    case SubPacketCode::START_15: return "START_15";
+    case SubPacketCode::SHARE_RESOURCES_16: return "SHARE_RESOURCES_16";
+    case SubPacketCode::UNK_17: return "UNK_17";
+    case SubPacketCode::HOST_MIGRATION_18: return "HOST_MIGRATION_18";
+    case SubPacketCode::SPEED_19: return "SPEED_19";
+    case SubPacketCode::UNIT_DATA_1A: return "UNIT_DATA_1A";
+    case SubPacketCode::REJECT_1B: return "REJECT_1B";
+    case SubPacketCode::START_1E: return "START_1E";
+    case SubPacketCode::UNK_1F: return "UNK_1F";
+    case SubPacketCode::PLAYER_INFO_20: return "PLAYER_INFO_20";
+    case SubPacketCode::UNK_21: return "UNK_21";
+    case SubPacketCode::IDENT3_22:  return "IDENT3_22";
+    case SubPacketCode::ALLY_23: return "ALLY_23";
+    case SubPacketCode::TEAM_24: return "TEAM_24";
+    case SubPacketCode::IDENT2_26:  return "IDENT2_26";
+    case SubPacketCode::PLAYER_RESOURCE_INFO_28: return "PLAYER_RESOURCE_INFO_28";
+    case SubPacketCode::UNK_29: return "UNK_29";
+    case SubPacketCode::LOADING_PROGRESS_2A: return "LOADING_PROGRESS_2A";
+    case SubPacketCode::UNIT_STAT_AND_MOVE_2C: return "UNIT_STAT_AND_MOVE_2C";
+    case SubPacketCode::UNK_2E: return "UNK_2E";
+    case SubPacketCode::UNK_F6: return "UNK_F6";
+    case SubPacketCode::ALLY_CHAT_F9: return "ALLY_CHAT_F9";
+    case SubPacketCode::REPLAYER_SERVER_FA: return "REPLAYER_SERVER_FA";
+    case SubPacketCode::RECORDER_DATA_CONNECT_FB: return "RECORDER_DATA_CONNECT_FB";
+    case SubPacketCode::MAP_POSITION_FC: return "MAP_POSITION_FC";
+    case SubPacketCode::SMARTPAK_TICK_OTHER_FD: return "SMARTPAK_TICK_OTHER_FD";
+    case SubPacketCode::SMARTPAK_TICK_START_FE: return "SMARTPAK_TICK_START_FE";
+    case SubPacketCode::SMARTPAK_TICK_FF: return "SMARTPAK_TICK_FF";
+    default: {
+        std::ostringstream ss;
+        ss << "UNK_" << std::hex << std::setw(2) << std::setfill('0') << unsigned(spc);
+        return ss.str();
+    }
+    };
+}
+
 unsigned TPacket::getExpectedSubPacketSize(const bytestring &bytes)
 {
     return getExpectedSubPacketSize(bytes.data(), bytes.size());

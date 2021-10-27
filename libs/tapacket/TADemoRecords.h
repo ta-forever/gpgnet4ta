@@ -43,6 +43,14 @@ namespace tapacket
         std::int8_t side : 8;
         std::uint8_t number : 8;      // beware not consistent across all players' versions of demo
         std::string name;           // upto 64
+        const char* getSide() const
+        {
+            switch (side) {
+            case 0: return "ARM";
+            case 1: return "CORE";
+            case 2: return "WATCH";
+            };
+        }
     };
 
     struct PlayerStatusMessage

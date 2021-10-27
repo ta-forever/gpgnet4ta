@@ -3,6 +3,7 @@
 #include <QtCore/qcryptographichash.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qjsonarray.h>
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qobject.h>
@@ -28,7 +29,7 @@
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14.4";
+static const char* VERSION = "taf-0.14.6";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
@@ -469,23 +470,43 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     jo.insert("mapName", header.mapName.c_str());
     jo.insert("taMapHash", QString("%1").arg(taMapHash, 8, 16, QChar('0')));
 
+    QJsonArray jsonPlayers;
+    for (quint32 dpid : knownLockedInPlayers)
+    {
+        if (game.players.contains(dpid) && game.players[dpid])
+        {
+            QJsonObject p;
+            UserContext& userContext = *game.players[dpid];
+            p.insert("name", userContext.gamePlayerInfo.name);
+            p.insert("side", userContext.gamePlayerInfo.side);
+            p.insert("number", userContext.gamePlayerNumber);
+            jsonPlayers.append(p);
+        }
+    }
+    jo.insert("players", jsonPlayers);
+
     std::ofstream meta(filename.toStdString() + ".json");
     meta << QJsonDocument(jo).toJson().toStdString();
-
     return fs;
 }
 
-void TaDemoCompiler::commitMove(const TaDemoCompiler::GameContext& game, int playerNumber, const GameMoveMessage& moves)
+void TaDemoCompiler::commitMove(TaDemoCompiler::GameContext& game, int playerNumber, const GameMoveMessage& moves)
 {
     // TADR file format requires:
     // - unencrypted
-    // - compressed (0x04) or uncomprossed (0x03)
+    // - compressed (0x04) or uncompressed (0x03)
     // - 0 bytes no checksum (normally 2 bytes)
     // - 0 bytes no timestamp (normally 4 bytes)
 
+    if (!game.timer.isValid())
+    {
+        qInfo() << "[TaDemoCompiler::commitMove] initialising demo timer";
+        game.timer.start();
+    }
+
     tapacket::TADemoWriter tad(game.demoCompilation.get());
     tapacket::Packet packet;
-    packet.time = 0u;  // milliseconds since last packet, but only used by ancient versions of replayer
+    packet.time = game.timer.restart();
     packet.sender = playerNumber;
     packet.data.assign((std::uint8_t*)moves.moves.data(), moves.moves.size());
     tad.write(packet);

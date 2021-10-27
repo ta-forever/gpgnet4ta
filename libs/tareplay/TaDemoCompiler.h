@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tapacket/UnitDataRepo.h"
+#include <QtCore/qelapsedtimer.h>
 
 namespace tareplay {
 
@@ -41,6 +42,7 @@ namespace tareplay {
             QMap<quint32, QSharedPointer<UserContext> > players;    // keyed by Dplay ID
             QVector<quint32> playersLockedIn;                       // those that actually progressed to loading
             tapacket::UnitDataRepo unitData;
+            QElapsedTimer timer;
 
             std::shared_ptr<std::ostream> demoCompilation;
             QString tempFileName;
@@ -56,7 +58,7 @@ namespace tareplay {
         void timerEvent(QTimerEvent* event);
 
         std::shared_ptr<std::ostream> commitHeaders(const GameContext& game, QString filename);
-        void commitMove(const GameContext &, int playerNumber, const GameMoveMessage &);
+        void commitMove(GameContext &, int playerNumber, const GameMoveMessage &);
 
         QString m_demoPathTemplate;
         quint32 m_minDemoSize;

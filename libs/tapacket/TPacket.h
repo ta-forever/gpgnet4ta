@@ -171,6 +171,7 @@ namespace tapacket
     class TPacket
     {
     public:
+        static std::string toString(SubPacketCode code);
         static unsigned getExpectedSubPacketSize(const bytestring &bytes);
         static unsigned getExpectedSubPacketSize(const std::uint8_t *s, unsigned sz);
         static void decrypt(bytestring& data, std::size_t ofs, std::uint16_t &checkExtracted, std::uint16_t &checkCalculated);

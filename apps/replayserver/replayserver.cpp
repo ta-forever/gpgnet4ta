@@ -31,7 +31,7 @@ int doMain(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("ReplayServer");
-    QCoreApplication::setApplicationVersion("0.14.4");
+    QCoreApplication::setApplicationVersion("0.14.6");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replay Server");
