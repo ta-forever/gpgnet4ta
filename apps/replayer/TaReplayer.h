@@ -30,6 +30,10 @@ class Replayer : public QObject, public tapacket::DemoParser
         std::uint32_t originalDpId;
         tapacket::bytestring statusPacket;
         std::uint32_t ticks;
+        double cumulativeMetal;
+        double cumulativeMetalShared;
+        double cumulativeEnergy;
+        double cumulativeEnergyShared;
     };
 
     enum class DpPlayerState
@@ -61,6 +65,7 @@ class Replayer : public QObject, public tapacket::DemoParser
                                     //(alternatively: responded with crc on) 
         int unitSyncReceiveCount;   //Number of $1a it claims to have recieved 
         bool hasTaken;              //True if this player has taken control over someone.
+        bool warnedWatcherNotPermitted;
     };
 
     struct UnitInfo

@@ -4,9 +4,10 @@
 #include "taflib/HexDump.h"
 #include "taflib/Logger.h"
 
-#include <dplay.h>
-#include <sstream>
 #include <cmath>
+#include <dplay.h>
+#include <iomanip>
+#include <sstream>
 
 #ifdef min
 #undef min
@@ -36,7 +37,11 @@ Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
     tapacket::Player(player),
     dpId(0u),
     originalDpId(0u),
-    ticks(0u)
+    ticks(0u),
+    cumulativeMetal(0.0),
+    cumulativeMetalShared(0.0),
+    cumulativeEnergy(0.0),
+    cumulativeEnergyShared(0.0)
 { }
 
 Replayer::DpPlayer::DpPlayer(std::uint32_t dpid) :
@@ -48,7 +53,8 @@ Replayer::DpPlayer::DpPlayer(std::uint32_t dpid) :
     unitSyncErrorCount(0),
     unitSyncAckCount(0),
     unitSyncReceiveCount(0),
-    hasTaken(false)
+    hasTaken(false),
+    warnedWatcherNotPermitted(false)
 { }
 
 Replayer::UnitInfo::UnitInfo() :
@@ -690,9 +696,18 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::WAIT_GO:
         tapacket::TPlayerInfo playerInfo(dpPlayer.statusPacket);
-        if (playerInfo.isClickedIn())
+        if (playerInfo.isClickedIn() && !playerInfo.isWatcher())
         {
             return 1;
+        }
+        else if (playerInfo.isClickedIn() && !dpPlayer.warnedWatcherNotPermitted)
+        {
+            dpPlayer.warnedWatcherNotPermitted = true;
+            this->say(hostDpId, "Please join as a regular player, not as a watcher");
+        }
+        else if (!playerInfo.isClickedIn())
+        {
+            dpPlayer.warnedWatcherNotPermitted = false;
         }
         break;
     }
@@ -909,8 +924,10 @@ bool Replayer::doPlay()
             switch (tapacket::SubPacketCode(move[0]))
             {
             case tapacket::SubPacketCode::CHAT_05:
+            {
                 filteredMoves += move;
                 break;
+            }
 
             case tapacket::SubPacketCode::GIVE_UNIT_14:
                 // Yankspanker replayer filters this in Tsavefile.unsmartpak, the direct method of retrieving paks from savefile for feeding to game
@@ -984,6 +1001,34 @@ bool Replayer::doPlay()
                     //say(player->dpId, msg);
                 }
                 // do not feed
+                break;
+            }
+
+            case tapacket::SubPacketCode::PLAYER_RESOURCE_INFO_28:
+            {
+                sender->cumulativeMetal = *(float*)&move[46];
+                sender->cumulativeEnergy = *(float*)&move[34];
+                filteredMoves += move;
+                break;
+            }
+            case tapacket::SubPacketCode::SHARE_RESOURCES_16:
+            {
+                std::uint32_t originalDpId = *(std::uint32_t*) & move[9];
+                auto benefactor = getDemoPlayerByOriginalDpId(originalDpId);
+                if (benefactor)
+                {
+                    const float amount = *(float*)&move[13];
+                    const char type = move[1];
+                    if (type == 2)
+                    {
+                        benefactor->cumulativeMetalShared += double(amount);
+                    }
+                    else
+                    {
+                        benefactor->cumulativeEnergyShared += double(amount);
+                    }
+                }
+                filteredMoves += move;
                 break;
             }
 
@@ -1074,6 +1119,23 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
 
         switch (tapacket::SubPacketCode(s[0]))
         {
+        case tapacket::SubPacketCode::CHAT_05:
+        {
+            if (s.find((const std::uint8_t*) "> .total", 1) != tapacket::bytestring::npos)
+            {
+                for (auto player : m_demoPlayers)
+                {
+                    std::ostringstream ss;
+                    int metalProduced = (player->cumulativeMetal - player->cumulativeMetalShared) / 1000.0;
+                    int energyProduced = (player->cumulativeEnergy - player->cumulativeEnergyShared) / 1000.0;
+                    int metalShared = player->cumulativeMetalShared / 1000.0;
+                    ss << std::setw(15) << player->name << std::setw(0)
+                        << " Metal: " << metalProduced << "K Energy: " << energyProduced << "K Shared M: " << metalShared << "K";
+                    this->say(player->dpId, ss.str());
+                }
+            }
+            break;
+        }
         case tapacket::SubPacketCode::SPEED_19:
         {
             std::ostringstream ss;

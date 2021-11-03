@@ -208,7 +208,7 @@ int handleRegisterDplay(const QCoreApplication &app, const QCommandLineParser& p
         while (!CheckDplayLobbyableApplication(dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
         {
             QString err = QString("Unable to update DirectPlay registration for ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\". ";
-            err += "Probably gpgnet4ta was unable to gain admin privileges. Attempt to launch anyway?";
+            err += "Probably talauncher was unable to gain admin privileges. Attempt to launch anyway?";
             int result = MessageBox(
                 NULL,
                 err.toStdString().c_str(),

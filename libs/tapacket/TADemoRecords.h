@@ -49,6 +49,7 @@ namespace tapacket
             case 0: return "ARM";
             case 1: return "CORE";
             case 2: return "WATCH";
+            default: return "ARM";
             };
         }
     };
