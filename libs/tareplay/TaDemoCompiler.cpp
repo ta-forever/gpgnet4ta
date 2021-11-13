@@ -29,7 +29,7 @@
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14.6";
+static const char* VERSION = "taf-0.14.9";
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),
