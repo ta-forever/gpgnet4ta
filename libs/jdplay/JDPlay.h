@@ -33,6 +33,7 @@
 #include <dplobby.h>
 #include <string>
 #include <cstdint>
+#include <sstream>
 
 namespace jdplay {
 
@@ -45,12 +46,14 @@ namespace jdplay {
         bool debug;
         int curRetry;
         int searchValidationCount;
+        int validateCount;
         bool foundLobby;
         bool isInitialized;
         bool lpDPIsOpen;
         std::string enumCallbackSessionName;
         std::string enumCallbackSessionPassword;
         std::string lastError;
+        std::ostringstream enumSessionsLog;
 
         LPDIRECTPLAY3 lpDP;		// directplay interface pointer
         LPDIRECTPLAYLOBBY3	lpDPLobby;	// lobby interface pointer
@@ -70,6 +73,7 @@ namespace jdplay {
         ~JDPlay();
 
         std::string getLastError();
+        std::string getEnumSessionLog();
         void updatePlayerName(const char* playerName);
         bool initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers);
         bool searchOnce();

@@ -44,6 +44,27 @@ using namespace std;
     lastError = ss.str(); \
 }
 
+std::ostream& operator<< (std::ostream& os, const GUID& guid)
+{
+    const unsigned char* ptr = (const unsigned char*)&guid;
+    static const int idx[sizeof(GUID)] = { 3,2,1,0, 5,4, 7,6, 8,9, 10,11,12,13,14,15 };
+    ios init(NULL);
+    init.copyfmt(os);
+
+    os << '{';
+    for (int n = 0; n < sizeof(GUID); ++n)
+    {
+        os << std::hex << std::setw(2) << std::setfill('0') << unsigned(ptr[idx[n]]);
+        if (n == 3 || n == 5 || n == 7 || n == 9) {
+            os << '-';
+        }
+    }
+    os << '}';
+
+    os.copyfmt(init);
+    return os;
+}
+
 namespace jdplay {
 
     inline BSTR _ConvertStringToBSTR(const char* pSrc)
@@ -150,6 +171,7 @@ namespace jdplay {
 
         this->instance = this;
         this->searchValidationCount = searchValidationCount;
+        this->validateCount = -1;
         this->lpDPIsOpen = false;
         this->isInitialized = false;
         this->debug = debug;
@@ -192,6 +214,16 @@ namespace jdplay {
     std::string JDPlay::getLastError()
     {
         return lastError;
+    }
+
+    std::string JDPlay::getEnumSessionLog()
+    {
+        std::string s = enumSessionsLog.str();
+        while (s.find('\0') != std::string::npos)
+        {
+            s[s.find('\0')] = '@';
+        }
+        return s;
     }
 
     bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers) {
@@ -537,10 +569,14 @@ namespace jdplay {
 
 
     void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD) {
-
-        static int validateCount = -1;
+        enumSessionsLog << "----- updateFoundSessionDescription. validateCount=" << validateCount 
+            << ", searchValidationCount=" << searchValidationCount << std::endl;
+        enumSessionsLog << "lpFoundSD->dwFlags=" << std::hex << lpFoundSD->dwFlags << std::endl;
+        enumSessionsLog << "lpFoundSD->guidInstance=" << lpFoundSD->guidInstance << std::endl;
+        enumSessionsLog << "lpFoundSD->guidApplication=" << lpFoundSD->guidApplication << std::endl;
 
         if (validateCount > -1) {
+            enumSessionsLog << "validateCount > -1" << std::endl;
             bool areEqual = dpSessionDesc.dwSize == lpFoundSD->dwSize
                 && dpSessionDesc.dwFlags == lpFoundSD->dwFlags
                 && dpSessionDesc.guidInstance == lpFoundSD->guidInstance
@@ -555,12 +591,15 @@ namespace jdplay {
 
             if (areEqual) {
                 validateCount++;
+                enumSessionsLog << "areEqual" << std::endl;
             }
             else {
                 validateCount = -1;
+                enumSessionsLog << "!areEqual" << std::endl;
             }
         }
         else {
+            enumSessionsLog << "validateCount <= -1" << std::endl;
             //so that dplay also joins sessions created ingame
             dpSessionDesc.dwSize = lpFoundSD->dwSize;
             dpSessionDesc.dwFlags = lpFoundSD->dwFlags;
@@ -583,18 +622,32 @@ namespace jdplay {
         if (lpFoundSD->lpszSessionName)
         {
             enumCallbackSessionName = ToAnsi(lpFoundSD->lpszSessionName);
+            enumSessionsLog << "enumCallbackSessionName=" << enumCallbackSessionName << std::endl;
         }
+        else
+        {
+            enumSessionsLog << "lpFoundSD->lpszSessionName == null" << std::endl;
+        }
+
         if (lpFoundSD->lpszPassword)
         {
             enumCallbackSessionPassword = ToAnsi(lpFoundSD->lpszPassword);
+            enumSessionsLog << "enumCallbackSessionPassword=" << enumCallbackSessionPassword << std::endl;
+        }
+        else
+        {
+            enumSessionsLog << "lpFoundSD->lpszPassword == null" << std::endl;
         }
 
         if (validateCount >= searchValidationCount) {
+            enumSessionsLog << "validateCount >= searchValidationCount" << std::endl;
             foundLobby = true;
         }
         else {
+            enumSessionsLog << "validateCount < searchValidationCount" << std::endl;
             foundLobby = false;
         }
+        enumSessionsLog << "foundLobby=" << foundLobby << std::endl;;
     }
 
 
