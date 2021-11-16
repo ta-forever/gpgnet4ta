@@ -32,7 +32,10 @@
 #include <iostream>
 #include <windowsx.h>	//GlobalAllocPtr
 #include <iomanip>
+#include <cctype>
 #include <cstring>
+#include <iostream>
+#include <fstream>
 #include <sstream>
 #include "DPlayWrapper.h"
 
@@ -44,7 +47,7 @@ using namespace std;
     lastError = ss.str(); \
 }
 
-std::ostream& operator<< (std::ostream& os, const GUID& guid)
+static std::ostream& operator<< (std::ostream& os, const GUID& guid)
 {
     const unsigned char* ptr = (const unsigned char*)&guid;
     static const int idx[sizeof(GUID)] = { 3,2,1,0, 5,4, 7,6, 8,9, 10,11,12,13,14,15 };
@@ -62,6 +65,143 @@ std::ostream& operator<< (std::ostream& os, const GUID& guid)
     os << '}';
 
     os.copyfmt(init);
+    return os;
+}
+
+static std::string DPCONNECTION_dwFlags_to_str(DWORD dwFlags)
+{
+    switch (dwFlags)
+    {
+    case DPLCONNECTION_CREATESESSION: return "DPOPEN_CREATE";
+    case DPLCONNECTION_JOINSESSION: return "DPOPEN_JOIN";
+    default:
+    {
+        std::ostringstream ss;
+        ss << dwFlags;
+        return ss.str();
+    }
+    };
+}
+
+struct HexBytes
+{
+    const unsigned char* m_data;
+    int m_size;
+    HexBytes(const void* data, int size) : m_data((const unsigned char*)data), m_size(size) {}
+};
+
+struct CharBytes
+{
+    const char* m_data;
+    int m_size;
+    CharBytes(const void* data, int size) : m_data((const char*)data), m_size(size) {}
+};
+
+static std::ostream& operator<<(std::ostream &os, const HexBytes &hb)
+{
+    if (hb.m_data == NULL)
+    {
+        os << "null";
+        return os;
+    }
+
+    ios init(NULL);
+    init.copyfmt(os);
+    os << std::hex << std::setw(2) << std::setfill('0');
+    for (int n = 0; n < hb.m_size; ++n)
+    {
+        os << unsigned(hb.m_data[n]);
+    }
+    os.copyfmt(init);
+    return os;
+}
+
+static std::ostream& operator<<(std::ostream& os, const CharBytes &b)
+{
+    if (b.m_data == NULL)
+    {
+        os << "null";
+        return os;
+    }
+
+    for (int n = 0; n < b.m_size; ++n)
+    {
+        if (std::isprint(b.m_data[n]))
+        {
+            os << b.m_data[n];
+        }
+        else
+        {
+            os << '.';
+        }
+    }
+    return os;
+}
+
+static int safewcslen(const wchar_t* ws)
+{
+    if (ws)
+    {
+        return wcslen(ws);
+    }
+    return 0;
+}
+
+static std::ostream& operator<< (std::ostream& os, const DPNAME& name)
+{
+    os << "{lpszShortName='" << CharBytes(name.lpszShortName, 2 * safewcslen(name.lpszShortName)) << "'"
+        << ", lpszLongName='" << CharBytes(name.lpszLongName, 2 * safewcslen(name.lpszLongName)) << "'}";
+    return os;
+}
+
+static std::ostream &print(std::ostream& os, const DPSESSIONDESC2* desc, int indent)
+{
+    if (desc == NULL)
+    {
+        os << "NULL";
+        return os;
+    }
+
+    std::string margin(indent, ' ');
+    ios init(NULL);
+    init.copyfmt(os);
+    os << "{" << std::endl << margin;
+    os << "dwFlags=" << std::hex << desc->dwFlags << "," << std::endl << margin;
+    os << "guidInstance=" << desc->guidInstance << ", guidApplication=" << desc->guidApplication << "," << std::endl << margin;
+    os << "dwMaxPlayers=" << std::dec << desc->dwMaxPlayers << ", dwCurrentPlayers=" << desc->dwCurrentPlayers << "," << std::endl << margin;
+    os << "dwUser1=" << std::hex << desc->dwUser1 << ", dwUser2=" << desc->dwUser2 << ", dwUser3=" << desc->dwUser3 << ", dwUser4=" << desc->dwUser4 << "," << std::endl << margin;
+    os << "lpszSessionName=" << CharBytes(desc->lpszSessionName, 2 * safewcslen(desc->lpszSessionName)) << "," << std::endl << margin;
+    os << "lpszPassword=" << CharBytes(desc->lpszPassword, 2 * safewcslen(desc->lpszPassword)) << std::endl << margin << "}";
+    os.copyfmt(init);
+    return os;
+}
+
+static std::ostream& print(std::ostream& os, const DPLCONNECTION* conn, int indent)
+{
+    if (conn == NULL)
+    {
+        os << "NULL";
+        return os;
+    }
+
+    std::string margin(indent, ' ');
+    os << "{" << std::endl << margin
+        << "dwFlags=" << DPCONNECTION_dwFlags_to_str(conn->dwFlags) << "," << std::endl << margin
+        << "guidSP=" << conn->guidSP << "," << std::endl << margin
+        << "address=" << CharBytes(conn->lpAddress, conn->dwAddressSize) << "," << std::endl << margin
+        << "address(hex)=" << HexBytes(conn->lpAddress, conn->dwAddressSize) << "," << std::endl << margin;
+        os << "lpSessionDesc="; print(os, conn->lpSessionDesc, indent+4) << "," << std::endl << margin;
+
+    if (conn->lpPlayerName)
+    {
+        os << "lpPlayerName=" << *conn->lpPlayerName << std::endl << margin;
+    }
+    else
+    {
+        os << "lpPlayerName=NULL" << std::endl << margin;
+    }
+    os << "}";
+
     return os;
 }
 
@@ -162,11 +302,23 @@ namespace jdplay {
         return true;
     }
 
-    JDPlay::JDPlay(const char* playerName, int searchValidationCount, bool debug) {
+    std::ostream& JDPlay::debug()
+    {
+        if (m_debugStream)
+        {
+            return *m_debugStream;
+        }
+        else
+        {
+            return m_logStream;
+        }
+    }
 
-        if (debug) {
-            cout << "++ JDPlay(" << playerName << "," << searchValidationCount << "," << debug << ")" << endl;
-            fflush(stdout);
+    JDPlay::JDPlay(const char* playerName, int searchValidationCount, const char *debugOutputFile)
+    {
+        if (debugOutputFile) {
+            m_debugStream.reset(new std::ofstream(debugOutputFile));
+            debug() << "++ JDPlay(" << playerName << "," << searchValidationCount << "," << debugOutputFile << ")" << endl;
         }
 
         this->instance = this;
@@ -174,7 +326,6 @@ namespace jdplay {
         this->validateCount = -1;
         this->lpDPIsOpen = false;
         this->isInitialized = false;
-        this->debug = debug;
 
         // clear out memory for info objects
         ZeroMemory(&dpName, sizeof(DPNAME));
@@ -188,27 +339,16 @@ namespace jdplay {
         dpName.lpszShortName = (LPWSTR)malloc(256);
         updatePlayerName(playerName);
 
-        if (debug) {
-            cout << "-- JDPlay()" << endl;
-            fflush(stdout);
-        }
+        debug() << "-- JDPlay()" << endl;
     }
 
     JDPlay::~JDPlay() {
 
-        if (debug) {
-            cout << "++ ~JDPlay()" << endl;
-            fflush(stdout);
-        }
-
+        debug() << "++ ~JDPlay()" << endl;
         if (isInitialized) {
             deInitialize();
         }
-
-        if (debug) {
-            cout << "-- ~JDPlay()" << endl;
-            fflush(stdout);
-        }
+        debug() << "-- ~JDPlay()" << endl;
     }
 
     std::string JDPlay::getLastError()
@@ -216,9 +356,9 @@ namespace jdplay {
         return lastError;
     }
 
-    std::string JDPlay::getEnumSessionLog()
+    std::string JDPlay::getLogString()
     {
-        std::string s = enumSessionsLog.str();
+        std::string s = m_logStream.str();
         while (s.find('\0') != std::string::npos)
         {
             s[s.find('\0')] = '@';
@@ -228,10 +368,7 @@ namespace jdplay {
 
     bool JDPlay::initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers) {
 
-        if (debug) {
-            cout << "++ initialize(" << gameGUID << ", " << hostIP << ", " << isHost << ")" << endl;
-            fflush(stdout);
-        }
+        debug() << "++ initialize(" << gameGUID << ", " << hostIP << ", " << isHost << ")" << endl;
 
         if (isInitialized) {
             deInitialize();
@@ -251,10 +388,7 @@ namespace jdplay {
             return false;
         }
 
-        if (debug) {
-            cout << "initialize() - GUID initialized" << endl;
-            fflush(stdout);
-        }
+        debug() << "initialize() - GUID initialized" << endl;
 
         // create TCP connection ***********************************************************************
         LPDIRECTPLAYLOBBY old_lpDPLobby = NULL;      // old lobby pointer
@@ -272,10 +406,7 @@ namespace jdplay {
                 return false;
             }
 
-            if (debug) {
-                cout << "initialize() - COM initialized" << endl;
-                fflush(stdout);
-            }
+            debug() << "initialize() - COM initialized" << endl;
 
             // creating directplay object
             hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&lpDP);
@@ -380,14 +511,16 @@ namespace jdplay {
         }
 
         // populate session description ******************************************************************
+        dpSessionNameStorage = L"TAF Game";
+        dpSessionPasswordStorage = L"";
         dpSessionDesc.dwSize = sizeof(DPSESSIONDESC2);
         dpSessionDesc.dwFlags = 0;									// optional: DPSESSION_MIGRATEHOST
         dpSessionDesc.guidApplication = gameID;						// Game GUID
         dpSessionDesc.guidInstance = gameID;						// ID for the session instance
-        dpSessionDesc.lpszSessionName = L"TAF Game";                // name of the session
+        dpSessionDesc.lpszSessionName = (wchar_t *)dpSessionNameStorage.c_str();
         dpSessionDesc.dwMaxPlayers = maxPlayers;					// Maximum # players allowed in session
         dpSessionDesc.dwCurrentPlayers = 0;							// Current # players in session (read only)
-        dpSessionDesc.lpszPassword = L"";                           // password of the session (optional)
+        dpSessionDesc.lpszPassword = (wchar_t*)dpSessionPasswordStorage.c_str();
         dpSessionDesc.dwReserved1 = 0;								// Reserved for future M$ use.
         dpSessionDesc.dwReserved2 = 0;
         dpSessionDesc.dwUser1 = 0;									// For use by the application
@@ -471,6 +604,7 @@ namespace jdplay {
     }
 
     bool JDPlay::launch(bool startGame) {
+        debug() << "[JDPlay::launch] startGame=" << startGame << std::endl;
 
         if (!isInitialized) {
             SET_LAST_ERROR("launch() - WARNING: JDPlay has to be initialized before launching!");
@@ -495,7 +629,9 @@ namespace jdplay {
 
         HRESULT hr;
         // launch game *********************************************************************************
+        debug() << "dpConn="; print(debug(), &dpConn, 4) << std::endl;
         hr = lpDPLobby->RunApplication(0, &appID, &dpConn, 0);
+        debug() << "RunApplication returned hr=" << hr << ", appId=" << appID << std::endl;
 
         if (hr != S_OK) {
             SET_LAST_ERROR("launch() - ERROR[" << getDPERR(hr) << "]: failed to launch the game, maybe it's not installed properly");
@@ -555,28 +691,14 @@ namespace jdplay {
         }
     }
 
-    void JDPlay::printSessionDesc()
-    {
-        cout << "  session name:" << enumCallbackSessionName << endl;
-        cout << "      password:" << enumCallbackSessionPassword << endl;
-        cout << "currentPlayers:" << dpSessionDesc.dwCurrentPlayers << endl;
-        cout << "        dwUser:" << hex
-            << dpSessionDesc.dwUser1 << ' '
-            << dpSessionDesc.dwUser2 << ' '
-            << dpSessionDesc.dwUser3 << ' '
-            << dpSessionDesc.dwUser4 << endl;
-    }
-
-
     void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD) {
-        enumSessionsLog << "----- updateFoundSessionDescription. validateCount=" << validateCount 
+        debug()
+            << "[JDPlay::updateFoundSessionDescription] validateCount=" << validateCount 
             << ", searchValidationCount=" << searchValidationCount << std::endl;
-        enumSessionsLog << "lpFoundSD->dwFlags=" << std::hex << lpFoundSD->dwFlags << std::endl;
-        enumSessionsLog << "lpFoundSD->guidInstance=" << lpFoundSD->guidInstance << std::endl;
-        enumSessionsLog << "lpFoundSD->guidApplication=" << lpFoundSD->guidApplication << std::endl;
+        debug() << "lpFoundSD="; print(debug(), lpFoundSD, 4) << std::endl;
 
         if (validateCount > -1) {
-            enumSessionsLog << "validateCount > -1" << std::endl;
+            debug() << "validateCount > -1" << std::endl;
             bool areEqual = dpSessionDesc.dwSize == lpFoundSD->dwSize
                 && dpSessionDesc.dwFlags == lpFoundSD->dwFlags
                 && dpSessionDesc.guidInstance == lpFoundSD->guidInstance
@@ -591,15 +713,15 @@ namespace jdplay {
 
             if (areEqual) {
                 validateCount++;
-                enumSessionsLog << "areEqual" << std::endl;
+                debug() << "areEqual" << std::endl;
             }
             else {
                 validateCount = -1;
-                enumSessionsLog << "!areEqual" << std::endl;
+                debug() << "!areEqual" << std::endl;
             }
         }
         else {
-            enumSessionsLog << "validateCount <= -1" << std::endl;
+            debug() << "validateCount <= -1" << std::endl;
             //so that dplay also joins sessions created ingame
             dpSessionDesc.dwSize = lpFoundSD->dwSize;
             dpSessionDesc.dwFlags = lpFoundSD->dwFlags;
@@ -613,52 +735,36 @@ namespace jdplay {
             dpSessionDesc.dwUser2 = lpFoundSD->dwUser2;
             dpSessionDesc.dwUser3 = lpFoundSD->dwUser3;
             dpSessionDesc.dwUser4 = lpFoundSD->dwUser4;
-            dpSessionDesc.lpszSessionName = lpFoundSD->lpszSessionName;
-            dpSessionDesc.lpszPassword = lpFoundSD->lpszPassword;
+
+            dpSessionNameStorage = L"TAF Game";
+            if (lpFoundSD->lpszSessionName)
+            {
+                dpSessionNameStorage = lpFoundSD->lpszSessionName;
+            }
+            dpSessionDesc.lpszSessionName = (wchar_t*)dpSessionNameStorage.c_str();
+
+            dpSessionPasswordStorage = L"";
+            if (lpFoundSD->lpszPassword)
+            {
+                dpSessionPasswordStorage = lpFoundSD->lpszPassword;
+            }
+            dpSessionDesc.lpszPassword = (wchar_t*)dpSessionPasswordStorage.c_str();
 
             validateCount = 0;
         }
 
-        if (lpFoundSD->lpszSessionName)
-        {
-            enumCallbackSessionName = ToAnsi(lpFoundSD->lpszSessionName);
-            enumSessionsLog << "enumCallbackSessionName=" << enumCallbackSessionName << std::endl;
-        }
-        else
-        {
-            enumSessionsLog << "lpFoundSD->lpszSessionName == null" << std::endl;
-        }
-
-        if (lpFoundSD->lpszPassword)
-        {
-            enumCallbackSessionPassword = ToAnsi(lpFoundSD->lpszPassword);
-            enumSessionsLog << "enumCallbackSessionPassword=" << enumCallbackSessionPassword << std::endl;
-        }
-        else
-        {
-            enumSessionsLog << "lpFoundSD->lpszPassword == null" << std::endl;
-        }
-
-        if (validateCount >= searchValidationCount) {
-            enumSessionsLog << "validateCount >= searchValidationCount" << std::endl;
-            foundLobby = true;
-        }
-        else {
-            enumSessionsLog << "validateCount < searchValidationCount" << std::endl;
-            foundLobby = false;
-        }
-        enumSessionsLog << "foundLobby=" << foundLobby << std::endl;;
+        foundLobby = (validateCount >= searchValidationCount);
+        debug() << "foundLobby=" << foundLobby << std::endl;
     }
 
-
-    std::string JDPlay::getAdvertisedPlayerName()
+    std::wstring JDPlay::getAdvertisedPlayerName()
     {
-        return ToAnsi(dpName.lpszShortName);
+        return dpName.lpszShortName;
     }
 
-    std::string JDPlay::getAdvertisedSessionName()
+    std::wstring JDPlay::getAdvertisedSessionName()
     {
-        return enumCallbackSessionName;
+        return dpSessionNameStorage;
     }
 
     void JDPlay::dpClose()

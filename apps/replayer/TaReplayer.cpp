@@ -102,7 +102,7 @@ void Replayer::hostGame(QString _guid, QString _player, QString _ipaddr)
     std::string ipaddr = _ipaddr.toStdString();
 
     qInfo() << "[Replayer::hostGame]" << guid.c_str() << player.c_str() << ipaddr.c_str();
-    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 3, false));
+    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 3, NULL));// "c:\\temp\\jdplay_ta_replayer.log"));
     if (!m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), true, 10))
     {
         qWarning() << "[Replayer::hostGame] jdplay failed to initialise!";

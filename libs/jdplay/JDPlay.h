@@ -29,11 +29,12 @@
 
  /****************************************************************************************************************/
 
+#include <cstdint>
 #include <dplay.h>
 #include <dplobby.h>
-#include <string>
-#include <cstdint>
+#include <memory>
 #include <sstream>
+#include <string>
 
 namespace jdplay {
 
@@ -43,17 +44,17 @@ namespace jdplay {
     private:
         static JDPlay* instance;		// needed for callback function to access a method
 
-        bool debug;
+        std::shared_ptr<std::ostream> m_debugStream;
         int curRetry;
         int searchValidationCount;
         int validateCount;
         bool foundLobby;
         bool isInitialized;
         bool lpDPIsOpen;
-        std::string enumCallbackSessionName;
-        std::string enumCallbackSessionPassword;
+        std::wstring dpSessionNameStorage;
+        std::wstring dpSessionPasswordStorage;
         std::string lastError;
-        std::ostringstream enumSessionsLog;
+        std::ostringstream m_logStream;
 
         LPDIRECTPLAY3 lpDP;		// directplay interface pointer
         LPDIRECTPLAYLOBBY3	lpDPLobby;	// lobby interface pointer
@@ -68,24 +69,25 @@ namespace jdplay {
         DWORD playerFlags;                  // either Host or not
         HANDLE processHandle;               // of game after launching
 
+        std::ostream& debug();
+
     public:
-        JDPlay(const char* playerName, int searchValidationCount, bool debug);
+        JDPlay(const char* playerName, int searchValidationCount, const char *debugOutputFile);
         ~JDPlay();
 
         std::string getLastError();
-        std::string getEnumSessionLog();
+        std::string getLogString();
         void updatePlayerName(const char* playerName);
         bool initialize(const char* gameGUID, const char* hostIP, bool isHost, int maxPlayers);
         bool searchOnce();
         bool launch(bool startGame);
         bool pollStillActive(DWORD &exitCode);
         void pollSessionStatus(LPDIRECTPLAY3 dplay = NULL);
-        void printSessionDesc();
         bool isHost();
         void releaseDirectPlay();
         void releaseLobby();
-        std::string getAdvertisedSessionName();
-        std::string getAdvertisedPlayerName();
+        std::wstring getAdvertisedSessionName();
+        std::wstring getAdvertisedPlayerName();
         DWORD_PTR getUserData1() { return dpSessionDesc.dwUser1; }
         DWORD_PTR getUserData2() { return dpSessionDesc.dwUser2; }
         DWORD_PTR getUserData3() { return dpSessionDesc.dwUser3; }

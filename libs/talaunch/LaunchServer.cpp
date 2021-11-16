@@ -119,6 +119,12 @@ void LaunchServer::onReadyReadTcp()
     }
 }
 
+static bool TrueLog(const char* s)
+{
+    qInfo() << s;
+    return true;
+}
+
 void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, bool asHost, bool doSearch)
 {
     if (m_jdPlay)
@@ -132,40 +138,43 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
 
     if (asHost)
     {
-        qInfo() << "host" << guid.c_str() << player.c_str() << ipaddr.c_str();
+        qInfo() << "[LaunchServer::launchGame] host" << guid.c_str() << player.c_str() << ipaddr.c_str();
     }
     else if (doSearch)
     {
-        qInfo() << "searchjoin" << guid.c_str() << player.c_str() << ipaddr.c_str();
+        qInfo() << "[LaunchServer::launchGame] searchjoin" << guid.c_str() << player.c_str() << ipaddr.c_str();
     }
     else
     {
-        qInfo() << "join" << guid.c_str() << player.c_str() << ipaddr.c_str();
+        qInfo() << "[LaunchServer::launchGame] join" << guid.c_str() << player.c_str() << ipaddr.c_str();
     }
 
-    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 1, false));
-    if (!m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), asHost, 10))
+    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 1, NULL)); // "c:\\temp\\jdplay_launch_server.log"));
+    if (TrueLog("Initialising JDPlay ...") && !m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), asHost, 10))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to initialise!" << m_jdPlay->getLastError().c_str();
-        qInfo() << "[LaunchServer::launchGame] enumSessionLog:\n" << m_jdPlay->getEnumSessionLog().c_str();
+        qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);
         return;
     }
-    else if (!asHost && doSearch && !(m_jdPlay->searchOnce() || m_jdPlay->searchOnce() || m_jdPlay->searchOnce()))
+    else if (!asHost && doSearch && !(
+        TrueLog("Searching ...") && m_jdPlay->searchOnce() || 
+        TrueLog("Searching ...") && m_jdPlay->searchOnce() || 
+        TrueLog("Searching ...") && m_jdPlay->searchOnce()))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to find a game!" << m_jdPlay->getLastError().c_str();
-        qInfo() << "[LaunchServer::launchGame] enumSessionLog:\n" << m_jdPlay->getEnumSessionLog().c_str();
+        qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);
         return;
     }
-    else if (!m_jdPlay->launch(true))
+    else if (TrueLog("Launching game ...") && !m_jdPlay->launch(true))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to launch!" << m_jdPlay->getLastError().c_str();
-        qInfo() << "[LaunchServer::launchGame] enumSessionLog:\n" << m_jdPlay->getEnumSessionLog().c_str();
+        qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
         emit gameFailedToLaunch(_guid);
@@ -173,7 +182,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     }
     else {
         qInfo() << "[LaunchServer::launchGame] success";
-        qInfo() << "[LaunchServer::launchGame] enumSessionLog:\n" << m_jdPlay->getEnumSessionLog().c_str();
+        qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         notifyClients("RUNNING");
     }
 }
