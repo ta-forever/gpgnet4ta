@@ -284,7 +284,8 @@ void TaDemoCompilerClient::onTaPacket(
                 {
                     sendGameInfo(playerInfo.maxUnits, QString::fromStdString(playerInfo.getMapName()));
                 }
-                sendGamePlayer(playerInfo.getSide(), m_localPlayerName, QByteArray((char*)s.data(), s.size()));
+                qint8 side = playerInfo.isWatcher() ? 2 : playerInfo.getSide();
+                sendGamePlayer(side, m_localPlayerName, QByteArray((char*)s.data(), s.size()));
             }
             break;
         }
