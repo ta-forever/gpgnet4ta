@@ -1134,6 +1134,16 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                     this->say(player->dpId, ss.str());
                 }
             }
+            else if (s.find((const std::uint8_t*) "> .pos", 1) != tapacket::bytestring::npos)
+            {
+                std::streampos pos = m_demoDataStream->tellg();
+                m_demoDataStream->seekg(0, m_demoDataStream->end);
+                std::streampos size = m_demoDataStream->tellg();
+                m_demoDataStream->seekg(pos, m_demoDataStream->beg);
+                std::ostringstream ss;
+                ss << 100 * pos / size << "% of " << size/1024 << "KB";
+                this->say(otherDplayId, ss.str());
+            }
             break;
         }
         case tapacket::SubPacketCode::SPEED_19:
