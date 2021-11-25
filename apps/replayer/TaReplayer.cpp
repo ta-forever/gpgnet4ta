@@ -1141,7 +1141,7 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                 std::streampos size = m_demoDataStream->tellg();
                 m_demoDataStream->seekg(pos, m_demoDataStream->beg);
                 std::ostringstream ss;
-                ss << 100 * pos / size << "% of " << size/1024 << "KB";
+                ss << int(100.0 * double(pos) / double(size)) << "% of " << size / 1000 << "KB";
                 this->say(otherDplayId, ss.str());
             }
             break;
