@@ -162,6 +162,20 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 m_gpgNetClient.sendGameOption("MapDetails", mapDetails);
             }
         }
+        else if (msg.startsWith("/rating_type ") && msg.size() > 13)
+        {
+            if (!m_isHost) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set rating type.  ignoring";
+            }
+            else if (m_alreadyLaunched) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
+            }
+            else
+            {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting rating type";
+                m_gpgNetClient.sendGameOption("RatingType", msg.mid(13));
+            }
+        }
         else if (msg == "/quit")
         {
             if (!m_launchClient.isRunning() || ++m_quitCount == 2)
