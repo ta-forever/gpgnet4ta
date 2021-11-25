@@ -38,8 +38,6 @@ DPlayWrapper::DPlayWrapper()
             m_dll = 0;
             throw std::runtime_error("DPlayWrapper::DPlayWrapper] DLL load failure " + dllPath);
         }
-
-        std::cout << "dplayx.dll loaded ok" << std::endl;
     }
 }
 

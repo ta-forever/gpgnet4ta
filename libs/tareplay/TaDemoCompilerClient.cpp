@@ -228,7 +228,7 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         {
             throw std::runtime_error("you need to determine and setHostPlayerName() before GameMonitor receives any packets!");
         }
-        else if (name.c_str() == m_hostPlayerName)
+        if (name.c_str() == m_hostPlayerName)
         {
             m_hostDplayId = dplayId;
         }
@@ -237,7 +237,7 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         {
             throw std::runtime_error("you need to determine and setLocalPlayerName() before GameMonitor receives any packets!");
         }
-        else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
+        if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
         {
             m_localPlayerDplayId = dplayId;
             sendHello(m_tafGameId, dplayId, m_localPlayerName);

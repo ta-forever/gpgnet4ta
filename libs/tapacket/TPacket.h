@@ -83,6 +83,7 @@ namespace tapacket
     public:
         TPlayerInfo(const bytestring& subPacket);
         bytestring asSubPacket() const;
+        unsigned serialisedSize;
 
         void setDpId(std::uint32_t dpid);
         void setInternalVersion(std::uint8_t v);

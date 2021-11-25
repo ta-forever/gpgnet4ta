@@ -10,6 +10,7 @@
 #include "taflib/HexDump.h"
 #include "TADemoParser.h"
 #include "TPacket.h"
+#include "Logger.h"
 
 using namespace tapacket;
 
@@ -167,8 +168,9 @@ void DemoParser::load(PlayerStatusMessage &msg)
     TPacket::decrypt(data, 1u, checks[0], checks[1]);
     if (checks[0] != checks[1])
     {
-        std::cerr << "[DemoParser::load PlayerStatusMessage] checksum error" << std::endl;
-        taflib::HexDump(data.data()+1, data.size()-1, std::cerr);
+        std::ostringstream ss;
+        taflib::HexDump(data.data()+1, data.size()-1, ss);
+        qWarning() << "[DemoParser::load PlayerStatusMessage] checksum error\n" << ss.str().c_str();
     }
     msg.statusMessage = TPacket::decompress(data.data()+1, data.size()-1, 3).substr(7);
 }

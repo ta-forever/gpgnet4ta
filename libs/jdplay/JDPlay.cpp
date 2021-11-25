@@ -287,18 +287,18 @@ namespace jdplay {
         DWORD           dwFlags,
         LPVOID          lpContext)
     {
-        cout << "\rdpID:" << dpId
-            << ", dwPlayerType:" << (dwPlayerType == DPPLAYERTYPE_PLAYER ? "Player" : "Group")
-            << ", lpName:" << ToAnsi(lpName->lpszShortName);
-        if (dwFlags & DPENUMGROUPS_SHORTCUT) cout << ", SHORTCUT";
-        if (dwFlags & DPENUMGROUPS_STAGINGAREA) cout << ", STAGING";
-        if (dwFlags & DPENUMPLAYERS_GROUP) cout << ", PLYRS&GRPS";
-        if (dwFlags & DPENUMPLAYERS_LOCAL) cout << ", LOCAL";
-        if (dwFlags & DPENUMPLAYERS_REMOTE) cout << ", REMOTE";
-        if (dwFlags & DPENUMPLAYERS_SESSION) cout << ", SESSION";
-        if (dwFlags & DPENUMPLAYERS_SERVERPLAYER) cout << ", SERVER";
-        if (dwFlags & DPENUMPLAYERS_SPECTATOR) cout << ", SPECTATOR";
-        cout << std::endl;
+        //cout << "\rdpID:" << dpId
+        //    << ", dwPlayerType:" << (dwPlayerType == DPPLAYERTYPE_PLAYER ? "Player" : "Group")
+        //    << ", lpName:" << ToAnsi(lpName->lpszShortName);
+        //if (dwFlags & DPENUMGROUPS_SHORTCUT) cout << ", SHORTCUT";
+        //if (dwFlags & DPENUMGROUPS_STAGINGAREA) cout << ", STAGING";
+        //if (dwFlags & DPENUMPLAYERS_GROUP) cout << ", PLYRS&GRPS";
+        //if (dwFlags & DPENUMPLAYERS_LOCAL) cout << ", LOCAL";
+        //if (dwFlags & DPENUMPLAYERS_REMOTE) cout << ", REMOTE";
+        //if (dwFlags & DPENUMPLAYERS_SESSION) cout << ", SESSION";
+        //if (dwFlags & DPENUMPLAYERS_SERVERPLAYER) cout << ", SERVER";
+        //if (dwFlags & DPENUMPLAYERS_SPECTATOR) cout << ", SPECTATOR";
+        //cout << std::endl;
         return true;
     }
 

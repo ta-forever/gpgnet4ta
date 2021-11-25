@@ -1,6 +1,7 @@
 #include "TAPacketParser.h"
 #include "DPlayPacket.h"
 #include "TPacket.h"
+#include "Logger.h"
 
 #include <algorithm>
 #include <cstring>
@@ -229,7 +230,6 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
     {
         return;
     }
-
     bytestring payload((const std::uint8_t*)_payload, _payloadSize);
     {
         taflib::Watchdog wd2("TAPacketParser::parseTaPacket decrypt", 100);
@@ -237,7 +237,7 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
         TPacket::decrypt(payload, 0u, checksum[0], checksum[1]);
         if (checksum[0] != checksum[1])
         {
-            std::cerr << "[TAPacketParser::parseTaPacket] checksum mismatch! context=" << context;
+            qWarning() << "[TAPacketParser::parseTaPacket] checksum mismatch! context=" << context.c_str();
             return;
         }
     }
@@ -263,9 +263,10 @@ void TAPacketParser::parseTaPacket(std::uint32_t sourceDplayId, std::uint32_t ot
         unsigned expectedSize = TPacket::getExpectedSubPacketSize(s);
         if (expectedSize == 0u || s.size() != expectedSize)
         {
-            std::cerr << "[TAPacketParser::parseTaPacket] unknown subpacket:\n";
-            taflib::StrHexDump(_payload, _payloadSize, std::cerr);
-            return;
+            std::ostringstream ss;
+            taflib::StrHexDump(payload.data(), payload.size(), ss);
+            qWarning() << "[TAPacketParser::parseTaPacket] subpacket" << unsigned(s[0]) << "error. expected size:" << expectedSize << "actual size:" << s.size() << "\n" << ss.str().c_str();
+            continue;
         }
         m_parsedSubPacketCodes.insert(SubPacketCode(s[0]));
 

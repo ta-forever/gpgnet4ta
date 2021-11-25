@@ -678,6 +678,7 @@ bytestring TPing::asSubPacket() const
 
 TPlayerInfo::TPlayerInfo(const bytestring& subPacket)
 {
+    serialisedSize = subPacket.size();
     const std::uint8_t* ptr = subPacket.data() + 1;
     std::memcpy(fill1, ptr, sizeof(fill1));
     width = toUint16(ptr + 139);
@@ -690,9 +691,19 @@ TPlayerInfo::TPlayerInfo(const bytestring& subPacket)
     maxUnits = toUint16(ptr + 165);
     versionMajor = ptr[167];
     versionMinor = ptr[168];
-    std::memcpy(data3, ptr + 169, sizeof(data3));
-    player2Id = toUint32(ptr + 186);
-    data4 = ptr[190];
+    if (subPacket.size() == 192)
+    {
+        std::memcpy(data3, ptr + 169, sizeof(data3));
+        player2Id = toUint32(ptr + 186);
+        data4 = ptr[190];
+    }
+    else
+    {
+        // mysteriously short-sized PlayerInfo packets
+        std::memcpy(data3, ptr + 169, sizeof(data3)-1);
+        player2Id = player1Id;
+        data4 = 0;
+    }
 }
 
 bytestring TPlayerInfo::asSubPacket() const
@@ -713,7 +724,7 @@ bytestring TPlayerInfo::asSubPacket() const
     result.append(data3, data3 + sizeof(data3));
     serialise(result, player2Id);
     result.push_back(data4);
-    return result;
+    return result.substr(0, serialisedSize);
 }
 
 void TPlayerInfo::setDpId(std::uint32_t dpid)
