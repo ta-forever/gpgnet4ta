@@ -149,7 +149,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
         qInfo() << "[LaunchServer::launchGame] join" << guid.c_str() << player.c_str() << ipaddr.c_str();
     }
 
-    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 1, NULL)); // "c:\\temp\\jdplay_launch_server.log"));
+    m_jdPlay.reset(new jdplay::JDPlay(player.c_str(), 0, NULL)); // "c:\\temp\\jdplay_launch_server.log"));
     if (TrueLog("Initialising JDPlay ...") && !m_jdPlay->initialize(guid.c_str(), ipaddr.c_str(), asHost, 10))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to initialise!" << m_jdPlay->getLastError().c_str();
@@ -161,7 +161,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     }
     else if (!asHost && doSearch && !(
         TrueLog("Searching ...") && m_jdPlay->searchOnce() || 
-        TrueLog("Searching ...") && m_jdPlay->searchOnce() || 
+        TrueLog("Searching ...") && m_jdPlay->searchOnce() ||
         TrueLog("Searching ...") && m_jdPlay->searchOnce()))
     {
         qWarning() << "[LaunchServer::launchGame] jdplay failed to find a game!" << m_jdPlay->getLastError().c_str();
