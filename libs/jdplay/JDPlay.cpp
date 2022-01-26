@@ -604,7 +604,9 @@ namespace jdplay {
     }
 
     bool JDPlay::launch(bool startGame) {
-        debug() << "[JDPlay::launch] startGame=" << startGame << std::endl;
+        std::time_t now = std::time(0);
+        char* date = std::ctime(&now);
+        debug() << "[JDPlay::launch] " << date << ", startGame=" << startGame << std::endl;
 
         if (!isInitialized) {
             SET_LAST_ERROR("launch() - WARNING: JDPlay has to be initialized before launching!");
@@ -692,8 +694,11 @@ namespace jdplay {
     }
 
     void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD) {
+        std::time_t now = std::time(0);
+        char* date = std::ctime(&now);
         debug()
-            << "[JDPlay::updateFoundSessionDescription] validateCount=" << validateCount 
+            << "[JDPlay::updateFoundSessionDescription] " << date
+            << "validateCount=" << validateCount
             << ", searchValidationCount=" << searchValidationCount << std::endl;
         debug() << "lpFoundSD="; print(debug(), lpFoundSD, 4) << std::endl;
 
