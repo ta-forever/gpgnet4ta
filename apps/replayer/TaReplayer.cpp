@@ -30,7 +30,8 @@ Replayer::Replayer(std::istream* demoDataStream) :
     m_isPaused(false),
     m_tickLastUserPauseEvent(0u),
     m_demoDataStream(demoDataStream),
-    m_launch(true)
+    m_launch(true),
+    m_nochat(false)
 { }
 
 Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
@@ -63,6 +64,11 @@ Replayer::UnitInfo::UnitInfo() :
     limit(0u),
     inUse(false)
 { }
+
+void Replayer::setNoChat(bool option)
+{
+    m_nochat = option;
+}
 
 void Replayer::send(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak)
 {
@@ -925,7 +931,10 @@ bool Replayer::doPlay()
             {
             case tapacket::SubPacketCode::CHAT_05:
             {
-                filteredMoves += move;
+                if (!m_nochat)
+                {
+                    filteredMoves += move;
+                }
                 break;
             }
 

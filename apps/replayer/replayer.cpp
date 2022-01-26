@@ -213,6 +213,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport"));
     parser.addOption(QCommandLineOption("info", "Just print out some info about the demo and exit"));
     parser.addOption(QCommandLineOption("detail", "Print out detailed information about the replay"));
+    parser.addOption(QCommandLineOption("nochat", "supress all ingame chat"));
     parser.process(app);
 
     if (parser.isSet("info") || parser.isSet("detail"))
@@ -302,6 +303,7 @@ int doMain(int argc, char* argv[])
         });
     }
 
+    replayer->setNoChat(parser.isSet("nochat"));
     replayer->hostGame(dplayGuid, "TAF Replayer", "127.0.0.1");
 
     app.exec();

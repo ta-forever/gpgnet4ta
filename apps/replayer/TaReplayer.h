@@ -96,6 +96,7 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::uint32_t m_tickLastUserPauseEvent;
     std::istream* m_demoDataStream;
     bool m_launch;
+    bool m_nochat;  // option to supress ingame chat
 
     // multiplier for m_playBackSpeed
     // is reduced in response to depleted m_pendingGamePackets buffer
@@ -116,6 +117,7 @@ public:
     Replayer(std::istream*);
 
     void hostGame(QString _guid, QString _player, QString _ipaddr);
+    void setNoChat(bool option);
 
     virtual void handle(const tapacket::Header& header);
     virtual void handle(const tapacket::Player& player, int n, int ofTotal);
