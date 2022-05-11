@@ -28,7 +28,7 @@ const char *MAP_TOOL_EXE = "maptool.exe";
 #endif
 
 #ifdef linux
-const char *MAP_TOOL_EXE = "maptool";
+const char *MAP_TOOL_EXE = "./maptool";
 #endif
 
 class ForwardGameEventsToGpgNet : public GameEventHandlerQt
@@ -508,10 +508,6 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
     qInfo() << "[getMapDetails]" << gamePath << maptoolExePath << _mapName;
     QStringList args = { "--gamepath", gamePath, "--mapname", _mapName+'$', "--hash" };
 
-#ifdef __unix__
-    maptoolExePath = maptoolExePath.prepend("./");
-#endif
-    
     qInfo() << "[getMapDetails] exe:" << maptoolExePath << ", args:" << args;
     QProcess process;
     process.start(maptoolExePath, args);
