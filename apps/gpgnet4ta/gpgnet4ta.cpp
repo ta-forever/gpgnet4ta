@@ -535,7 +535,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("GPGNet4TA");
-    QCoreApplication::setApplicationVersion("0.14.9");
+    QCoreApplication::setApplicationVersion("0.15.3");
     //app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
@@ -557,6 +557,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
     parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10.", "players", "10"));
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
+    parser.addOption(QCommandLineOption("maxpacketsize", "Place an upper limit on the otherwise auto-discovered maximum UDP packet size.", "maxpacketsize", "1500"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
     parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
@@ -631,7 +632,7 @@ int doMain(int argc, char* argv[])
         // That UDP port is expected to be one brokered by the FAF ICE adapter independently of gpgnet4ta
         // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
         // (viz all the Qt signal connections from GpgNetClient to TaLobby)
-        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"));
+        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"), parser.value("maxpacketsize").toInt());
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);

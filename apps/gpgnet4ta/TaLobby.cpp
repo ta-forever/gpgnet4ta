@@ -24,13 +24,14 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 }
 
 TaLobby::TaLobby(
-    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend):
+    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
     m_gameAddress(gameAddress),
     m_gameGuid(gameGuid),
-    m_proactiveResendEnabled(proactiveResend)
+    m_proactiveResendEnabled(proactiveResend),
+    m_maxPacketSize(maxPacketSize)
 {
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
@@ -91,7 +92,7 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerAlias, QS
         }
 
         m_proxy.reset(new tafnet::TafnetNode(
-            playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled));
+            playerId, false, m_lobbyBindAddress, m_lobbyPortOverride ? m_lobbyPortOverride : localPort, m_proactiveResendEnabled, m_maxPacketSize));
         m_game.reset(new tafnet::TafnetGameNode(
             m_proxy.data(),
             m_packetParser.data(),

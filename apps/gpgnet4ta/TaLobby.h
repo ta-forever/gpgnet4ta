@@ -22,6 +22,7 @@ class TaLobby : public QObject
     const QHostAddress m_gameAddress;
     const QUuid m_gameGuid;
     const bool m_proactiveResendEnabled;
+    const std::uint32_t m_maxPacketSize;
 
     QSharedPointer<tafnet::TafnetNode> m_proxy;             // communicates with other nodes via UDP port brokered by FAF ICE adapter
     QSharedPointer<tafnet::TafnetGameNode> m_game;          // bridge between m_proxy and TA instance
@@ -33,7 +34,7 @@ class TaLobby : public QObject
     QMap<QString, quint32> m_tafnetIdsByPlayerName;
 
 public:
-    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend);
+    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize);
     void enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);

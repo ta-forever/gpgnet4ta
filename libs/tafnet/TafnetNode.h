@@ -11,7 +11,6 @@
 namespace tafnet
 {
 
-    const std::uint32_t MAX_PACKET_SIZE_UPPER_LIMIT = 1400;
     const std::uint32_t MAX_PACKET_SIZE_LOWER_LIMIT = 250;
 
     struct Payload
@@ -120,6 +119,7 @@ namespace tafnet
             int get(bool incSendCount);
         };
         std::map<std::uint32_t, ResendRate> m_resendRates;      // keyed by peer tafnet player id
+        const std::uint32_t m_maxPacketSize;                    // upper limit on the otherwise auto-discovered UDP packet size
         const bool m_proactiveResendEnabled;
 
         // look for duplicate packets on UDP channel due to peers with activated proactive resend
@@ -133,7 +133,7 @@ namespace tafnet
         taflib::CRC32 m_crc32;
 
     public:
-        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend);
+        TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend, std::uint32_t maxPacketSize);
 
         virtual void setHandler(const std::function<void(std::uint8_t, std::uint32_t, char*, int)>& f);
         virtual std::uint32_t getPlayerId() const;

@@ -185,9 +185,10 @@ bool TafnetNode::HostAndPort::operator< (const HostAndPort& other) const
     return (port < other.port) || (port == other.port) && (ipv4addr < other.ipv4addr);
 }
 
-TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend) :
+TafnetNode::TafnetNode(std::uint32_t playerId, bool isHost, QHostAddress bindAddress, quint16 bindPort, bool proactiveResend, std::uint32_t maxPacketSize) :
     m_playerId(playerId),
     m_hostPlayerId(isHost ? playerId : 0u),
+    m_maxPacketSize(maxPacketSize),
     m_proactiveResendEnabled(proactiveResend)
 {
     m_crc32.Initialize();
@@ -367,10 +368,17 @@ void TafnetNode::onReadyRead()
                     if (crc == *testPacketCrc)
                     {
                         taflib::Watchdog wd("TafnetNode::onReadyRead PACKSIZE_TEST send", 100);
-                        qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize;
-                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
-                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
-                        sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                        if (testPacketSize <= m_maxPacketSize)
+                        {
+                            qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize;
+                            sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                            sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                            sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_ACK, tafBufferedHeader->seq, "", 0, 1);
+                        }
+                        else
+                        {
+                            qInfo() << "[TafnetNode::onReadyRead] ACTION_PACKSIZE_TEST peer=" << peerPlayerId << "packsize = " << testPacketSize << " exceeds our maxPacketSize. quietly ignoring ...";
+                        }
                     }
                     else
                     {
@@ -581,7 +589,7 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
 
         unsigned numFragments = len / (maxPacketSize+1) + 1;
         maxPacketSize = (len+numFragments-1) / numFragments;
-        maxPacketSize = std::min(maxPacketSize, MAX_PACKET_SIZE_UPPER_LIMIT);
+        maxPacketSize = std::min(maxPacketSize, m_maxPacketSize);
         maxPacketSize = std::max(maxPacketSize, MAX_PACKET_SIZE_LOWER_LIMIT);
 
         for (std::uint32_t fragOffset = 0u; fragOffset < len; fragOffset += maxPacketSize)
@@ -612,8 +620,9 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
 void TafnetNode::sendPacksizeTests(std::uint32_t peerPlayerId)
 {
     taflib::Watchdog wd("TafnetNode::sendPacksizeTests", 100);
-    char testData[MAX_PACKET_SIZE_UPPER_LIMIT];
-    for (unsigned n = 0; n < MAX_PACKET_SIZE_UPPER_LIMIT; ++n)
+    std::vector<char> _testData(m_maxPacketSize);
+    char* testData = _testData.data();
+    for (unsigned n = 0; n < m_maxPacketSize; ++n)
     {
         testData[n] = (char)n;
     }
@@ -625,11 +634,11 @@ void TafnetNode::sendPacksizeTests(std::uint32_t peerPlayerId)
         qInfo() << "[TafnetNode::sendPacksizeTests] sending ACTION_PACKSIZE_TEST to peer=" << peerPlayerId << "packsize=" << sz;
         sendMessage(peerPlayerId, Payload::ACTION_PACKSIZE_TEST, sz, testData, sz, 3);
 
-        if (sz >= MAX_PACKET_SIZE_UPPER_LIMIT)
+        if (sz >= m_maxPacketSize)
         {
             break;
         }
-        sz = std::min(1412 * sz / 1000, MAX_PACKET_SIZE_UPPER_LIMIT);
+        sz = std::min(1412 * sz / 1000, m_maxPacketSize);
     }
 }
 
