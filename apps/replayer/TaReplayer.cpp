@@ -24,7 +24,7 @@ Replayer::Replayer(std::istream* demoDataStream) :
     m_demoTicks(0u),
     m_targetTicks(0u),
     m_targetTicksFractional(0.0),
-    m_playBackSpeed(10u),
+    m_playBackSpeed(1.0),
     m_rateControl(1.0),
     m_state(ReplayState::LOADING_DEMO_PLAYERS),
     m_isPaused(false),
@@ -878,11 +878,11 @@ bool Replayer::doPlay()
     // as long as we're able to keep buffer at least quarter full, m_rateControl increases to 1.0
     m_rateControl += m_pendingGamePackets.size() < NUM_PAKS_TO_PRELOAD/4 ? -0.005 : 0.005;
     m_rateControl = std::max(m_rateControl, 0.5);
-    m_rateControl = std::min(m_rateControl, 1.1);
+    m_rateControl = std::min(m_rateControl, 1.0);
 
     if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
-        m_targetTicksFractional += m_rateControl * double(m_playBackSpeed) / 10.0 * WALL_TO_GAME_TICK_RATIO;
+        m_targetTicksFractional += m_rateControl * m_playBackSpeed * WALL_TO_GAME_TICK_RATIO;
         m_targetTicks += m_targetTicksFractional;
         m_targetTicksFractional -= unsigned(m_targetTicksFractional);
     }
@@ -1168,10 +1168,19 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                 m_isPaused = false;
                 m_tickLastUserPauseEvent = m_wallClockTicks;
             }
+            // s[2] in range 1..20
+            else if (s[2] == 19)
+            {
+                m_playBackSpeed = 4.24; // geometric mean between 1.8 and 10
+            }
+            else if (s[2] == 20)
+            {
+                m_playBackSpeed = 10.0;
+            }
             else
             {
-                m_playBackSpeed = s[2];
-                m_playBackSpeed = 0.5 + std::pow(10.0, m_playBackSpeed / 10.0);
+                m_playBackSpeed = double(s[2]) / 10.0;
+                //m_playBackSpeed = std::pow(10.0, m_playBackSpeed) / 10.0;
             }
             break;
         }

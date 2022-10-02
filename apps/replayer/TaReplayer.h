@@ -90,7 +90,7 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::uint32_t m_demoTicks;
     std::uint32_t m_targetTicks;
     double m_targetTicksFractional;
-    unsigned m_playBackSpeed;
+    double m_playBackSpeed;
     ReplayState m_state;
     bool m_isPaused;
     std::uint32_t m_tickLastUserPauseEvent;

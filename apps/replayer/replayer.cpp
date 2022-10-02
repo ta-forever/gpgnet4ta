@@ -199,7 +199,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("0.14.9");
+    QCoreApplication::setApplicationVersion("2022.10.02");
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replayer");
