@@ -12,6 +12,7 @@ add_executable(replayserver
 
 target_include_directories(replayserver 
     PUBLIC
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libs
     )
 

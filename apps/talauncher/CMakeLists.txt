@@ -4,6 +4,7 @@ add_executable(talauncher
 
 target_include_directories(talauncher 
     PUBLIC
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libs
     ${LIBCOMMUNI_INCLUDE_DIR}
     )

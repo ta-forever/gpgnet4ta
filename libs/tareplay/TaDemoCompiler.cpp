@@ -26,10 +26,11 @@
 #include "TaDemoCompilerMessages.h"
 #include "TaReplayServer.h"
 #include "TaDemoCompiler.h"
+#include "VersionString.h"
 
 using namespace tareplay;
 
-static const char* VERSION = "taf-0.14.9";
+static const char* VERSION = "taf-" VERSION_STRING;
 
 TaDemoCompiler::UserContext::UserContext(QTcpSocket* socket):
     gameId(0u),

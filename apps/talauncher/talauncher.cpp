@@ -7,6 +7,7 @@
 #include "taflib/Logger.h"
 #include "taflib/MessageBoxThread.h"
 #include "talaunch/LaunchServer.h"
+#include "VersionString.h"
 
 #include <iostream>
 
@@ -237,7 +238,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TALauncher");
-    QCoreApplication::setApplicationVersion("0.14.9");
+    QCoreApplication::setApplicationVersion(VERSION_STRING);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Total Annihilation launch-to-lobby server");

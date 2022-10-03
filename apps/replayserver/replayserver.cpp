@@ -24,6 +24,7 @@
 
 #include "TafLobbyClient.h"
 #include "TafHwIdGenerator.h"
+#include "VersionString.h"
 
 using namespace tareplay;
 
@@ -31,7 +32,7 @@ int doMain(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("ReplayServer");
-    QCoreApplication::setApplicationVersion("0.14.9");
+    QCoreApplication::setApplicationVersion(VERSION_STRING);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replay Server");

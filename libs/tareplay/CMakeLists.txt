@@ -15,6 +15,7 @@ add_library(tareplay STATIC
     TaReplayServerMessages.cpp)
 
 target_include_directories(tareplay PUBLIC
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libs)
 
 

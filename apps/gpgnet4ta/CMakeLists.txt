@@ -21,6 +21,7 @@ add_executable(gpgnet4ta
 
 target_include_directories(gpgnet4ta 
     PUBLIC
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libs
     ${LIBCOMMUNI_INCLUDE_DIR}
     )
