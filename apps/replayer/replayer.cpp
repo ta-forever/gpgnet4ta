@@ -1,4 +1,5 @@
 #include "TaReplayer.h"
+#include "VersionString.h"
 
 #include "taflib/Logger.h"
 #include "taflib/HexDump.h"
@@ -199,7 +200,7 @@ int doMain(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("TaReplayer");
-    QCoreApplication::setApplicationVersion("2022.10.02");
+    QCoreApplication::setApplicationVersion(VERSION_STRING);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("TA Replayer");
