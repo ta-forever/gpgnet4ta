@@ -1,6 +1,7 @@
 #include "TaReplayer.h"
 
 #include "jdplay/JDPlay.h"
+#include "taflib/EngineeringNotation.h"
 #include "taflib/HexDump.h"
 #include "taflib/Logger.h"
 
@@ -880,11 +881,25 @@ bool Replayer::doPlay()
     m_rateControl = std::max(m_rateControl, 0.5);
     m_rateControl = std::min(m_rateControl, 1.0);
 
+    std::uint32_t dpTicks = 0u;
+    for (auto dpPlayer : m_dpPlayers)
+    {
+        dpTicks = std::max(dpTicks, dpPlayer.second->ticks);
+    }
+
     if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
-        m_targetTicksFractional += m_rateControl * m_playBackSpeed * WALL_TO_GAME_TICK_RATIO;
-        m_targetTicks += m_targetTicksFractional;
-        m_targetTicksFractional -= unsigned(m_targetTicksFractional);
+        if (dpTicks < 500u)
+        {
+            m_targetTicks = dpTicks;
+            m_targetTicksFractional = 0.0;
+        }
+        else
+        {
+            m_targetTicksFractional += m_rateControl * m_playBackSpeed * WALL_TO_GAME_TICK_RATIO;
+            m_targetTicks += m_targetTicksFractional;
+            m_targetTicksFractional -= unsigned(m_targetTicksFractional);
+        }
     }
 
     for (;; m_pendingGamePackets.pop())
@@ -1135,11 +1150,13 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                 for (auto player : m_demoPlayers)
                 {
                     std::ostringstream ss;
-                    int metalProduced = (player->cumulativeMetal - player->cumulativeMetalShared) / 1000.0;
-                    int energyProduced = (player->cumulativeEnergy - player->cumulativeEnergyShared) / 1000.0;
-                    int metalShared = player->cumulativeMetalShared / 1000.0;
+                    double metalProduced = (player->cumulativeMetal - player->cumulativeMetalShared);
+                    double energyProduced = (player->cumulativeEnergy - player->cumulativeEnergyShared);
+                    double metalShared = player->cumulativeMetalShared;
                     ss << std::setw(15) << player->name << std::setw(0)
-                        << " Metal: " << metalProduced << "K Energy: " << energyProduced << "K Shared M: " << metalShared << "K";
+                        << " Metal: " << taflib::engineeringNotation(metalProduced).toStdString() 
+                        << " Energy: " << taflib::engineeringNotation(energyProduced).toStdString()
+                        << " Shared M: " << taflib::engineeringNotation(metalShared).toStdString();
                     this->say(player->dpId, ss.str());
                 }
             }

@@ -15,6 +15,8 @@ add_library(taflib STATIC
     ConsoleReader.cpp
     DuplicateDetection.h
     DuplicateDetection.cpp
+    EngineeringNotation.h
+    EngineeringNotation.cpp
     HexDump.h
     HexDump.cpp
     Logger.h
