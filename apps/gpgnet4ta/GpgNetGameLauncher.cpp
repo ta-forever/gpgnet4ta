@@ -176,6 +176,34 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 m_gpgNetClient.sendGameOption("RatingType", msg.mid(13));
             }
         }
+        else if (msg.startsWith("/replay_delay_seconds ") && msg.size() > 22)
+        {
+            if (!m_isHost) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set replay delay.  ignoring";
+            }
+            else if (m_alreadyLaunched) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
+            }
+            else
+            {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting replay delay";
+                m_gpgNetClient.sendGameOption("ReplayDelaySeconds", msg.mid(22));
+            }
+        }
+        else if (msg.startsWith("/title ") && msg.size() > 6)
+        {
+            if (!m_isHost) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set title.  ignoring";
+            }
+            else if (m_alreadyLaunched) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
+            }
+            else
+            {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting title";
+                m_gpgNetClient.sendGameOption("Title", msg.mid(6));
+            }
+        }
         else if (msg == "/quit")
         {
             if (!m_launchClient.isRunning() || ++m_quitCount == 2)
