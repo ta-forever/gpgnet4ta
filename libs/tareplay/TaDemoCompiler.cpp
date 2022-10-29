@@ -429,10 +429,10 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     }
 
     quint32 taMapHash;          // to later bung into meta.json
-    std::uint8_t taVersionMajor = 0;
-    std::uint8_t taVersionMinor = 0;
+    std::uint8_t taVersionMajor = 0u;
+    std::uint8_t taVersionMinor = 0u;
     bool cheatsEnabled = false;
-    bool permLosEnabled = false;
+    std::uint8_t permLosByte = 0u;
     for (quint32 dpid : knownLockedInPlayers)
     {
         if (game.players.contains(dpid) && game.players[dpid])
@@ -449,7 +449,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
                 taVersionMajor = playerInfo.versionMajor;
                 taVersionMinor = playerInfo.versionMinor;
                 cheatsEnabled = playerInfo.isCheatsEnabled();
-                permLosEnabled = playerInfo.isPermLosEnabled();
+                permLosByte = playerInfo.getPermLosByte();
             }
 
             demoPlayer.statusMessage = tapacket::TPacket::trivialSmartpak(demoPlayer.statusMessage, 0xffffffff);
@@ -473,7 +473,7 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     jo.insert("taVersionMajor", int(taVersionMajor));
     jo.insert("taVersionMinor", int(taVersionMinor));
     jo.insert("cheatsEnabled", cheatsEnabled);
-    jo.insert("permLosEnabled", permLosEnabled);
+    jo.insert("permLosByte", permLosByte);
     jo.insert("mapName", header.mapName.c_str());
     jo.insert("taMapHash", QString("%1").arg(taMapHash, 8, 16, QChar('0')));
 

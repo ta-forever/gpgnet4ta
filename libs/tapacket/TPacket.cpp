@@ -782,9 +782,9 @@ void TPlayerInfo::setPermLos(bool permLos)
     */
 }
 
-bool TPlayerInfo::isPermLosEnabled()
+std::uint8_t TPlayerInfo::getPermLosByte()
 {
-    return fill2[0] & 0x08;
+    return fill2[0];
 }
 
 bool TPlayerInfo::isClickedIn()
