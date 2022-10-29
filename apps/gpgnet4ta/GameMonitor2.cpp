@@ -315,7 +315,7 @@ void GameMonitor2::onStatus(
         auto &player = m_players[sourceDplayId];
         player.isAI = isAI;
         player.slotNumber = playerSlotNumber;
-        if (player.side < 0 || player.isWatcher != isWatcher)
+        if (player.side < 0 || player.isWatcher != isWatcher || player.side != playerSide)
         {
             player.side = playerSide;
             player.isWatcher = isWatcher;
