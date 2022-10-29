@@ -93,6 +93,7 @@ namespace tapacket
         bool isClickedIn();
         bool isWatcher();
         bool isCheatsEnabled();
+        bool isPermLosEnabled();
         bool isAI();
         std::int8_t getSide();
         std::uint8_t getSlotNumber();

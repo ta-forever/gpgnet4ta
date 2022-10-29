@@ -431,6 +431,8 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     quint32 taMapHash;          // to later bung into meta.json
     std::uint8_t taVersionMajor = 0;
     std::uint8_t taVersionMinor = 0;
+    bool cheatsEnabled = false;
+    bool permLosEnabled = false;
     for (quint32 dpid : knownLockedInPlayers)
     {
         if (game.players.contains(dpid) && game.players[dpid])
@@ -446,6 +448,8 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
                 taMapHash = playerInfo.getMapHash();
                 taVersionMajor = playerInfo.versionMajor;
                 taVersionMinor = playerInfo.versionMinor;
+                cheatsEnabled = playerInfo.isCheatsEnabled();
+                permLosEnabled = playerInfo.isPermLosEnabled();
             }
 
             demoPlayer.statusMessage = tapacket::TPacket::trivialSmartpak(demoPlayer.statusMessage, 0xffffffff);
@@ -468,6 +472,8 @@ std::shared_ptr<std::ostream> TaDemoCompiler::commitHeaders(const GameContext& g
     jo.insert("unitsHash", game.getUnitDataHash());
     jo.insert("taVersionMajor", int(taVersionMajor));
     jo.insert("taVersionMinor", int(taVersionMinor));
+    jo.insert("cheatsEnabled", cheatsEnabled);
+    jo.insert("permLosEnabled", permLosEnabled);
     jo.insert("mapName", header.mapName.c_str());
     jo.insert("taMapHash", QString("%1").arg(taMapHash, 8, 16, QChar('0')));
 

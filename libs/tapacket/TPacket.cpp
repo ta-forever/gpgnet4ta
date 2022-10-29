@@ -782,6 +782,11 @@ void TPlayerInfo::setPermLos(bool permLos)
     */
 }
 
+bool TPlayerInfo::isPermLosEnabled()
+{
+    return fill2[0] & 0x08;
+}
+
 bool TPlayerInfo::isClickedIn()
 {
     // offset 163 once smartpaked
