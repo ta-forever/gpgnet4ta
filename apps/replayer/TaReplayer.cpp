@@ -889,9 +889,9 @@ bool Replayer::doPlay()
 
     if (!m_isPaused && (!m_pendingGamePackets.empty() || std::int32_t(m_targetTicks - m_demoTicks) <= 0))
     {
-        if (dpTicks < 500u)
+        if (m_wallClockTicks < 100u)
         {
-            m_targetTicks = dpTicks;
+            m_targetTicks = dpTicks+1;
             m_targetTicksFractional = 0.0;
         }
         else
