@@ -56,6 +56,7 @@ namespace tapacket
         LOADING_PROGRESS_2A  = 0x2a,
         UNIT_STAT_AND_MOVE_2C = 0x2c,
         UNK_2E = 0x2e,
+        THALDREN_EXTENDED_42 = 0x42,
         UNK_F6  = 0xf6,
         ALLY_CHAT_F9 = 0xf9,
         REPLAYER_SERVER_FA = 0xfa,

@@ -246,6 +246,7 @@ std::string TPacket::toString(SubPacketCode spc)
     case SubPacketCode::LOADING_PROGRESS_2A: return "LOADING_PROGRESS_2A";
     case SubPacketCode::UNIT_STAT_AND_MOVE_2C: return "UNIT_STAT_AND_MOVE_2C";
     case SubPacketCode::UNK_2E: return "UNK_2E";
+    case SubPacketCode::THALDREN_EXTENDED_42: return "THALDREN_EXTENDED_42";
     case SubPacketCode::UNK_F6: return "UNK_F6";
     case SubPacketCode::ALLY_CHAT_F9: return "ALLY_CHAT_F9";
     case SubPacketCode::REPLAYER_SERVER_FA: return "REPLAYER_SERVER_FA";
@@ -335,6 +336,9 @@ unsigned TPacket::getExpectedSubPacketSize(const std::uint8_t *s, unsigned sz)
         if (sz >= 3) len = *(std::uint16_t*)(&s[1]);
         break;
     case SubPacketCode::UNK_2E: len = 9; break;
+    case SubPacketCode::THALDREN_EXTENDED_42:
+        if (sz >= 3) len = *(std::uint16_t*)(&s[1]) + 3;
+        break;
     case SubPacketCode::UNK_F6: len = 1;     break;
     case SubPacketCode::ALLY_CHAT_F9: len = 73;    break;
     case SubPacketCode::REPLAYER_SERVER_FA: len = 1;     break;
