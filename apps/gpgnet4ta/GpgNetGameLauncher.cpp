@@ -142,8 +142,13 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
     {
         taflib::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 3000);
         qInfo() << "[GpgNetGameLauncher::onExtendedMessage]" << msg;
-        if (msg == "/launch")
+        if (msg.startsWith("/launch"))
         {
+            if (!msg.endsWith("/launch"))
+            {
+                // a specific join order has been requested
+                m_randomPositions = false;
+            }
             onLaunchGame();
         }
         else if (msg.startsWith("/map ") && msg.size()>5)
@@ -223,11 +228,11 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
     }
     catch (std::exception &e)
     {
-        qWarning() << "[GpgNetGameLauncher::onLaunchGame] exception" << e.what();
+        qWarning() << "[GpgNetGameLauncher::onExtendedMessage] exception" << e.what();
     }
     catch (...)
     {
-        qWarning() << "[GpgNetGameLauncher::onLaunchGame] unknown exception";
+        qWarning() << "[GpgNetGameLauncher::onExtendedMessage] unknown exception";
     }
 }
 
@@ -265,7 +270,7 @@ void GpgNetGameLauncher::onLaunchGame()
     }
 
     QString sessionName = m_thisPlayerName + "'s Game";
-    createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits);
+    createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits, m_randomPositions);
     copyOnlineDll(m_gamePath + "/online.dll");
 
     qInfo() << "[GpgNetGameLauncher::onLaunchGame] m_launchClient.launch()";
@@ -283,7 +288,7 @@ void GpgNetGameLauncher::onLaunchGame()
     // from here on, game state is not driven by GpgNetGameLauncher but instead is inferred by GameMonitor
 }
 
-void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits)
+void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits, bool randomPositions)
 {
     qInfo() << "[GpgNetGameLauncher::createTAInitFile] Loading ta ini template:" << tmplateFilename;
     QFile tmplt(tmplateFilename);
@@ -300,6 +305,7 @@ void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFi
     txt.replace("{playerlimit}", QString::number(std::max(2, std::min(playerLimit, 10))));
     txt.replace("{maxunits}", QString::number(std::max(20, std::min(maxUnits, 1500))));
     txt.replace("{lockoptions}", lockOptions ? "1" : "0");
+    txt.replace("{location}", randomPositions ? "2" : "1");
 
     qInfo() << "[GpgNetGameLauncher::createTAInitFile] saving ta ini:" << iniFilename;
     QFile ini(iniFilename);

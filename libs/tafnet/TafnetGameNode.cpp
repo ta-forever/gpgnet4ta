@@ -360,6 +360,18 @@ void TafnetGameNode::unregisterRemotePlayer(std::uint32_t remotePlayerId)
 {
     qInfo() << "[TafnetGameNode::unregisterRemotePlayer] playerId" << m_tafnetNode->getPlayerId() << "unregistering peer" << remotePlayerId;
     m_pendingEnumRequests.erase(remotePlayerId);
+
+    std::queue<std::uint32_t> remainingRemotePlayersJoinOrder;
+    while (!m_playerInviteOrder.empty())
+    {
+        if (m_playerInviteOrder.front() != remotePlayerId)
+        {
+            remainingRemotePlayersJoinOrder.push(m_playerInviteOrder.front());
+        }
+        m_playerInviteOrder.pop();
+    }
+    m_playerInviteOrder = remainingRemotePlayersJoinOrder;
+
     killGameSender(remotePlayerId);
     killGameReceiver(remotePlayerId);
 }
@@ -471,34 +483,64 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
     }
 }
 
+void TafnetGameNode::setPlayerInviteOrder(const std::vector<std::uint32_t>& playerIds)
+{
+    std::ostringstream ss;
+    for (std::uint32_t id: playerIds)
+    {
+        ss << id << ' ';
+    }
+    qInfo() << "[TafnetGameNode::setPlayerInviteOrder] " << ss.str().c_str();
+
+    m_playerInviteOrder = std::queue<std::uint32_t>();
+    for (std::uint32_t id : playerIds)
+    {
+        if (m_gameSenders.find(id) == m_gameSenders.end())
+        {
+            qWarning() << "[TafnetGameNode::setPlayerInviteOrder] ignoring unknown pid:" << id;
+        }
+        else
+        {
+            m_playerInviteOrder.push(id);
+        }
+    }
+}
+
 void TafnetGameNode::processPendingEnumRequests()
 {
     taflib::Watchdog wd("[TafnetGameNode::processPendingEnumRequests]", 100);
     try
     {
-        std::set<std::uint32_t> completed;
-
-        for (auto& pair : m_pendingEnumRequests)
+        auto itToAdmit = m_pendingEnumRequests.end();
+        if (!m_playerInviteOrder.empty())
         {
-            std::uint32_t peerId = std::get<0>(pair);
-            const QByteArray& datas = std::get<1>(pair);
+            itToAdmit = m_pendingEnumRequests.find(m_playerInviteOrder.front());
+        }
+        else
+        {
+            itToAdmit = m_pendingEnumRequests.begin();
+        }
+
+        if (itToAdmit != m_pendingEnumRequests.end())
+        {
+            std::uint32_t peerId = std::get<0>(*itToAdmit);
+            const QByteArray& datas = std::get<1>(*itToAdmit);
             GameSender* gameSender = getGameSender(peerId);
             bool ok = gameSender->enumSessions(datas.constData(), datas.size());
             if (!ok)
             {
-                qInfo() << "[TafnetGameNode::processPendingEnumRequests] enum port no connection ..." << m_pendingEnumRequests.size() << "enum requests in queue";
-                break;
+                qInfo() << "[TafnetGameNode::processPendingEnumRequests] enum port no connection ...";
             }
             else
             {
-                qInfo() << "[TafnetGameNode::processPendingEnumRequests] enum port connected.  request delivered for peerId=" << peerId;
-                completed.insert(peerId);
+                qInfo() << "[TafnetGameNode::processPendingEnumRequests] admitting pid:" << peerId;
+                if (!m_playerInviteOrder.empty())
+                {
+                    m_playerInviteOrder.pop();
+                }
+                m_pendingEnumRequests.erase(itToAdmit);
             }
-        }
-
-        for (std::uint32_t peerId : completed)
-        {
-            m_pendingEnumRequests.erase(peerId);
+            qInfo() << "[TafnetGameNode::processPendingEnumRequests]" << m_pendingEnumRequests.size() << "players knocking," << m_playerInviteOrder.size() << "invited";
         }
 
         if (m_packetParser && m_packetParser->getProgressTicks() > 0u)

@@ -45,6 +45,7 @@ public slots:
     void onJoinGame(QString host, QString playerAlias, QString playerRealName, int playerId);
     void onConnectToPeer(QString host, QString playerAlias, QString playerRealName, int playerId);
     void onDisconnectFromPeer(int playerId);
+    void onExtendedMessage(QString msg);
 
 public slots:
     void echoToGame(bool isPrivate, QString name, QString chat);

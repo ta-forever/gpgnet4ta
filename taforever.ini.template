@@ -1,7 +1,7 @@
 [totala]
 watching=2
 mapmode=2
-location=2
+location={location}
 cheats=1
 los=1
 deathopt=2

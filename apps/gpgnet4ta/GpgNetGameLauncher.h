@@ -31,6 +31,7 @@ class GpgNetGameLauncher: public QObject
     bool m_alreadyLaunched = false;
     bool m_isHost = false;
     bool m_autoLaunch = false;
+    bool m_randomPositions = true;
     int m_quitCount = 0;
     QTimer m_quitCountResetTimer;
 
@@ -55,6 +56,6 @@ public slots:
     void onResetQuitCount();
 
 private:
-    static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits);
+    static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits, bool randomPositions);
     static void copyOnlineDll(QString gamePath);
 };

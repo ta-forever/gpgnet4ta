@@ -225,3 +225,34 @@ void TaLobby::echoToGame(bool isPrivate, QString name, QString chat)
 
     m_game->messageToLocalPlayer(dplayId, tafnetId, isPrivate, name.toStdString(), chat.toStdString());
 }
+
+void TaLobby::onExtendedMessage(QString msg)
+{
+    try
+    {
+        taflib::Watchdog wd("TaLobby::onExtendedMessage", 3000);
+        qInfo() << "[TaLobby::onExtendedMessage]" << msg;
+        if (msg.startsWith("/launch"))
+        {
+            QStringList args = msg.split(" ");
+            if (args.size() > 1)
+            {
+                std::vector<std::uint32_t> joinOrderIds;
+                for (QString idString : args[1].split(","))
+                {
+                    joinOrderIds.push_back(idString.toUInt());
+                }
+                m_game->setPlayerInviteOrder(joinOrderIds);
+            }
+        }
+    }
+    catch (std::exception & e)
+    {
+        qWarning() << "[TaLobby::onExtendedMessage] exception" << e.what();
+    }
+    catch (...)
+    {
+        qWarning() << "[TaLobby::onExtendedMessage] unknown exception";
+    }
+}
+

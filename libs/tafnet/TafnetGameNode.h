@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <queue>
 
 #include "TafnetNode.h"
 #include "GameReceiver.h"
@@ -32,6 +33,7 @@ namespace tafnet
         std::map<std::uint32_t, std::shared_ptr<GameReceiver> > m_gameReceivers; // keyed by peer tafnet playerId
         std::map<std::uint16_t, std::uint32_t> m_remotePlayerIds;                // tafnet id keyed by gameReceiver's receive socket port (both tcp and udp)
         std::map<std::uint32_t, QByteArray> m_pendingEnumRequests;               // keyed by peer tafnet playerId
+        std::queue<std::uint32_t> m_playerInviteOrder;                      // useful only by host instance. controls order that enum requests are passed to game
         QTimer m_pendingEnumRequestsTimer;
 
         // these only discovered once some data received from game
@@ -57,6 +59,8 @@ namespace tafnet
         virtual void sendEnumRequest(QUuid gameGuid, std::uint32_t asPeerId);
 
         virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat);
+
+        virtual void setPlayerInviteOrder(const std::vector<std::uint32_t> & playerIds);
 
     private:
 

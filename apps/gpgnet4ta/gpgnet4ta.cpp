@@ -700,6 +700,7 @@ int doMain(int argc, char* argv[])
 
         taflib::ConsoleReader consoleReader(QHostAddress("127.0.0.1"), parser.value("consoleport").toInt());
         QObject::connect(&consoleReader, &taflib::ConsoleReader::textReceived, &launcher, &GpgNetGameLauncher::onExtendedMessage);
+        QObject::connect(&consoleReader, &taflib::ConsoleReader::textReceived, &lobby, &TaLobby::onExtendedMessage);
         app.exec();
     }
     return 0;
