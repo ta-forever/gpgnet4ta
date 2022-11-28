@@ -41,7 +41,7 @@ bytestring RecordReader::operator()(std::istream *is)
         if (is->gcount() == 1)
         {
             std::uint16_t length = unsigned(m_recordLength[0]) | (unsigned(m_recordLength[1]) << 8);
-            if (length > 16384 || length <= 2)
+            if (length > 32768 || length <= 2)
             {
                 std::ostringstream ss;
                 ss << "[RecordReader::operator()] unrealistic record length " << length << " at position " << is->tellg();
