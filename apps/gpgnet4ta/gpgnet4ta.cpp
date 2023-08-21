@@ -567,10 +567,6 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
     {
         qWarning() << "[getMapDetails] maptool ReadError";
     }
-    else if (process.error() == QProcess::UnknownError)
-    {
-        qWarning() << "[getMapDetails] maptool UnknownError";
-    }
 
     //process.exitStatus() one of QProcess::NormalExit, CrashExit
     if (process.exitStatus() == QProcess::CrashExit)
