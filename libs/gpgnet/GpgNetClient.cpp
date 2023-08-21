@@ -32,7 +32,8 @@ m_datastream(&m_socket)
     m_socket.connectToHost(gpgnetHost, gpgnetPort);
     if (!m_socket.waitForConnected(3000))
     {
-        throw std::runtime_error("unable to connect to gpgnet");
+        QString msg = QString("unable to connect to gpgnet. host=%1, port=%2").arg(gpgnetHost.toString()).arg(gpgnetPort);
+        throw std::runtime_error(msg.toStdString());
     }
     qInfo() << "[GpgNetClient::GpgNetClient] connect" << m_socket.peerAddress().toString() << ':' << m_socket.peerPort();
     QObject::connect(&m_socket, &QTcpSocket::readyRead, this, &GpgNetClient::onReadyRead);
