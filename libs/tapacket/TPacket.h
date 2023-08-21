@@ -196,7 +196,7 @@ namespace tapacket
         static unsigned bin2int(const bytestring &s, unsigned start, unsigned num);
 
         static void test();
-        static int testDecode(const bytestring &encrypted, bool hasTimestamp, bool hasChecksum, std::uint8_t filter);
+        static int testDecode(const bytestring &data, bool isEncrypted, bool hasTimestamp, bool hasChecksum, std::uint8_t filter);
         static void testCompression(unsigned dictionarySize);
         static bool testUnpakability(bytestring s, int recurseDepth);
     };

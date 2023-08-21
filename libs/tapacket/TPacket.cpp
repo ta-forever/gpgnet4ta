@@ -971,47 +971,48 @@ void TPacket::test()
     //return;
 
     std::map<int, unsigned> badSubPacketCounts;
-    std::uint8_t filter = 0x00;
+    std::uint8_t filter = 0x20;
 
     using namespace tapacket::TestPackets;
-    ++badSubPacketCounts[testDecode(td1, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td2, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td3, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td4, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td5, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td6, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td7, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td8, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td9, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td10, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td11, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td12, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td13, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td14, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td15, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td16, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td17, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td18, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td19, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td20, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td21, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td22, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td23, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td24, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td25, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td26, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td27, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td28, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td29, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td30, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td31, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td32, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td33, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td34, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td35, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td36, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td37, true, true, filter)];
-    ++badSubPacketCounts[testDecode(td38, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td1, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td2, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td3, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td4, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td5, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td6, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td7, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td8, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td9, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td10, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td11, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td12, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td13, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td14, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td15, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td16, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td17, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td18, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td19, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td20, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td21, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td22, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td23, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td24, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td25, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td26, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td27, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td28, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td29, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td30, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td31, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td32, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td33, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td34, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td35, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td36, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td37, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td38, true, true, true, filter)];
+    ++badSubPacketCounts[testDecode(td39, false, false, true, filter)];
 
     for (auto p : badSubPacketCounts)
     {
@@ -1088,19 +1089,25 @@ void TPacket::testCompression(unsigned dictionarySize)
     std::cout << std::endl;
 }
 
-int TPacket::testDecode(const bytestring & encrypted, bool hasTimestamp, bool hasChecksum, std::uint8_t filter)
+int TPacket::testDecode(const bytestring & data, bool isEncrypted, bool hasTimestamp, bool hasChecksum, std::uint8_t filter)
 {
-    std::cout << "-------------------- encrypted len=" << std::dec << encrypted.size() << "\n";
+    std::cout << "-------------------- data len=" << std::dec << data.size() << "\n";
+    //std::cout << "data:\n";
+    //taflib::HexDump(data.data(), data.size(), std::cout);
 
-    std::uint16_t checksum[2];
-    bytestring decrypted(encrypted);
-    decrypt(decrypted, 0u, checksum[0], checksum[1]);
-    //std::cout << "decrypted: (checkpacked=" << checksum[0] << ", checkcalced=" << checksum[1] << ")\n";
-    //HexDump(decrypted.data(), decrypted.size(), std::cout);
+    bytestring decrypted = data;
+    if (isEncrypted)
+    {
+        std::uint16_t checksum[2];
+        decrypted = bytestring(data);
+        decrypt(decrypted, 0u, checksum[0], checksum[1]);
+        //std::cout << "decrypted: (checkpacked=" << checksum[0] << ", checkcalced=" << checksum[1] << ")\n";
+        //taflib::HexDump(decrypted.data(), decrypted.size(), std::cout);
+    }
 
     bytestring decompressed = decompress(decrypted, 3);
     //std::cout << "decompressed:\n";
-    //HexDump(decompressed.data(), decompressed.size(), std::cout);
+    //taflib::HexDump(decompressed.data(), decompressed.size(), std::cout);
 
     std::vector<bytestring> unpaked = unsmartpak(decompressed, hasTimestamp, hasChecksum);
     int nSubPak = 0;

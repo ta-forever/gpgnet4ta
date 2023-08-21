@@ -42,5 +42,6 @@ namespace tapacket {
         extern const bytestring td36;
         extern const bytestring td37;
         extern const bytestring td38;
+        extern const bytestring td39;
     }
 }
