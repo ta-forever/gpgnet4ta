@@ -218,6 +218,7 @@ class HandleGameStatus : public GameEventHandlerQt
     TaLobby& m_taLobby;
     int m_quitRequested;
     QString m_selectedMap;
+    bool m_isGameRated;
 
     // fixed size 10 slots
     QVector<QString> m_playerNames;
@@ -225,14 +226,15 @@ class HandleGameStatus : public GameEventHandlerQt
     QVector<bool> m_isWatcher;
 
 public:
-    HandleGameStatus(IrcForward* irc, QString channel, TaLobby& taLobby) :
+    HandleGameStatus(IrcForward* irc, QString channel, TaLobby& taLobby, bool isGameRated) :
         m_irc(irc),
         m_channel(channel),
         m_taLobby(taLobby),
         m_quitRequested(0),
         m_playerNames(10u),
         m_isAI(10u, false),
-        m_isWatcher(10u, false)
+        m_isWatcher(10u, false),
+        m_isGameRated(isGameRated)
     { }
 
     virtual void onGameSettings(QString mapName, quint16 maxUnits, QString hostName, QString localName)
@@ -318,14 +320,20 @@ public:
             {
                 if (humanPlayerCount >= 3)
                 {
-                    doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
-                    doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                    if (m_isGameRated)
+                    {
+                        doSend("Game becomes rated after 1:00. Finalise teams by then", false, true);
+                        doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                    }
                     doSend("/quit to disconnect so team can .take (unless UR host!)", false, true);
                 }
                 else if (humanPlayerCount == 2)
                 {
-                    doSend("Game becomes rated after 1:00", false, true);
-                    doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                    if (m_isGameRated)
+                    {
+                        doSend("Game becomes rated after 1:00", false, true);
+                        doSend("Self-d/alt-f4 before to rescind, or ally afterwards", false, true);
+                    }
                 }
 
                 if (m_irc && m_irc->isActive())
@@ -349,32 +357,35 @@ public:
         try
         {
             taflib::Watchdog wd("HandleGameStatus::onGameEnded", 100);
-            doSend("Game over man, game over!", true, true);
-            for (const QVariantMap &result : results)
+            if (m_isGameRated)
             {
-                std::ostringstream ss;
-                std::string alias = result.value("alias").toString().toStdString();
-                std::string realName = result.value("realName").toString().toStdString();
-                int slot = result.value("slot").toInt();
-                int team = result.value("team").toInt();
-                int score = result.value("score").toInt();
-                std::string outcome;
-                if (score > 0)
-                    outcome = "VICTORY";
-                else if (score == 0)
-                    outcome = "DRAW";
-                else
-                    outcome = "DEFEAT";
+                doSend("Game over man, game over!", true, true);
+                for (const QVariantMap& result : results)
+                {
+                    std::ostringstream ss;
+                    std::string alias = result.value("alias").toString().toStdString();
+                    std::string realName = result.value("realName").toString().toStdString();
+                    int slot = result.value("slot").toInt();
+                    int team = result.value("team").toInt();
+                    int score = result.value("score").toInt();
+                    std::string outcome;
+                    if (score > 0)
+                        outcome = "VICTORY";
+                    else if (score == 0)
+                        outcome = "DRAW";
+                    else
+                        outcome = "DEFEAT";
 
-                if (realName.empty() || realName == alias)
-                {
-                    ss << alias << ": " << outcome;
+                    if (realName.empty() || realName == alias)
+                    {
+                        ss << alias << ": " << outcome;
+                    }
+                    else
+                    {
+                        ss << alias << " (aka " << realName << "): " << outcome;
+                    }
+                    doSend(ss.str(), true, true);
                 }
-                else
-                {
-                    ss << alias << " (aka " << realName << "): " << outcome;
-                }
-                doSend(ss.str(), true, true);
             }
         }
         catch (std::exception &e)
@@ -512,15 +523,70 @@ QString getMapDetails(QString gamePath, QString maptoolExePath, QString _mapName
     qInfo() << "[getMapDetails] exe:" << maptoolExePath << ", args:" << args;
     QProcess process;
     process.start(maptoolExePath, args);
-    process.waitForFinished(3000);
+    for (int n = 0; n < 10; ++n)
+    {
+        if (process.waitForFinished(1000))
+        {
+            break;
+        }
+        qInfo() << "[getMapDetails] waiting for maptool to exit ...";
+    }
+
+    //process.state() one of QProces::NotRunning, QProcess::Starting, QProcess::Running
+    if (process.state() == QProcess::Running)
+    {
+        qWarning() << "[getMapDetails] maptool still running! giving up ...";
+        process.terminate();
+        return "";
+    }
+    else if (process.state() == QProcess::Starting)
+    {
+        qWarning() << "[getMapDetails] maptool still starting! giving up ...";
+        process.terminate();
+        return "";
+    }
+
+    //process.error() one of QProcess::FailedToStart, Crashed, Timedout, WriteError, ReadError, UnknownError
+    if (process.error() == QProcess::FailedToStart)
+    {
+        qWarning() << "[getMapDetails] maptool FailedToStart";
+    }
+    else if (process.error() == QProcess::Crashed)
+    {
+        qWarning() << "[getMapDetails] maptool Crashed";
+    }
+    else if (process.error() == QProcess::Timedout)
+    {
+        qWarning() << "[getMapDetails] maptool TimedOut";
+    }
+    else if (process.error() == QProcess::WriteError)
+    {
+        qWarning() << "[getMapDetails] maptool WriteError";
+    }
+    else if (process.error() == QProcess::ReadError)
+    {
+        qWarning() << "[getMapDetails] maptool ReadError";
+    }
+    else if (process.error() == QProcess::UnknownError)
+    {
+        qWarning() << "[getMapDetails] maptool UnknownError";
+    }
+
+    //process.exitStatus() one of QProcess::NormalExit, CrashExit
+    if (process.exitStatus() == QProcess::CrashExit)
+    {
+        qWarning() << "[getMapDetails] maptool exitStatus=CrashExit";
+    }
 
     QString err = process.readAllStandardError();
     if (!err.isEmpty())
     {
-      qWarning() << err;
+        qWarning() << "[getMapDetails] maptool had output on stderr:";
+        qWarning() << err;
     }
 
     QString result = process.readAllStandardOutput();
+    qInfo() << "[getMapDetails] maptool exitCode:" << process.exitCode();
     qInfo() << "[getMapDetails]" << result;
 
     return result;
@@ -544,25 +610,26 @@ int doMain(int argc, char* argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption(QCommandLineOption("autolaunch", "Normally gpgnet4ta sets up the connections then waits for a /launch command before it launches TA. This option causes TA to launch straight away."));
+    parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
     parser.addOption(QCommandLineOption("country", "Player country code.", "code"));
+    parser.addOption(QCommandLineOption("democompilerdebugreq", "host:port/gameid of TA Demo Compiler to issue debug req to", "democompilerdebugreq"));
+    parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
     parser.addOption(QCommandLineOption("deviation", "Player rating deviation.", "deviation"));
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant.", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
     parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
     parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
     parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join.", "irc"));
+    parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface.", "lobbybindaddress", "127.0.0.1"));
     parser.addOption(QCommandLineOption("lockoptions", "Lock (some of) the lobby options."));
     parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", ""));
     parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
+    parser.addOption(QCommandLineOption("maxpacketsize", "Place an upper limit on the otherwise auto-discovered maximum UDP packet size.", "maxpacketsize", "1500"));
     parser.addOption(QCommandLineOption("mean", "Player rating mean.", "mean"));
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
     parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10.", "players", "10"));
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
-    parser.addOption(QCommandLineOption("maxpacketsize", "Place an upper limit on the otherwise auto-discovered maximum UDP packet size.", "maxpacketsize", "1500"));
-    parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
-    parser.addOption(QCommandLineOption("consoleport", "Specifies port for ConsoleReader to listen on (consoleport receives less-privileged commands than LaunchServer does)", "48685"));
-    parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
-    parser.addOption(QCommandLineOption("democompilerdebugreq", "host:port/gameid of TA Demo Compiler to issue debug req to", "democompilerdebugreq"));
+    parser.addOption(QCommandLineOption("israted", "Flag to indicate game is ranked.  Affects some of the messages sent to players."));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -659,7 +726,7 @@ int doMain(int argc, char* argv[])
         lobby.connectGameEvents(gameEventsToGpgNet);
 
         qInfo() << "[main] connecting game status events to HandleGameStatus";
-        HandleGameStatus handleGameStatus(ircForward.get(), ircChannel, lobby);
+        HandleGameStatus handleGameStatus(ircForward.get(), ircChannel, lobby, parser.isSet("israted"));
         lobby.connectGameEvents(handleGameStatus);
 
         if (parser.isSet("democompilerurl"))
