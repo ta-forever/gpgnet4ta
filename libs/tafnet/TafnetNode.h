@@ -15,9 +15,12 @@ namespace tafnet
     const int INITIAL_RESEND_TIMEOUT = 500; // milliseconds, until a ping measured
     const int MAX_RESEND_TIMEOUT = 700;     // milliseconds
     const int RESEND_TIMEOUT_MARGIN = 50;   // milliseconds, above measured ping
+    const int RESEND_TIMER_INTERVAL = 100;  // milliseconds, interval to poll for resend requests
+    const int RESEND_TIMER_HOLD_OFF_TIME = 500;  // millisecond
     const int MAX_RESEND_AT_ONCE = 5;
     const std::uint32_t PING_PACKET_SIZE = 16;
     const std::int64_t DEAD_PEER_TIMEOUT = 3 * 60 * 1000;    // milliseoncds, until give up pinging and delete their connection
+    const std::size_t RECENT_PING_BUFFER_SIZE = 5;      // for estimating expected ping
 
     struct Payload
     {
