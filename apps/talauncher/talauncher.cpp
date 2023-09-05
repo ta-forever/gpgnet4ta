@@ -13,7 +13,9 @@
 
 bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QString commandLine, QString currentDirectory)
 {
-    QString registryPath = QString(R"(%1\%2)").arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
+    QString registryPath = QString(R"(%1\%2)")
+        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
+        .arg("Applications");
     QSettings registry(registryPath, QSettings::NativeFormat);
     QStringList applications = registry.childGroups();
 
@@ -42,8 +44,9 @@ bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QS
 
 void RegisterDplayLobbyableApplication(QString name, QString guid, QString path, QString file, QString commandLine, QString currentDirectory)
 {
-    QString registryPath = QString(R"(%1\%2)").arg(
-        R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay\Applications)", name);
+    QString registryPath = QString(R"(%1\%2)")
+        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay\Applications)")
+        .arg(name);
 
     QSettings registry(registryPath, QSettings::NativeFormat);
     registry.setValue("Guid", guid);
@@ -55,8 +58,9 @@ void RegisterDplayLobbyableApplication(QString name, QString guid, QString path,
 
 QString GetDplayLobbableAppPath(QString appGuid, QString defaultPath)
 {
-    QString registryPath = QString(R"(%1\%2)").arg(
-        R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
+    QString registryPath = QString(R"(%1\%2)")
+        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
+        .arg("Applications");
     QSettings registry(registryPath, QSettings::NativeFormat);
     QStringList applications = registry.childGroups();
     Q_FOREACH(QString appName, applications)
@@ -75,8 +79,9 @@ QMap<QString, QString> GetDplayLobbableApp(QString appGuid)
 {
     QMap<QString, QString> result;
 
-    QString registryPath = QString(R"(%1\%2)").arg(
-        R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)", "Applications");
+    QString registryPath = QString(R"(%1\%2)")
+        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
+        .arg("Applications");
     QSettings registry(registryPath, QSettings::NativeFormat);
     QStringList applications = registry.childGroups();
     Q_FOREACH(QString appName, applications)
