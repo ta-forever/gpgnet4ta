@@ -38,6 +38,7 @@ TaLobby::TaLobby(
     m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW));
     m_packetParser.reset(new tapacket::TAPacketParser());
     m_packetParser->subscribe(m_gameMonitor.data());
+    m_pingTimer.setInterval(3000);
 }
 
 
@@ -99,6 +100,19 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerAlias, QS
             [this]() { return new tafnet::GameSender(this->m_gameAddress, 47624); },
             [this](QSharedPointer<QUdpSocket> udpSocket) { return new tafnet::GameReceiver(this->m_gameReceiveBindAddress, 0, 0, udpSocket);
         }));
+        QObject::connect(&m_pingTimer, &QTimer::timeout, [this]() {
+            std::map<std::uint32_t, std::int64_t> lags = m_proxy->getPingToPeers();
+            m_proxy->sendPingToPeers();
+            if (!lags.empty())
+            {
+                QMap<quint32, qint64> qLags;
+                for (const auto& pair : lags) {
+                    qLags.insert(pair.first, pair.second);
+                }
+                emit peerPingStats(qLags);
+            }
+        });
+        m_pingTimer.start();
     }
     catch (std::exception &e)
     {
@@ -108,6 +122,12 @@ void TaLobby::onCreateLobby(int protocol, int localPort, QString playerAlias, QS
     {
         qWarning() << "[TaLobby::onCreateLobby] unknown exception";
     }
+}
+
+
+void TaLobby::setPeerPingInterval(int milliseconds)
+{
+    m_pingTimer.setInterval(milliseconds);
 }
 
 void TaLobby::onJoinGame(QString _host, QString playerAlias, QString playerRealName, int playerId)

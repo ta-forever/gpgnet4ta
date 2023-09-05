@@ -316,6 +316,8 @@ public:
                 m_irc->close();
             }
 
+            m_taLobby.setPeerPingInterval(teamsFrozen ? 10000 : 3000);
+
             if (!teamsFrozen && aiCount == 0)
             {
                 if (humanPlayerCount >= 3)
@@ -711,6 +713,14 @@ int doMain(int argc, char* argv[])
             if (parser.isSet("autolaunch")) launcher.onLaunchGame();
         });
         QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
+        QObject::connect(&lobby, &TaLobby::peerPingStats, [&gpgNetClient](QMap<quint32, qint64> pings) {
+            QStringList peerPingPairs;
+            for (auto it = pings.begin(); it != pings.end(); ++it)
+            {
+                peerPingPairs.push_back(QString("%1:%2").arg(it.key()).arg(it.value()));
+            }
+            gpgNetClient.sendGameMetrics("PlayerPings", peerPingPairs.join(';'));
+        });
 
         // The TaLobby also takes the opporunity to snoop the network traffic that it handles in order to work out whats happening in the game
         // (eg game started/ended state; selected map, players and teams at start of game; and winners/losers/draws at end of game)

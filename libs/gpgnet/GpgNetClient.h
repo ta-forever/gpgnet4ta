@@ -30,6 +30,7 @@ namespace gpgnet
         void sendGameMods(QStringList uids);
         void sendGameOption(QString key, QString value);
         void sendGameOption(QString key, int value);
+        void sendGameMetrics(QString key, QString value);
         void sendPlayerOption(QString playerId, QString key, QString value);
         void sendPlayerOption(QString playerId, QString key, int value);
         void sendAiOption(QString name, QString key, int value);

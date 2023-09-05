@@ -196,6 +196,13 @@ void GpgNetClient::sendGameOption(QString key, int value)
     sendArgument(value);
 }
 
+void GpgNetClient::sendGameMetrics(QString key, QString value)
+{
+    sendCommand("GameMetrics", 2);
+    sendArgument(key.toUtf8());
+    sendArgument(value.toUtf8());
+}
+
 void GpgNetClient::sendPlayerOption(QString playerId, QString key, QString value)
 {
     sendCommand("PlayerOption", 3);

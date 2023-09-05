@@ -2,6 +2,7 @@
 
 #include <QtNetwork/qhostaddress.h>
 #include <QtCore/quuid.h>
+#include <QtCore/qtimer.h>
 #include "GameEventHandlerQt.h"
 #include "GameMonitor2.h"
 #include "tareplay/TaDemoCompilerClient.h"
@@ -23,6 +24,7 @@ class TaLobby : public QObject
     const QUuid m_gameGuid;
     const bool m_proactiveResendEnabled;
     const std::uint32_t m_maxPacketSize;
+    QTimer m_pingTimer;
 
     QSharedPointer<tafnet::TafnetNode> m_proxy;             // communicates with other nodes via UDP port brokered by FAF ICE adapter
     QSharedPointer<tafnet::TafnetGameNode> m_game;          // bridge between m_proxy and TA instance
@@ -39,6 +41,10 @@ public:
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
     quint32 getLocalPlayerDplayId();
+    void setPeerPingInterval(int milliseconds);
+
+signals:
+    void peerPingStats(QMap<quint32, qint64> pingsPerPeer);
 
 public slots:
     void onCreateLobby(int protocol, int localPort, QString playerAlias, QString playerRealName, int playerId, int natTraversal);

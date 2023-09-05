@@ -12,6 +12,12 @@ namespace tafnet
 {
 
     const std::uint32_t MAX_PACKET_SIZE_LOWER_LIMIT = 250;
+    const int INITIAL_RESEND_TIMEOUT = 500; // milliseconds, until a ping measured
+    const int MAX_RESEND_TIMEOUT = 700;     // milliseconds
+    const int RESEND_TIMEOUT_MARGIN = 50;   // milliseconds, above measured ping
+    const int MAX_RESEND_AT_ONCE = 5;
+    const std::uint32_t PING_PACKET_SIZE = 16;
+    const std::int64_t DEAD_PEER_TIMEOUT = 3 * 60 * 1000;    // milliseoncds, until give up pinging and delete their connection
 
     struct Payload
     {
@@ -35,6 +41,7 @@ namespace tafnet
 
         std::uint8_t action;
         QSharedPointer<QByteArray> buf;
+        qint64 timestamp;
 
         Payload();
         void set(std::uint8_t action, const char *data, int len);
@@ -116,7 +123,19 @@ namespace tafnet
             std::uint32_t sendCount = 0u;
             std::uint32_t ackCount = 0u;
             std::uint32_t maxPacketSize = MAX_PACKET_SIZE_LOWER_LIMIT;
-            int get(bool incSendCount);
+
+            std::int64_t timestampLastPing;
+            std::int64_t timestampLastPingAck;
+            std::int64_t timestampFirstPing;;
+            std::deque<std::int64_t> recentPings;
+
+            std::uint32_t lastTimeoutSeq;
+            std::uint32_t lastResendReqSeq;
+
+            ResendRate();
+            int getResendRate(bool incSendCount);
+            void registerAck();
+            std::int64_t getSuccessfulPingTime();
         };
         std::map<std::uint32_t, ResendRate> m_resendRates;      // keyed by peer tafnet player id
         const std::uint32_t m_maxPacketSize;                    // upper limit on the otherwise auto-discovered UDP packet size
@@ -150,6 +169,9 @@ namespace tafnet
         virtual void onResendTimer();
         virtual void onResendReqReenableTimer();
         virtual void resetTcpBuffers();
+
+        virtual void sendPingToPeers();
+        virtual std::map<std::uint32_t, std::int64_t> getPingToPeers();
 
     private:
         virtual void onReadyRead();
