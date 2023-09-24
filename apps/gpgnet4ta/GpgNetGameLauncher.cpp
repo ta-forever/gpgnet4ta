@@ -49,12 +49,18 @@ void GpgNetGameLauncher::pollJdplayStillActive()
     try
     {
         taflib::Watchdog wd("GpgNetGameLauncher::pollJdplayStillActive", 100);
-        if (!m_launchClient.isRunning())
+        if (!m_launchClient.isApplicationRunning())
         {
             qInfo() << "[GpgNetGameLauncher::pollJdplayStillActive] game stopped running. exit (or crash?)";
             m_pollStillActiveTimer.stop();
             m_gpgNetClient.sendGameEnded();
-            emit gameTerminated();
+            emit applicationTerminated();
+        }
+        else if (m_isHost && !m_alreadyLaunched && m_launchClient.isGameLaunched())
+        {
+            qInfo() << "[GpgNetGameLauncher::pollJdplayStillActive] game launch detected";
+            m_alreadyLaunched = true;
+            m_gpgNetClient.sendGameState("Launching", "Launching");
         }
     }
     catch (std::exception &e)
@@ -79,11 +85,11 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
         m_launchClient.setAddress("127.0.0.1");
         m_launchClient.setIsHost(true);
  
-        m_readyToLaunch = true;
-        if (m_autoLaunch)
+        m_readyToStart = true;
+        if (m_autoStart)
         {
             qInfo() << "[GpgNetGameLauncher::onHostGame] executing deferred launch";
-            onLaunchGame();
+            onStartApplication();
         }
 
         m_gpgNetClient.sendPlayerOption(QString::number(m_thisPlayerId), "Team", 1);
@@ -117,11 +123,11 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, QString, i
         m_launchClient.setAddress(hostip);
         m_launchClient.setIsHost(false);
 
-        m_readyToLaunch = true;
-        if (m_autoLaunch)
+        m_readyToStart = true;
+        if (m_autoStart)
         {
             qInfo() << "[GpgNetGameLauncher::onJoinGame] executing deferred launch";
-            onLaunchGame();
+            onStartApplication();
         }
 
         m_gpgNetClient.sendPlayerOption(QString::number(m_thisPlayerId), "Team", 1);
@@ -149,14 +155,14 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 // a specific join order has been requested
                 m_randomPositions = false;
             }
-            onLaunchGame();
+            onStartApplication();
         }
         else if (msg.startsWith("/map ") && msg.size()>5)
         {
             if (!m_isHost) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set map.  ignoring";
             }
-            else if (m_alreadyLaunched) {
+            else if (m_alreadyStarted) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
             }
             else
@@ -172,7 +178,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
             if (!m_isHost) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set rating type.  ignoring";
             }
-            else if (m_alreadyLaunched) {
+            else if (m_alreadyStarted) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
             }
             else
@@ -186,7 +192,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
             if (!m_isHost) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set replay delay.  ignoring";
             }
-            else if (m_alreadyLaunched) {
+            else if (m_alreadyStarted) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
             }
             else
@@ -200,7 +206,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
             if (!m_isHost) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set title.  ignoring";
             }
-            else if (m_alreadyLaunched) {
+            else if (m_alreadyStarted) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
             }
             else
@@ -211,7 +217,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
         }
         else if (msg == "/quit")
         {
-            if (!m_launchClient.isRunning() || ++m_quitCount == 2)
+            if (!m_launchClient.isApplicationRunning() || ++m_quitCount == 2)
             {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] terminating with m_quitCount=" << m_quitCount;
                 qApp->quit();
@@ -254,38 +260,39 @@ void GpgNetGameLauncher::onResetQuitCount()
     }
 }
 
-void GpgNetGameLauncher::onLaunchGame()
+void GpgNetGameLauncher::onStartApplication()
 {
-    if (m_alreadyLaunched)
+    if (m_alreadyStarted)
     {
-        qInfo() << "[GpgNetGameLauncher::onLaunchGame] game already launched. ignoring";
+        qInfo() << "[GpgNetGameLauncher::onStartApplication] game already launched. ignoring";
         return;
     }
 
-    if (!m_readyToLaunch)
+    if (!m_readyToStart)
     {
-        qInfo() << "[GpgNetGameLauncher::onLaunchGame] game not ready to launch. deferring";
-        m_autoLaunch = true;
+        qInfo() << "[GpgNetGameLauncher::onStartApplication] game not ready to launch. deferring";
+        m_autoStart = true;
         return;
     }
 
     QString sessionName = m_thisPlayerName + "'s Game";
     createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits, m_randomPositions);
     copyOnlineDll(m_gamePath + "/online.dll");
+    m_alreadyLaunched = false;
 
-    qInfo() << "[GpgNetGameLauncher::onLaunchGame] m_launchClient.launch()";
-    if (!m_launchClient.launch())
+    qInfo() << "[GpgNetGameLauncher::onStartApplication] m_launchClient.launch()";
+    if (!m_launchClient.startApplication())
     {
         qWarning() << "[GpgNetGameLauncher::doLaunchGame] unable to launch game";
         return;
     }
 
-    m_alreadyLaunched = true;
+    m_alreadyStarted = true;
     m_pollStillActiveTimer.start(1000);
 
     m_gpgNetClient.sendGameState("Lobby", "Battleroom");
-    emit gameLaunched();
-    // from here on, game state is not driven by GpgNetGameLauncher but instead is inferred by GameMonitor
+    emit applicationStarted();
+    // next we expect to receive a call to our onLaunchClientStateChanged slot
 }
 
 void GpgNetGameLauncher::createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits, bool randomPositions)

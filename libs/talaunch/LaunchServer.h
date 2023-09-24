@@ -19,6 +19,7 @@ namespace talaunch {
         std::shared_ptr<jdplay::JDPlay> m_jdPlay;
         int m_shutdownCounter;
         bool m_loggedAConnection;
+        bool m_joinIsDisabled;
 
     signals:
         void quit();

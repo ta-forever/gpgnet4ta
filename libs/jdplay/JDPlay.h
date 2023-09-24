@@ -39,6 +39,7 @@
 namespace jdplay {
 
     BOOL FAR PASCAL EnumSessionsCallback(LPCDPSESSIONDESC2 lpThisSD, LPDWORD lpdwTimeOut, DWORD dwFlags, LPVOID lpContext);
+    std::string GuidToString(const GUID& guid);
 
     class JDPlay {
     private:
@@ -106,6 +107,8 @@ namespace jdplay {
 
         void updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD); //has to be public for the callback function
         static JDPlay* getInstance(); //makes the object available to the callback function
+
+        DPSESSIONDESC2& enumSessions();
 
     private:
         void deInitialize();

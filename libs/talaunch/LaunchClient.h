@@ -11,7 +11,7 @@ namespace talaunch {
         quint16 m_serverPort;
 
         QTcpSocket m_tcpSocket;
-        enum class State { CONNECTING, IDLE, RUNNING, FAIL };
+        enum class State { CONNECTING, IDLE, RUNNING, LAUNCHED, FAIL };
         State m_state;
 
         QString m_playerName;
@@ -29,8 +29,9 @@ namespace talaunch {
         void setIsHost(bool isHost);
         void setRequireSearch(bool requireSearch);  // false (default) for playing game, true for joining replay.  I don't know why
 
-        bool launch();
-        bool isRunning();
+        bool startApplication();
+        bool isApplicationRunning();
+        bool isGameLaunched();          // players have progressed from the battleroom to the game
 
     private:
         void onReadyReadTcp();

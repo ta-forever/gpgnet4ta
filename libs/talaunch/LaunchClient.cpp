@@ -82,7 +82,7 @@ void LaunchClient::setRequireSearch(bool requireSearch)
     m_requireSearch = requireSearch;
 }
 
-bool LaunchClient::launch()
+bool LaunchClient::startApplication()
 {
     connect(m_serverAddress, m_serverPort);
     if (m_tcpSocket.waitForConnected(3))
@@ -91,28 +91,33 @@ bool LaunchClient::launch()
                                         { "/host", "/host"}};
 
         QString args = QStringList({ cmd[m_isHost][m_requireSearch], m_gameGuid, m_playerName, m_gameAddress }).join(' ');
-        qInfo() << "[LaunchClient::launch]" << args;
+        qInfo() << "[LaunchClient::startApplication]" << args;
         m_tcpSocket.write(args.toUtf8());
         m_tcpSocket.flush();
         if (!m_tcpSocket.waitForReadyRead(30000))
         {
-            qInfo() << "[LaunchClient::launch] Did not receive a reply from server";
+            qInfo() << "[LaunchClient::startApplication] Did not receive a reply from server";
             m_state = State::FAIL;
         }
         onReadyReadTcp();
     }
     else
     {
-        qInfo() << "[LaunchClient::launch] cannot launch due to no connection to launch server";
+        qInfo() << "[LaunchClient::startApplication] cannot startApplication due to no connection to startApplication server";
         m_state = State::CONNECTING;
     }
 
-    return LaunchClient::isRunning();
+    return isApplicationRunning();
 }
 
-bool LaunchClient::isRunning()
+bool LaunchClient::isApplicationRunning()
 {
-    return m_state == State::RUNNING;
+    return m_state == State::RUNNING || m_state == State::LAUNCHED;
+}
+
+bool LaunchClient::isGameLaunched()
+{
+    return m_state == State::LAUNCHED;
 }
 
 void LaunchClient::onReadyReadTcp()
@@ -125,6 +130,8 @@ void LaunchClient::onReadyReadTcp()
     QByteArray data = m_tcpSocket.readAll();
     QStringList response = QString::fromUtf8(data).split(" ");
     qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
+
+    State oldState = m_state;
     if (response[0] == "IDLE")
     {
         m_state = State::IDLE;
@@ -132,6 +139,10 @@ void LaunchClient::onReadyReadTcp()
     else if (response[0] == "RUNNING")
     {
         m_state = State::RUNNING;
+    }
+    else if (response[0] == "LAUNCHED")
+    {
+        m_state = State::LAUNCHED;
     }
     else if (response[0] == "FAIL")
     {

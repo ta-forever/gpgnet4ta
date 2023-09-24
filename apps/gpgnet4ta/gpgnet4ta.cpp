@@ -159,7 +159,9 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Launching'";
                 if (m_isHost)
                 {
-                    m_gpgNetClient.sendGameState("Launching", "Launching");
+                    //this is now sent to gpgNetClient by GpgNetGameLauncher on receipt of message from LaunchClient
+                    //which determines the launch state via directplay API rather than packet sniffing as we've done here
+                    //m_gpgNetClient.sendGameState("Launching", "Launching");
                 }
             }
             else
@@ -706,13 +708,13 @@ int doMain(int argc, char* argv[])
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &launcher, &GpgNetGameLauncher::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::hostGame, [&launcher, &parser](QString mapName) {
             launcher.onHostGame(mapName, getMapDetails(parser.value("gamepath"), MAP_TOOL_EXE, mapName));
-            if (parser.isSet("autolaunch")) launcher.onLaunchGame();
+            if (parser.isSet("autolaunch")) launcher.onStartApplication();
         });
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, [&launcher, &parser](QString host, QString playerName, QString, int playerId) {
             launcher.onJoinGame(host, playerName, playerName, playerId);
-            if (parser.isSet("autolaunch")) launcher.onLaunchGame();
+            if (parser.isSet("autolaunch")) launcher.onStartApplication();
         });
-        QObject::connect(&launcher, &GpgNetGameLauncher::gameTerminated, &app, &QCoreApplication::quit);
+        QObject::connect(&launcher, &GpgNetGameLauncher::applicationTerminated, &app, &QCoreApplication::quit);
         QObject::connect(&lobby, &TaLobby::peerPingStats, [&gpgNetClient](QMap<quint32, qint64> pings) {
             QStringList peerPingPairs;
             for (auto it = pings.begin(); it != pings.end(); ++it)
@@ -764,7 +766,7 @@ int doMain(int argc, char* argv[])
                 }
             });
 
-            QObject::connect(&launcher, &GpgNetGameLauncher::gameLaunched, ircForward.get(), [ircForward, ircChannel]()
+            QObject::connect(&launcher, &GpgNetGameLauncher::applicationStarted, ircForward.get(), [ircForward, ircChannel]()
             {
                 ircForward->join(ircChannel);
                 ircForward->open();

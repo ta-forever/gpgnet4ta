@@ -286,7 +286,7 @@ int doMain(int argc, char* argv[])
     if (launchClient)
     {
         QObject::connect(&timer, &QTimer::timeout, [&launchClient, &demoStream, &replayClient, &replayer, &app]() {
-            if (!launchClient->isRunning())
+            if (!launchClient->isApplicationRunning())
             {
                 qInfo() << "[doMain] TA not running.  shutting down replayer";
                 demoStream.reset();
@@ -298,7 +298,7 @@ int doMain(int argc, char* argv[])
 
         QObject::connect(replayer.get(), &Replayer::readyToJoin, [&launchClient, &timer]() {
             qInfo() << "[doMain] launching TA";
-            launchClient->launch();
+            launchClient->startApplication();
             timer.setInterval(1000);
             timer.start();
         });

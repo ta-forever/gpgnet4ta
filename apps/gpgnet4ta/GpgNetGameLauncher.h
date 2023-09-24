@@ -27,10 +27,12 @@ class GpgNetGameLauncher: public QObject
     QString m_mapName;
     int m_thisPlayerId;
     QTimer m_pollStillActiveTimer;
-    bool m_readyToLaunch = false;
-    bool m_alreadyLaunched = false;
+
+    bool m_autoStart = false;           // "start" as in run the executable
+    bool m_readyToStart = false;
+    bool m_alreadyStarted = false;
+    bool m_alreadyLaunched = false;     // "launched" as in progressed from battleroom
     bool m_isHost = false;
-    bool m_autoLaunch = false;
     bool m_randomPositions = true;
     int m_quitCount = 0;
     QTimer m_quitCountResetTimer;
@@ -45,11 +47,11 @@ public:
     void onJoinGame(QString host, QString playerName, QString, int playerId);
 
     void onExtendedMessage(QString msg);
-    void onLaunchGame();
+    void onStartApplication();
 
 signals:
-    void gameLaunched();
-    void gameTerminated();
+    void applicationStarted();
+    void applicationTerminated();
 
 public slots:
     void pollJdplayStillActive();

@@ -183,6 +183,7 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
     else {
         qInfo() << "[LaunchServer::launchGame] success";
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
+        m_joinIsDisabled = false;
         notifyClients("RUNNING");
     }
 }
@@ -205,6 +206,15 @@ void LaunchServer::timerEvent(QTimerEvent* event)
                 emit gameExitedWithError(exitCode);
             }
             m_jdPlay.reset();
+        }
+        else if (m_jdPlay && m_jdPlay->isHost() && !m_joinIsDisabled)
+        {
+            DPSESSIONDESC2 & desc = m_jdPlay->enumSessions();
+            if (desc.dwFlags & DPSESSION_JOINDISABLED)
+            {
+                m_joinIsDisabled = true;
+                notifyClients("LAUNCHED");
+            }
         }
 
         --m_shutdownCounter;

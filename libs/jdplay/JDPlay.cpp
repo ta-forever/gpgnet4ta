@@ -47,6 +47,11 @@ using namespace std;
     lastError = ss.str(); \
 }
 
+//#define GLOBAL_DEBUG
+#ifdef GLOBAL_DEBUG
+static std::ofstream GlobalDebug("c:\\temp\\jdplay.log");
+#endif
+
 static std::ostream& operator<< (std::ostream& os, const GUID& guid)
 {
     const unsigned char* ptr = (const unsigned char*)&guid;
@@ -277,7 +282,7 @@ namespace jdplay {
         if (lpThisSD) {
             JDPlay::getInstance()->updateFoundSessionDescription(lpThisSD);
         }
-        return 0;
+        return false;
     }
 
     BOOL FAR PASCAL enumPlayersCallback(
@@ -696,6 +701,30 @@ namespace jdplay {
     void JDPlay::updateFoundSessionDescription(LPCDPSESSIONDESC2 lpFoundSD) {
         std::time_t now = std::time(0);
         char* date = std::ctime(&now);
+
+#ifdef GLOBAL_DEBUG
+        if (lpFoundSD) {
+            const DPSESSIONDESC2& dpSessionDesc = *lpFoundSD;
+            GlobalDebug << "[JDPlay::updateFoundSessionDescription] "
+                << " dwFlags:" << std::hex << dpSessionDesc.dwFlags
+                << " guidInstance:" << GuidToString(dpSessionDesc.guidInstance)
+                << " guidApplication:" << GuidToString(dpSessionDesc.guidApplication)
+                << " dwMaxPlayers:" << dpSessionDesc.dwMaxPlayers
+                << " dwCurrentPlayers:" << dpSessionDesc.dwCurrentPlayers
+                << " dwReserved1:" << std::hex << dpSessionDesc.dwReserved1
+                << " dwReserved2:" << std::hex << dpSessionDesc.dwReserved2
+                << " dwUser1:" << std::hex << dpSessionDesc.dwUser1
+                << " dwUser2:" << std::hex << dpSessionDesc.dwUser2
+                << " dwUser3:" << std::hex << dpSessionDesc.dwUser3
+                << " dwUser4:" << std::hex << dpSessionDesc.dwUser4
+                << std::endl;
+            GlobalDebug.flush();
+        }
+        else {
+            GlobalDebug << "[JDPlay::updateFoundSessionDescription] NULL lpFoundSD!";
+        }
+#endif
+
         debug()
             << "[JDPlay::updateFoundSessionDescription] " << date
             << "validateCount=" << validateCount
@@ -985,4 +1014,37 @@ namespace jdplay {
         return "ERROR";
     }
 
+    std::string GuidToString(const GUID& guid) {
+        std::ostringstream oss;
+        oss << std::hex
+            << std::setfill('0')
+            << std::setw(8) << guid.Data1 << '-'
+            << std::setw(4) << guid.Data2 << '-'
+            << std::setw(4) << guid.Data3 << '-'
+            << std::setw(2) << static_cast<int>(guid.Data4[0])
+            << std::setw(2) << static_cast<int>(guid.Data4[1]) << '-'
+            << std::setw(2) << static_cast<int>(guid.Data4[2])
+            << std::setw(2) << static_cast<int>(guid.Data4[3]) << '-'
+            << std::setw(2) << static_cast<int>(guid.Data4[4])
+            << std::setw(2) << static_cast<int>(guid.Data4[5])
+            << std::setw(2) << static_cast<int>(guid.Data4[6])
+            << std::setw(2) << static_cast<int>(guid.Data4[7]);
+
+        return oss.str();
+    }
+
+    DPSESSIONDESC2& JDPlay::enumSessions() {
+        DPSESSIONDESC2 sessionDesc;
+        ZeroMemory(&sessionDesc, sizeof(DPSESSIONDESC2));
+        sessionDesc.dwSize = sizeof(DPSESSIONDESC2);
+        sessionDesc.guidApplication = dpSessionDesc.guidApplication;
+        sessionDesc.guidInstance = dpSessionDesc.guidInstance;
+        HRESULT hr = lpDP->EnumSessions(&sessionDesc, 30, EnumSessionsCallback, 0, DPENUMSESSIONS_ALL);
+#ifdef GLOBAL_DEBUG
+        if FAILED(hr) {
+            GlobalDebug << "[JDPlay::sessionDesc] FAILED to EnumSessions: " << getDPERR(hr) << std::endl;
+        }
+#endif GLOBAL_DEBUG
+        return dpSessionDesc;
+    }
 }
