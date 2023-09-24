@@ -1,3 +1,3 @@
 #ifndef VERSION_STRING
-#define VERSION_STRING "2023.08.21"
+#define VERSION_STRING "2023.09.24"
 #endif
