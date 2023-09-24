@@ -5,7 +5,7 @@ set (CMAKE_CXX_STANDARD 11)
 find_package(Qt5 COMPONENTS Core Network REQUIRED)
 
 # -------------- libcommuni submodule --------
-set(ENABLE_IRC ON CACHE BOOL "Enable IRC integration using libcommuni https://github.com/communi/libcommuni")
+set(ENABLE_IRC OFF CACHE BOOL "Enable IRC integration using libcommuni https://github.com/communi/libcommuni")
 set(LIBCOMMUNI_DIR "${CMAKE_BINARY_DIR}/libcommuni" CACHE PATH "Path to libcommuni binaries https://github.com/communi/libcommuni")
 
 if (ENABLE_IRC)
