@@ -832,6 +832,53 @@ std::uint32_t TPlayerInfo::getMapHash()
     return *(std::uint32_t*)&data3[0];
 }
 
+TAlliance::TAlliance()
+{
+    dpidFrom = dpidTo = alliedToWithFrom = alliedFromWithTo = 0;
+}
+
+TAlliance::TAlliance(const bytestring& subPacket)
+{
+    const std::uint8_t* ptr = subPacket.data() + 1;
+    dpidFrom = toUint32(ptr);
+    dpidTo = toUint32(ptr + 4);
+    alliedFromWithTo = ptr[8];
+    alliedToWithFrom = toUint32(ptr + 9);
+}
+
+bytestring TAlliance::asSubPacket() const
+{
+    bytestring result;
+    result.push_back(std::uint8_t(SubPacketCode::ALLY_23));
+    serialise(result, dpidFrom);
+    serialise(result, dpidTo);
+    result.push_back(alliedFromWithTo);
+    serialise(result, alliedToWithFrom);
+    return result;
+}
+
+TTeam::TTeam()
+{
+    dpidFrom = 0;
+    teamNumber = 5; // no team
+}
+
+TTeam::TTeam(const bytestring& subPacket)
+{
+    const std::uint8_t* ptr = subPacket.data() + 1;
+    dpidFrom = toUint32(ptr);
+    teamNumber = ptr[4];
+}
+
+bytestring TTeam::asSubPacket() const
+{
+    bytestring result;
+    result.push_back(std::uint8_t(SubPacketCode::ALLY_23));
+    serialise(result, dpidFrom);
+    result.push_back(teamNumber);
+    return result;
+}
+
 TIdent2::TIdent2()
 { 
     std::memset(dpids, 0, sizeof(dpids));

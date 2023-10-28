@@ -26,6 +26,7 @@ struct PlayerData : public Player
     std::ostream& print(std::ostream& s) const;
 
     std::set<std::uint32_t> allies;
+    int battleroomTeamSelection;// not to be confused with teamNumber. teamnumber is our own deduction
     bool isWatcher = false;
     bool isAI = false;
     int slotNumber = -1;        // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
@@ -151,6 +152,8 @@ public:
         std::uint32_t sourceDplayId, const std::string &mapName, std::uint16_t maxUnits,
         unsigned playerSlotNumber, int playerSide, bool isWatcher, bool isAI, bool cheats);
     virtual void onChat(std::uint32_t sourceDplayId, const std::string &chat);
+    virtual void onAlliance(std::uint32_t subjectDplayId, std::uint32_t objectDplayId, bool isAllied);
+    virtual void onTeamSelection(std::uint32_t fromDplayId, int teamNumber);
     virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId);
     virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId);
     virtual void onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick);
@@ -175,7 +178,7 @@ protected:
     virtual const GameResult& latchEndGameResult(int winningTeamNumber);
 
     // returns 0u if not found
-    virtual std::uint32_t getPlayerByName(const std::string &name) const;
+    virtual std::uint32_t getPlayerDpidByName(const std::string &name) const;
 
     // return dplayids who have neither died nor are watchers
     virtual std::set<std::uint32_t> getActivePlayers() const;

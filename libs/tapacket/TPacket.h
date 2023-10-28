@@ -97,7 +97,7 @@ namespace tapacket
         std::uint8_t getPermLosByte();
         bool isAI();
         std::int8_t getSide();
-        std::uint8_t getSlotNumber();
+        std::uint8_t getSlotNumber();   // actually this is color
         std::string getMapName();
         std::uint32_t getMapHash();
                                         //record        +typecode   +smartpak
@@ -116,6 +116,34 @@ namespace tapacket
         std::uint32_t player2Id;        //186           //187       //194
         std::uint8_t data4;             //190           //191       //198
     };                                  //191           //192       //199
+
+    class TAlliance
+    {
+    public:
+        TAlliance();
+        TAlliance(const bytestring& subPacket);
+        bytestring asSubPacket() const;
+
+                                        //record        +typecode
+        std::uint32_t dpidFrom;         //0             //1
+        std::uint32_t dpidTo;           //4             //5
+        std::uint8_t alliedFromWithTo;  //8             //9
+        std::uint32_t alliedToWithFrom; //9             //10
+                                        //13            //14
+    };
+
+    class TTeam
+    {
+    public:
+        TTeam();
+        TTeam(const bytestring& subPacket);
+        bytestring asSubPacket() const;
+
+                                        //record        +typecode
+        std::uint32_t dpidFrom;         //0             //1
+        std::uint8_t teamNumber;        //4             //5
+                                        //5             //6
+    };
 
     class TIdent2
     {

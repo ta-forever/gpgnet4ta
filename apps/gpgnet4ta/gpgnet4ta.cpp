@@ -618,6 +618,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant.", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
     parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
     parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
+    parser.addOption(QCommandLineOption("israted", "Flag to indicate game is ranked.  Affects some of the messages sent to players."));
     parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join.", "irc"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
     parser.addOption(QCommandLineOption("lobbybindaddress", "Interface on which to bind the lobby interface.", "lobbybindaddress", "127.0.0.1"));
@@ -629,11 +630,17 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("numgames", "Player game count.", "count"));
     parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10.", "players", "10"));
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
-    parser.addOption(QCommandLineOption("israted", "Flag to indicate game is ranked.  Affects some of the messages sent to players."));
+    parser.addOption(QCommandLineOption("runtests", "Flag to just run tests and exit"));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
     qInstallMessageHandler(taflib::Logger::Log);
+
+    if (parser.isSet("runtests"))
+    {
+        GameMonitor2::test();
+        return 0;
+    }
 
     if (parser.isSet("democompilerdebugreq"))
     {
