@@ -6,8 +6,11 @@
 #include "tapacket/DPlayPacket.h"
 
 #include <algorithm>
+#include <cstring>
 #include <sstream>
 #include <QtCore/quuid.h>
+
+#include <windows.h>
 
 using namespace tafnet;
 
@@ -277,6 +280,8 @@ TafnetGameNode::TafnetGameNode(
     tapacket::TAPacketParser* gameMonitor,
     std::function<GameSender * ()> gameSenderFactory,
     std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory) :
+    m_startPositionsHandle(NULL),
+    m_startPositionsMemMap(NULL),
     m_tafnetNode(tafnetNode),
     m_packetParser(gameMonitor),
     m_gameTcpPort(0),
@@ -300,6 +305,16 @@ TafnetGameNode::TafnetGameNode(
     m_pendingEnumRequestsTimer.connect(&m_pendingEnumRequestsTimer, &QTimer::timeout, [this] { processPendingEnumRequests(); });
     m_pendingEnumRequestsTimer.setInterval(1000);
     m_pendingEnumRequestsTimer.start();
+}
+
+TafnetGameNode::~TafnetGameNode()
+{
+    if (m_startPositionsHandle != NULL)
+    {
+        UnmapViewOfFile(m_startPositionsHandle);
+        CloseHandle(m_startPositionsHandle);
+    }
+    m_startPositionsHandle = m_startPositionsMemMap = NULL;
 }
 
 std::set<std::uint16_t> TafnetGameNode::probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms)
@@ -483,17 +498,17 @@ void TafnetGameNode::messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint
     }
 }
 
-void TafnetGameNode::setPlayerInviteOrder(const std::vector<std::uint32_t>& playerIds)
+void TafnetGameNode::setPlayerInviteOrder(const std::vector<std::uint32_t>& tafnetIds)
 {
     std::ostringstream ss;
-    for (std::uint32_t id: playerIds)
+    for (std::uint32_t id: tafnetIds)
     {
         ss << id << ' ';
     }
     qInfo() << "[TafnetGameNode::setPlayerInviteOrder] " << ss.str().c_str();
 
     m_playerInviteOrder = std::queue<std::uint32_t>();
-    for (std::uint32_t id : playerIds)
+    for (std::uint32_t id : tafnetIds)
     {
         if (m_gameSenders.find(id) == m_gameSenders.end())
         {
@@ -503,6 +518,52 @@ void TafnetGameNode::setPlayerInviteOrder(const std::vector<std::uint32_t>& play
         {
             m_playerInviteOrder.push(id);
         }
+    }
+}
+
+struct StartPositionsShare
+{
+    std::uint32_t positionCount;
+    char orderedPlayerNames[10][32];
+};
+
+void TafnetGameNode::setPlayerStartPositions(const std::vector<std::string>& orderedPlayerNames)
+{
+    if (m_startPositionsHandle == NULL)
+    {
+        m_startPositionsHandle = CreateFileMapping((HANDLE)0xFFFFFFFF,
+            NULL,
+            PAGE_READWRITE,
+            0,
+            sizeof(StartPositionsShare),
+            "TADemo-StartPositions");
+
+        bool bExists = (GetLastError() == ERROR_ALREADY_EXISTS);
+
+        m_startPositionsMemMap = MapViewOfFile(m_startPositionsHandle,
+            FILE_MAP_ALL_ACCESS,
+            0,
+            0,
+            sizeof(StartPositionsShare));
+    }
+
+    if (m_startPositionsHandle && m_startPositionsMemMap)
+    {
+        memset(m_startPositionsMemMap, 0, sizeof(StartPositionsShare));
+        StartPositionsShare* sm = static_cast<StartPositionsShare*>(m_startPositionsMemMap);
+        sm->positionCount = orderedPlayerNames.size();
+        for (int n = 0; n < orderedPlayerNames.size(); ++n)
+        {
+            std::strncpy(sm->orderedPlayerNames[n], orderedPlayerNames[n].c_str(), sizeof(sm->orderedPlayerNames[n]));
+            sm->orderedPlayerNames[n][sizeof(sm->orderedPlayerNames[n])-1] = '\0';
+        }
+
+        std::ostringstream ss;
+        for (int n = 0; n < 10; ++n)
+        {
+            ss << sm->orderedPlayerNames[n] << ' ';
+        }
+        qInfo() << "[TafnetGameNode::setPlayerStartPositions] count=" << sm->positionCount << "names=" << ss.str().c_str();
     }
 }
 

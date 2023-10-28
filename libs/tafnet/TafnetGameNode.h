@@ -53,6 +53,7 @@ namespace tafnet
             tapacket::TAPacketParser *packetParser,
             std::function<GameSender * ()> gameSenderFactory,
             std::function<GameReceiver * (QSharedPointer<QUdpSocket>)> gameReceiverFactory);
+        ~TafnetGameNode();
 
         virtual void registerRemotePlayer(std::uint32_t remotePlayerId, std::uint16_t isHostEnumPort);
         virtual void unregisterRemotePlayer(std::uint32_t remotePlayerId);
@@ -60,7 +61,10 @@ namespace tafnet
 
         virtual void messageToLocalPlayer(std::uint32_t sourceDplayId, std::uint32_t tafnetid, bool isPrivate, const std::string& nick, const std::string& chat);
 
-        virtual void setPlayerInviteOrder(const std::vector<std::uint32_t> & playerIds);
+        // useful only by host instance. controls order that enum requests are passed to game
+        virtual void setPlayerInviteOrder(const std::vector<std::uint32_t>& tafnetIds);
+        // useful only by host instance, and only if his tdraw.dll supports the share memory interface
+        virtual void setPlayerStartPositions(const std::vector<std::string>& orderedPlayerNames);
 
     private:
 
@@ -80,5 +84,8 @@ namespace tafnet
 
         static std::set<std::uint16_t> probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
         static std::set<std::uint16_t> probeOccupiedUdpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms);
+
+        void* m_startPositionsHandle;
+        void* m_startPositionsMemMap;
     };
 }

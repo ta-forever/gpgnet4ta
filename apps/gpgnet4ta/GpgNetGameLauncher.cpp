@@ -147,7 +147,6 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
     try
     {
         taflib::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 3000);
-        qInfo() << "[GpgNetGameLauncher::onExtendedMessage]" << msg;
         if (msg.startsWith("/launch"))
         {
             if (!msg.endsWith("/launch"))

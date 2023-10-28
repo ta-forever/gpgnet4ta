@@ -42,6 +42,9 @@ public:
     void connectGameEvents(GameEventHandlerQt &subscriber);
     quint32 getLocalPlayerDplayId();
     void setPeerPingInterval(int milliseconds);
+    std::uint32_t getDplayIdFromTafnetId(std::uint32_t tafnetId);
+    std::string getPlayerNameFromTafnetId(std::uint32_t tafnetId);
+
 
 signals:
     void peerPingStats(QMap<quint32, qint64> pingsPerPeer);

@@ -246,12 +246,36 @@ void TaLobby::echoToGame(bool isPrivate, QString name, QString chat)
     m_game->messageToLocalPlayer(dplayId, tafnetId, isPrivate, name.toStdString(), chat.toStdString());
 }
 
+std::uint32_t TaLobby::getDplayIdFromTafnetId(std::uint32_t tafnetId)
+{
+    const std::set<std::string> knownPlayerNames = m_gameMonitor->getPlayerNames();
+    for (auto it = m_tafnetIdsByPlayerName.begin(); it != m_tafnetIdsByPlayerName.end(); ++it)
+    {
+        if (it.value() == tafnetId && knownPlayerNames.count(it.key().toStdString()) > 0)
+        {
+            return m_gameMonitor->getPlayerData(it.key().toStdString()).dplayid;
+        }
+    }
+    return 0;
+}
+
+std::string TaLobby::getPlayerNameFromTafnetId(std::uint32_t tafnetId)
+{
+    for (auto it = m_tafnetIdsByPlayerName.begin(); it != m_tafnetIdsByPlayerName.end(); ++it)
+    {
+        if (it.value() == tafnetId)
+        {
+            return it.key().toStdString();
+        }
+    }
+    return std::string();
+}
+
 void TaLobby::onExtendedMessage(QString msg)
 {
     try
     {
         taflib::Watchdog wd("TaLobby::onExtendedMessage", 3000);
-        qInfo() << "[TaLobby::onExtendedMessage]" << msg;
         if (msg.startsWith("/launch"))
         {
             QStringList args = msg.split(" ");
@@ -263,6 +287,24 @@ void TaLobby::onExtendedMessage(QString msg)
                     joinOrderIds.push_back(idString.toUInt());
                 }
                 m_game->setPlayerInviteOrder(joinOrderIds);
+            }
+        }
+        else if (msg.startsWith("/startpositions"))
+        {
+            QStringList args = msg.split(" ");
+            if (args.size() > 1)
+            {
+                std::vector<std::string> orderedPlayerNames;
+                for (QString idString : args[1].split(","))
+                {
+                    
+                    std::string playerName = getPlayerNameFromTafnetId(idString.toUInt());
+                    if (!playerName.empty())
+                    {
+                        orderedPlayerNames.push_back(playerName);
+                    }
+                }
+                m_game->setPlayerStartPositions(orderedPlayerNames);
             }
         }
     }
