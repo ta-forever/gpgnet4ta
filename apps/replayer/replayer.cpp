@@ -114,6 +114,16 @@ public:
             m_units.add(bs);
             ptr += subpakLen;
         }
+        if (m_verbose)
+        {
+            for (auto it = m_units.get().begin(); it != m_units.get().end(); ++it)
+            {
+                int sub = it->first.first;
+                unsigned id = it->first.second;
+                tapacket::bytestring bs = it->second;
+                qInfo() << "UnitInfo: sub=" << sub << "id=" << id << '(' << QString::number(id, 16) << ") data=" << QByteArray((const char*)bs.data(), bs.size()).toHex();
+            }
+        }
     }
 
     virtual void handle(const tapacket::Packet& packet, const std::vector<tapacket::bytestring>& unpaked, std::size_t n)
