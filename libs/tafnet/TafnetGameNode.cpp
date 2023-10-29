@@ -10,7 +10,9 @@
 #include <sstream>
 #include <QtCore/quuid.h>
 
+#ifdef WIN32
 #include <windows.h>
+#endif
 
 using namespace tafnet;
 
@@ -309,12 +311,14 @@ TafnetGameNode::TafnetGameNode(
 
 TafnetGameNode::~TafnetGameNode()
 {
+#ifdef WIN32
     if (m_startPositionsHandle != NULL)
     {
         UnmapViewOfFile(m_startPositionsHandle);
         CloseHandle(m_startPositionsHandle);
     }
     m_startPositionsHandle = m_startPositionsMemMap = NULL;
+#endif
 }
 
 std::set<std::uint16_t> TafnetGameNode::probeOccupiedTcpPorts(QHostAddress address, std::uint16_t begin, std::uint16_t end, int timeoutms)
@@ -529,6 +533,7 @@ struct StartPositionsShare
 
 void TafnetGameNode::setPlayerStartPositions(const std::vector<std::string>& orderedPlayerNames)
 {
+#ifdef WIN32
     if (m_startPositionsHandle == NULL)
     {
         m_startPositionsHandle = CreateFileMapping((HANDLE)0xFFFFFFFF,
@@ -565,6 +570,9 @@ void TafnetGameNode::setPlayerStartPositions(const std::vector<std::string>& ord
         }
         qInfo() << "[TafnetGameNode::setPlayerStartPositions] count=" << sm->positionCount << "names=" << ss.str().c_str();
     }
+#else
+    qWarning() << "[TafnetGameNode::setPlayerStartPositions] only supported on WIN32";
+#endif
 }
 
 void TafnetGameNode::processPendingEnumRequests()
