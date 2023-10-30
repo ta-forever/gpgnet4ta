@@ -217,7 +217,11 @@ void LaunchServer::timerEvent(QTimerEvent* event)
             }
         }
 
-        --m_shutdownCounter;
+        if (!m_jdPlay || exitCode != STILL_ACTIVE)
+        {
+            --m_shutdownCounter;
+        }
+
         if (m_shutdownCounter <= 0)
         {
             qInfo() << "[LaunchServer::timerEvent] shutdown counter expired.  terminating";
