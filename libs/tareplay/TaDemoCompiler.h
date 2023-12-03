@@ -8,7 +8,16 @@ namespace tareplay {
     class TaDemoCompiler: public QObject
     {
     public:
-        TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize);
+
+        enum class NoUserContextOption
+        {
+            IGNORE,
+            CLOSE_CONNECTION,
+            ABORT_CONNECTION,
+            DISCONNECT_FROM_HOST
+        };
+
+        TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize, NoUserContextOption noUserContextOption);
         ~TaDemoCompiler();
 
         void sendStopRecordingToAllInGame(quint32 gameId);
@@ -66,6 +75,7 @@ namespace tareplay {
         QMap<QTcpSocket*, QSharedPointer<UserContext> > m_players;
         QMap<quint32, GameContext> m_games;
         quint32 m_timerCounter;
+        NoUserContextOption m_noUserContextOption;
     };
 
 }

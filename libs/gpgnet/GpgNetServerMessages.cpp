@@ -1,5 +1,7 @@
 #include "GpgNetServerMessages.h"
 
+#include <stdexcept>
+
 using namespace gpgnet;
 
 static void SplitAliasAndRealName(QString aliasAndReal, QString& alias, QString& real)

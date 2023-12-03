@@ -49,6 +49,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("compiler", "run the TA Demo Compiler Server"));
     parser.addOption(QCommandLineOption("replayer", "run the TA Demo Replay Server"));
     parser.addOption(QCommandLineOption("lobbyserver", "Connect to lobby server to retrieve game information eg lobby.taforever.com:8001", "lobbyserver", ""));
+    parser.addOption(QCommandLineOption("nousercontextoption", "What to do when message received for a player with insufficient context: ignore, close, abort or disconnect", "nousercontextoption", "ignore"));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -68,13 +69,35 @@ int doMain(int argc, char* argv[])
         });
     }
 
+    TaDemoCompiler::NoUserContextOption noUserContextOption;
+    if (parser.value("nousercontextoption") == "close")
+    {
+        noUserContextOption = TaDemoCompiler::NoUserContextOption::CLOSE_CONNECTION;
+        qInfo() << "NoUserContextOption: CLOSE";
+    }
+    else if (parser.value("nousercontextoption") == "abort")
+    {
+        noUserContextOption = TaDemoCompiler::NoUserContextOption::ABORT_CONNECTION;
+        qInfo() << "NoUserContextOption: ABORT";
+    }
+    else if (parser.value("nousercontextoption") == "disconnect")
+    {
+        noUserContextOption = TaDemoCompiler::NoUserContextOption::DISCONNECT_FROM_HOST;
+        qInfo() << "NoUserContextOption: DISCONNECT";
+    }
+    else
+    {
+        noUserContextOption = TaDemoCompiler::NoUserContextOption::IGNORE;
+        qInfo() << "NoUserContextOption: IGNORE";
+    }
+
     std::shared_ptr<TaDemoCompiler> compiler;
     std::shared_ptr<TaReplayServer> replayServer;
     QHostAddress host = parser.isSet("addr") ? QHostAddress(parser.value("addr")) : QHostAddress(QHostAddress::AnyIPv4);
     quint16 port = parser.value("port").toInt();
     if (parser.isSet("compiler"))
     {
-        compiler.reset(new TaDemoCompiler(parser.value("demofile"), host, port++, parser.value("mindemosize").toUInt()));
+        compiler.reset(new TaDemoCompiler(parser.value("demofile"), host, port++, parser.value("mindemosize").toUInt(), noUserContextOption));
     }
     if (parser.isSet("replayer"))
     {

@@ -3,6 +3,8 @@
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qjsonobject.h>
 
+#include <stdexcept>
+
 TafLobbyJsonProtocol::TafLobbyJsonProtocol(QIODevice* ioDevice) :
     m_dataStream(ioDevice)
 {

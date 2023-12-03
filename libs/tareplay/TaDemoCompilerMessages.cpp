@@ -1,5 +1,7 @@
 #include "TaDemoCompilerMessages.h"
 
+#include <stdexcept>
+
 using namespace tareplay;
 
 const char* const HelloMessage::ID = "Hello";

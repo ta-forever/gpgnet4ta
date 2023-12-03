@@ -70,10 +70,12 @@ QString TaDemoCompiler::GameContext::getUnitDataHash() const
     return md5.result().toHex();
 }
 
-TaDemoCompiler::TaDemoCompiler(QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize):
+TaDemoCompiler::TaDemoCompiler(
+    QString demoPathTemplate, QHostAddress addr, quint16 port, quint32 minDemoSize, NoUserContextOption noUserContextOption):
     m_demoPathTemplate(demoPathTemplate),
     m_minDemoSize(minDemoSize),
-    m_timerCounter(0u)
+    m_timerCounter(0u),
+    m_noUserContextOption(noUserContextOption)
 {
     qInfo() << "[TaDemoCompiler::TaDemoCompiler] starting server on addr" << addr << "port" << port;
     m_tcpServer.listen(addr, port);
@@ -164,24 +166,7 @@ void TaDemoCompiler::onReadyRead()
             QVariantList command = userContext.gpgNetParser.GetCommand(*userContext.dataStream);
             QString cmd = command[0].toString();
 
-            if (cmd == GameMoveMessage::ID)
-            {
-                auto itGame = m_games.find(userContext.gameId);
-                if (itGame != m_games.end())
-                {
-                    auto itGamePlayer = itGame->players.find(userContext.playerDpId);
-                    if (itGamePlayer != itGame->players.end())
-                    {
-                        itGame->expiryCountdown = GAME_EXPIRY_TICKS;
-                        if (itGame->demoCompilation)
-                        {
-                            commitMove(itGame.value(), userContext.gamePlayerNumber, GameMoveMessage(command));
-                            committedMoves = true;
-                        }
-                    }
-                }
-            }
-            else if (cmd == HelloMessage::ID)
+            if (cmd == HelloMessage::ID)
             {
                 HelloMessage msg(command);
                 qInfo() << "[TaDemoCompiler::onReadyRead] received Hello from player" << sender->peerAddress().toString() << '/' << msg.playerName << '/' << msg.playerDpId << "in game" << msg.gameId;
@@ -211,6 +196,50 @@ void TaDemoCompiler::onReadyRead()
                     userContext.playerDpId = msg.playerDpId;
                     userContext.playerName = sender->peerAddress().toString();
                     m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
+                }
+            }
+            
+            if (userContext.gameId == 0 || userContext.playerDpId == 0)
+            {
+                qWarning() << "[TaDemoCompiler::onReadyRead] received cmd" << cmd << "from player" << sender->peerAddress().toString() << "but there is no user context";
+                switch (m_noUserContextOption)
+                {
+                case NoUserContextOption::CLOSE_CONNECTION:
+                    qWarning() << "[TaDemoCompiler::onReadyRead] ... close()ing connection";
+                    sender->close();
+                    break;
+
+                case NoUserContextOption::ABORT_CONNECTION:
+                    qWarning() << "[TaDemoCompiler::onReadyRead] ... abort()ing connection";
+                    sender->abort();
+                    break;
+
+                case NoUserContextOption::DISCONNECT_FROM_HOST:
+                    qWarning() << "[TaDemoCompiler::onReadyRead] ... disconnectFromHost()ing";
+                    sender->disconnectFromHost();
+                    break;
+
+                case NoUserContextOption::IGNORE:
+                default:
+                    qWarning() << "[TaDemoCompiler::onReadyRead] ... ignoring";
+                    break;
+                }
+            }
+            else if (cmd == GameMoveMessage::ID)
+            {
+                auto itGame = m_games.find(userContext.gameId);
+                if (itGame != m_games.end())
+                {
+                    auto itGamePlayer = itGame->players.find(userContext.playerDpId);
+                    if (itGamePlayer != itGame->players.end())
+                    {
+                        itGame->expiryCountdown = GAME_EXPIRY_TICKS;
+                        if (itGame->demoCompilation)
+                        {
+                            commitMove(itGame.value(), userContext.gamePlayerNumber, GameMoveMessage(command));
+                            committedMoves = true;
+                        }
+                    }
                 }
             }
             else if (cmd == GameInfoMessage::ID)

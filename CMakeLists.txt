@@ -1,5 +1,5 @@
-project(gpgnet4ta)
 cmake_minimum_required(VERSION 3.16)
+project(gpgnet4ta)
 set (CMAKE_CXX_STANDARD 11)
 
 find_package(Qt5 COMPONENTS Core Network REQUIRED)
