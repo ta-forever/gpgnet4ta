@@ -174,6 +174,7 @@ void TaDemoCompiler::onReadyRead()
                 userContext.playerDpId = msg.playerDpId;
                 userContext.playerName = msg.playerName;
                 m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
+                continue;
             }
             else if (cmd == ReconnectMessage::ID)
             {
@@ -197,6 +198,7 @@ void TaDemoCompiler::onReadyRead()
                     userContext.playerName = sender->peerAddress().toString();
                     m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
                 }
+                continue;
             }
             
             if (userContext.gameId == 0 || userContext.playerDpId == 0)
