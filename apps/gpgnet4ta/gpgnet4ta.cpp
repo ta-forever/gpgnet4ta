@@ -638,7 +638,10 @@ int doMain(int argc, char* argv[])
 
     if (parser.isSet("runtests"))
     {
-        GameMonitor2::test();
+        for (int allianceMethod = 0; allianceMethod <=6; ++allianceMethod)
+        {
+            GameMonitor2::test(allianceMethod);
+        }
         return 0;
     }
 

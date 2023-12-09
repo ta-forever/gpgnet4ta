@@ -14,7 +14,7 @@ struct Player
 {
     Player();
 
-    int side = -1;
+    int side;
     std::string name;           // upto 64
 };
 
@@ -27,14 +27,14 @@ struct PlayerData : public Player
 
     std::set<std::uint32_t> allies;
     int battleroomTeamSelection;// not to be confused with teamNumber. teamnumber is our own deduction
-    bool isWatcher = false;
-    bool isAI = false;
-    int slotNumber = -1;        // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
-    bool isDead = false;        // advertised that their commander died, or was rejected by a player
-    std::uint32_t tick = 0u;    // serial of last 2C packet
-    std::uint32_t dplayid = 0u;
-    int armyNumber = 0;         // assigned based on sorted names so is consistent across all players' instances
-    int teamNumber = 0;         // reflects alliances at time of launch, and is consistent across all players' demo recordings
+    bool isWatcher;
+    bool isAI;
+    int slotNumber;             // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
+    bool isDead;                // advertised that their commander died, or was rejected by a player
+    std::uint32_t tick;         // serial of last 2C packet
+    std::uint32_t dplayid;
+    int armyNumber;             // assigned based on sorted names so is consistent across all players' instances
+    int teamNumber;             // reflects alliances at time of launch, and is consistent across all players' demo recordings
                                 // 0:invalid, >0:team number.  The no-team-selected / ffa option is not supported
                                 // everyone is on a team regardless if that team only has one player
                                 // (Forged Alliance reserves team=1 for no-team-selected)
@@ -116,7 +116,7 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     GameEventHandler *m_gameEventHandler;
 
 public:
-    static void test();
+    static void test(int allianceMethod);
 
     GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks);
 

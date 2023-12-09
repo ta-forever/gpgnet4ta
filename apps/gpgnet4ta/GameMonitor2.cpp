@@ -5,7 +5,6 @@
 #include <iostream>
 #include <sstream>
 
-
 #ifdef QT_CORE_LIB
 #include "QtCore/qdebug.h"
 #include "taflib/Watchdog.h"
@@ -20,14 +19,33 @@
 #define WATCHDOG(name,timeout)
 #endif
 
-Player::Player()
+Player::Player():
+    side(-1)
 { }
 
-PlayerData::PlayerData()
+PlayerData::PlayerData():
+    battleroomTeamSelection(5),
+    isWatcher(false),
+    isAI(false),
+    slotNumber(-1),
+    isDead(false),
+    tick(0u),
+    dplayid(0u),
+    armyNumber(0),
+    teamNumber(0)
 { }
 
 PlayerData::PlayerData(const Player &player):
-Player(player)
+    Player(player),
+    battleroomTeamSelection(5),
+    isWatcher(false),
+    isAI(false),
+    slotNumber(-1),
+    isDead(false),
+    tick(0u),
+    dplayid(0u),
+    armyNumber(0),
+    teamNumber(0)
 { }
 
 std::ostream & PlayerData::print(std::ostream &s) const
@@ -349,22 +367,22 @@ void GameMonitor2::onChat(std::uint32_t sourceDplayId, const std::string &chat)
 
     if (m_gameEventHandler) m_gameEventHandler->onChat(chat, sourceDplayId == m_localDplayId);
 
-    //if (updateAlliances(sourceDplayId, chat))
-    //{
-    //    updatePlayerArmies();
-    //    if (!m_gameStarted)
-    //    {
-    //        notifyPlayerStatuses();
-    //    }
+    if (updateAlliances(sourceDplayId, chat))
+    {
+        updatePlayerArmies();
+        if (!m_gameStarted)
+        {
+            notifyPlayerStatuses();
+        }
 
-    //    // teams are frozen on game start, but players can still cause a mutual draw by allying after start
-    //    int winningTeamNumber;
-    //    if (checkEndGameCondition(winningTeamNumber) && winningTeamNumber < 0)
-    //    {
-    //        // we can latch a mutual draw straight away
-    //        latchEndGameResult(winningTeamNumber);
-    //    }
-    //}
+        // teams are frozen on game start, but players can still cause a mutual draw by allying after start
+        int winningTeamNumber;
+        if (checkEndGameCondition(winningTeamNumber) && winningTeamNumber < 0)
+        {
+            // we can latch a mutual draw straight away
+            latchEndGameResult(winningTeamNumber);
+        }
+    }
 }
 
 void GameMonitor2::onAlliance(std::uint32_t subjectDpid, std::uint32_t objectDpid, bool isAllied)
@@ -383,7 +401,8 @@ void GameMonitor2::onAlliance(std::uint32_t subjectDpid, std::uint32_t objectDpi
         return;
     }
 
-    LOG_INFO("[GameMonitor2::onAlliance] subject=" << itSubject->second.name.c_str() << "object=" << itObject->second.name.c_str() << "isAllied=" << isAllied);
+    const bool wasAllied = itSubject->second.allies.count(objectDpid);
+    LOG_INFO("[GameMonitor2::onAlliance] subject=" << itSubject->second.name.c_str() << "object=" << itObject->second.name.c_str() << "wasAllied=" << wasAllied << "isAllied=" << isAllied);
 
     if (isAllied)
     {
@@ -394,18 +413,22 @@ void GameMonitor2::onAlliance(std::uint32_t subjectDpid, std::uint32_t objectDpi
         itSubject->second.allies.erase(objectDpid);
     }
 
-    updatePlayerArmies();
-    if (!m_gameStarted)
+    if (wasAllied != isAllied)
     {
-        notifyPlayerStatuses();
-    }
 
-    // teams are frozen on game start, but players can still cause a mutual draw by allying after start
-    int winningTeamNumber;
-    if (checkEndGameCondition(winningTeamNumber) && winningTeamNumber < 0)
-    {
-        // we can latch a mutual draw straight away
-        latchEndGameResult(winningTeamNumber);
+        updatePlayerArmies();
+        if (!m_gameStarted)
+        {
+            notifyPlayerStatuses();
+        }
+
+        // teams are frozen on game start, but players can still cause a mutual draw by allying after start
+        int winningTeamNumber;
+        if (checkEndGameCondition(winningTeamNumber) && winningTeamNumber < 0)
+        {
+            // we can latch a mutual draw straight away
+            latchEndGameResult(winningTeamNumber);
+        }
     }
 }
 
@@ -420,6 +443,7 @@ void GameMonitor2::onTeamSelection(std::uint32_t fromDplayId, int teamNumber)
     }
 
     LOG_INFO("[GameMonitor2::onTeamSelection] subject=" << itSubject->second.name.c_str() << "brTeamNumber=" << teamNumber);
+    itSubject->second.battleroomTeamSelection = teamNumber;
 
     bool anyAllianceChange = false;
     for (auto itObject = m_players.begin(); itObject != m_players.end(); ++itObject)
@@ -430,7 +454,6 @@ void GameMonitor2::onTeamSelection(std::uint32_t fromDplayId, int teamNumber)
             const bool wasAlliedBA = itObject->second.allies.count(itSubject->second.dplayid);
             const bool nowAllied = (teamNumber < 5) && (teamNumber == itObject->second.battleroomTeamSelection);
 
-            itSubject->second.battleroomTeamSelection = teamNumber;
             if (nowAllied)
             {
                 itSubject->second.allies.insert(itObject->second.dplayid);
@@ -443,6 +466,7 @@ void GameMonitor2::onTeamSelection(std::uint32_t fromDplayId, int teamNumber)
                 itObject->second.allies.erase(itSubject->second.dplayid);
                 anyAllianceChange = anyAllianceChange || wasAlliedAB || wasAlliedBA;
             }
+            LOG_INFO("[GameMonitor2::onTeamSelection] object:" << itObject->second.name.c_str() << "brTeam:" << itObject->second.battleroomTeamSelection << "wasAlliedAB:" << wasAlliedAB << "wasAlliedBA:" << wasAlliedBA << "nowAllied:" << nowAllied << "anyAllianceChange:" << anyAllianceChange);
         }
     }
     if (anyAllianceChange)
@@ -958,8 +982,84 @@ static void TestGameResult(const std::vector<GameResult::ArmyResult>& results, i
     TESTASSERT(false);
 }
 
-void GameMonitor2::test()
+static void SetTestAlliance(int method, GameMonitor2& gm, int p1, int p2, bool isAllied)
 {
+    std::ostringstream p1ss;
+    if (isAllied)
+    {
+        p1ss << "<player" << p1 << ">" << "  allied with player" << p2;
+    }
+    else
+    {
+        p1ss << "<player" << p1 << ">" << "  broke alliance with player" << p2;
+    }
+
+    switch (method)
+    {
+    case 0:
+        gm.onChat(p1, p1ss.str());
+        break;
+
+    case 1:
+        gm.onAlliance(p1, p2, isAllied);
+        break;
+
+    case 2:
+        gm.onChat(p1, p1ss.str());
+        gm.onAlliance(p1, p2, isAllied);
+        break;
+
+    case 3:
+        if (p1 % 2 == 0)
+        {
+            gm.onChat(p1, p1ss.str());
+        }
+        else
+        {
+            gm.onAlliance(p1, p2, isAllied);
+        }
+        break;
+
+    case 4:
+        if (p1 % 2 == 0)
+        {
+            gm.onChat(p1, p1ss.str());
+        }
+        else
+        {
+            gm.onChat(p1, p1ss.str());
+            gm.onAlliance(p1, p2, isAllied);
+        }
+        break;
+
+    case 5:
+        if (p1 % 3 == 0)
+        {
+            gm.onChat(p1, p1ss.str());
+        }
+        else
+        {
+            gm.onAlliance(p1, p2, isAllied);
+        }
+        break;
+
+    case 6:
+        if (p1 % 3 == 0)
+        {
+            gm.onChat(p1, p1ss.str());
+        }
+        else
+        {
+            gm.onChat(p1, p1ss.str());
+            gm.onAlliance(p1, p2, isAllied);
+        }
+        break;
+    };
+}
+
+void GameMonitor2::test(int allianceMethod)
+{
+    qInfo() << "[GameMonitor2::test] =========== allianceMethod:" << allianceMethod;
     {
         // normal 1v1 player1 wins
         GameMonitor2 gm(NULL, 100, 10);
@@ -1253,8 +1353,8 @@ void GameMonitor2::test()
         gm.onGameTick(2, 101);
         TESTASSERT(gm.isGameStarted());
         TESTASSERT(!gm.isGameOver());
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
         TESTASSERT(gm.isGameStarted());
         TESTASSERT(gm.isGameOver());
         const auto& gr = gm.getGameResult();
@@ -1275,8 +1375,8 @@ void GameMonitor2::test()
         gm.onGameTick(2, 50);
         TESTASSERT(!gm.isGameStarted());
         TESTASSERT(!gm.isGameOver());
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
         TESTASSERT(!gm.isGameStarted());
         TESTASSERT(!gm.isGameOver());
         gm.onGameTick(1, 101);
@@ -1331,10 +1431,10 @@ void GameMonitor2::test()
         TESTASSERT(!gm.isGameOver());
 
         // normal pregame alliances
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
-        gm.onAlliance(3, 4, true);
-        gm.onAlliance(4, 3, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 3, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 3, true);
         gm.onGameTick(1, 101);
         gm.onGameTick(2, 101);
         gm.onGameTick(3, 101);
@@ -1347,12 +1447,12 @@ void GameMonitor2::test()
         TESTASSERT(*gm.getMutualAllies(4, gm.m_frozenPlayers).begin() == 3);
 
         // game started already, changes in alliance should be ignored
-        gm.onAlliance(3, 4, false);
-        gm.onAlliance(4, 3, false);
-        gm.onAlliance(1, 3, true);
-        gm.onAlliance(2, 3, true);
-        gm.onAlliance(3, 1, true);
-        gm.onAlliance(3, 2, true);
+        SetTestAlliance(allianceMethod, gm, 3, 4, false);
+        SetTestAlliance(allianceMethod, gm, 4, 3, false);
+        SetTestAlliance(allianceMethod, gm, 1, 3, true);
+        SetTestAlliance(allianceMethod, gm, 2, 3, true);
+        SetTestAlliance(allianceMethod, gm, 3, 1, true);
+        SetTestAlliance(allianceMethod, gm, 3, 2, true);
         gm.onGameTick(1, 102);
         gm.onGameTick(2, 102);
         gm.onGameTick(3, 102);
@@ -1402,10 +1502,10 @@ void GameMonitor2::test()
         TESTASSERT(!gm.isGameOver());
 
         // normal pregame alliances
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
-        gm.onAlliance(3, 4, true);
-        gm.onAlliance(4, 3, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 3, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 3, true);
         gm.onGameTick(1, 101);
         gm.onGameTick(2, 101);
         gm.onGameTick(3, 101);
@@ -1423,8 +1523,8 @@ void GameMonitor2::test()
         TESTASSERT(gm.isGameStarted());
         TESTASSERT(!gm.isGameOver());
 
-        gm.onAlliance(2, 4, true);
-        gm.onAlliance(4, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 2, true);
         TESTASSERT(gm.isGameStarted());
         TESTASSERT(gm.isGameOver());
 
@@ -1446,8 +1546,8 @@ void GameMonitor2::test()
         gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onStatus(3, "Comet Catcher", 1500, 3, 0, false, false, false);
         gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
@@ -1484,8 +1584,8 @@ void GameMonitor2::test()
         gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
         gm.onStatus(3, "Comet Catcher", 1500, 3, 0, false, false, false);
         gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
-        gm.onAlliance(1, 2, true);
-        gm.onAlliance(2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
         gm.onGameTick(1, 10);
         gm.onGameTick(2, 10);
         TESTASSERT(!gm.isGameStarted());
