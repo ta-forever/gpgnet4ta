@@ -65,6 +65,7 @@ namespace tareplay {
         void closeExpiredGames();
         void pingUsers();
         void timerEvent(QTimerEvent* event);
+        void handleBadConnection(QAbstractSocket* sender);
 
         std::shared_ptr<std::ostream> commitHeaders(const GameContext& game, QString filename);
         void commitMove(GameContext &, int playerNumber, const GameMoveMessage &);

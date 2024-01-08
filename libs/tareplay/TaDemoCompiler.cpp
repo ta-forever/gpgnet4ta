@@ -204,28 +204,7 @@ void TaDemoCompiler::onReadyRead()
             if (userContext.gameId == 0 || userContext.playerDpId == 0)
             {
                 qWarning() << "[TaDemoCompiler::onReadyRead] received cmd" << cmd << "from player" << sender->peerAddress().toString() << "but there is no user context";
-                switch (m_noUserContextOption)
-                {
-                case NoUserContextOption::CLOSE_CONNECTION:
-                    qWarning() << "[TaDemoCompiler::onReadyRead] ... close()ing connection";
-                    sender->close();
-                    break;
-
-                case NoUserContextOption::ABORT_CONNECTION:
-                    qWarning() << "[TaDemoCompiler::onReadyRead] ... abort()ing connection";
-                    sender->abort();
-                    break;
-
-                case NoUserContextOption::DISCONNECT_FROM_HOST:
-                    qWarning() << "[TaDemoCompiler::onReadyRead] ... disconnectFromHost()ing";
-                    sender->disconnectFromHost();
-                    break;
-
-                case NoUserContextOption::IGNORE:
-                default:
-                    qWarning() << "[TaDemoCompiler::onReadyRead] ... ignoring";
-                    break;
-                }
+                handleBadConnection(sender);
             }
             else if (cmd == GameMoveMessage::ID)
             {
@@ -253,12 +232,30 @@ void TaDemoCompiler::onReadyRead()
             }
             else if (cmd == GamePlayerMessage::ID)
             {
+                GamePlayerMessage gpm(command);
                 auto itGame = m_games.find(userContext.gameId);
                 if (itGame != m_games.end())
                 {
                     GameContext& game = itGame.value();
-                    game.expiryCountdown = GAME_EXPIRY_TICKS;
-                    game.players[userContext.playerDpId]->gamePlayerInfo = GamePlayerMessage(command);
+                    auto itPlayer = game.players.find(userContext.playerDpId);
+                    if (itPlayer != game.players.end())
+                    {
+                        game.expiryCountdown = GAME_EXPIRY_TICKS;
+                        game.players[userContext.playerDpId]->gamePlayerInfo = gpm;
+                    }
+                    else
+                    {
+                        qWarning() << "[TaDemoCompiler::onReadyRead] received cmd" << cmd << "from player" << sender->peerAddress().toString() << " but player dipid not found in game";
+                        qWarning() << "    GamePlayerMessage.name" << gpm.name;
+                        qWarning() << "    userContext.gameId" << userContext.gameId;
+                        qWarning() << "    userContext.playerDpId" << userContext.playerDpId;
+                        qWarning() << "    game.gameId" << game.gameId;
+                        qWarning() << "    game.info" << game.header.mapName << game.header.maxUnits;
+                        qWarning() << "    game.players" << game.players.keys();
+                        tapacket::TPlayerInfo tpi(tapacket::bytestring((const std::uint8_t*)gpm.statusMessage.data(), gpm.statusMessage.size()));
+                        qWarning() << "    gpm.playerinfo.dpid" << tpi.player1Id << tpi.player2Id;
+                        handleBadConnection(sender);
+                    }
                 }
             }
             else if (cmd == GameUnitDataMessage::ID)
@@ -631,3 +628,30 @@ void TaDemoCompiler::pingUsers()
         }
     }
 }
+
+void TaDemoCompiler::handleBadConnection(QAbstractSocket* sender)
+{
+    switch (m_noUserContextOption)
+    {
+    case NoUserContextOption::CLOSE_CONNECTION:
+        qWarning() << "[TaDemoCompiler::handleBadConnection] ... close()ing connection";
+        sender->close();
+        break;
+
+    case NoUserContextOption::ABORT_CONNECTION:
+        qWarning() << "[TaDemoCompiler::handleBadConnection] ... abort()ing connection";
+        sender->abort();
+        break;
+
+    case NoUserContextOption::DISCONNECT_FROM_HOST:
+        qWarning() << "[TaDemoCompiler::handleBadConnection] ... disconnectFromHost()ing";
+        sender->disconnectFromHost();
+        break;
+
+    case NoUserContextOption::IGNORE:
+    default:
+        qWarning() << "[TaDemoCompiler::handleBadConnection] ... ignoring";
+        break;
+    }
+}
+
