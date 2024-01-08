@@ -417,7 +417,6 @@ void TafnetGameNode::updateGameSenderPortsFromDplayHeader(const char* data, int 
                 if (m_initialOccupiedTcpPorts.count(port) == 0) {
                     qInfo() << "[TafnetGameNode::updateGameSenderPortsFromDplayHeader] TCP port probe:" << port << "seems likely belonging to game";
                     m_gameTcpPort = port;
-                    break;
                 }
             }
         }
