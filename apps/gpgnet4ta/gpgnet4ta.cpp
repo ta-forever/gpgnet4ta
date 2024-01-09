@@ -159,9 +159,10 @@ public:
                 qInfo() << "[ForwardGameEventsToGpgNet::onGameStarted] GameState 'Launching'";
                 if (m_isHost)
                 {
-                    //this is now sent to gpgNetClient by GpgNetGameLauncher on receipt of message from LaunchClient
-                    //which determines the launch state via directplay API rather than packet sniffing as we've done here
-                    //m_gpgNetClient.sendGameState("Launching", "Launching");
+                    //This duplicates message sent to gpgNetClient by GpgNetGameLauncher on receipt of message from LaunchClient
+                    //which determines the launch state via directplay API rather than packet sniffing as we've done here.
+                    //Its duplicated here because directplay isn't detecting launch for some players ...
+                    m_gpgNetClient.sendGameState("Launching", "Launching");
                 }
             }
             else
