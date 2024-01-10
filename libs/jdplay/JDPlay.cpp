@@ -368,6 +368,7 @@ namespace jdplay {
         {
             s[s.find('\0')] = '@';
         }
+        m_logStream.str("");
         return s;
     }
 
@@ -725,14 +726,7 @@ namespace jdplay {
         }
 #endif
 
-        debug()
-            << "[JDPlay::updateFoundSessionDescription] " << date
-            << "validateCount=" << validateCount
-            << ", searchValidationCount=" << searchValidationCount << std::endl;
-        debug() << "lpFoundSD="; print(debug(), lpFoundSD, 4) << std::endl;
-
         if (validateCount > -1) {
-            debug() << "validateCount > -1" << std::endl;
             bool areEqual = dpSessionDesc.dwSize == lpFoundSD->dwSize
                 && dpSessionDesc.dwFlags == lpFoundSD->dwFlags
                 && dpSessionDesc.guidInstance == lpFoundSD->guidInstance
@@ -747,15 +741,17 @@ namespace jdplay {
 
             if (areEqual) {
                 validateCount++;
-                debug() << "areEqual" << std::endl;
             }
             else {
                 validateCount = -1;
-                debug() << "!areEqual" << std::endl;
+                debug()
+                    << "[JDPlay::updateFoundSessionDescription] " << date
+                    << "validateCount=" << validateCount
+                    << ", searchValidationCount=" << searchValidationCount << std::endl;
+                debug() << "lpFoundSD="; print(debug(), lpFoundSD, 4) << std::endl;
             }
         }
         else {
-            debug() << "validateCount <= -1" << std::endl;
             //so that dplay also joins sessions created ingame
             dpSessionDesc.dwSize = lpFoundSD->dwSize;
             dpSessionDesc.dwFlags = lpFoundSD->dwFlags;
@@ -788,7 +784,6 @@ namespace jdplay {
         }
 
         foundLobby = (validateCount >= searchValidationCount);
-        debug() << "foundLobby=" << foundLobby << std::endl;
     }
 
     std::wstring JDPlay::getAdvertisedPlayerName()
@@ -1044,7 +1039,7 @@ namespace jdplay {
         if FAILED(hr) {
             GlobalDebug << "[JDPlay::sessionDesc] FAILED to EnumSessions: " << getDPERR(hr) << std::endl;
         }
-#endif GLOBAL_DEBUG
+#endif
         return dpSessionDesc;
     }
 }

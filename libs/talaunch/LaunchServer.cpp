@@ -210,12 +210,18 @@ void LaunchServer::timerEvent(QTimerEvent* event)
         else if (m_jdPlay && m_jdPlay->isHost() && !m_joinIsDisabled)
         {
             DPSESSIONDESC2 & desc = m_jdPlay->enumSessions();
+            std::string jdLog = m_jdPlay->getLogString();
+            if (jdLog.size() > 0)
+            {
+                qInfo() << "[LaunchServer::timerEvent] jdplay->enumSessions:\n" << jdLog.c_str();
+            }
             if (desc.dwFlags & DPSESSION_JOINDISABLED)
             {
                 m_joinIsDisabled = true;
                 notifyClients("LAUNCHED");
             }
         }
+
 
         if (!m_jdPlay || exitCode != STILL_ACTIVE)
         {
