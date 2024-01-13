@@ -708,6 +708,7 @@ int doMain(int argc, char* argv[])
             gpgNetClient);
 
         launcher.parseGameFileVersions(parser.value("verify"));
+        launcher.setEnableGameFileVersionVerify(parser.isSet("israted"));
 
         // TaLobby is a conglomerate of objects that handles a man-in-the-middle relay of TA network traffic
         // Together they work to tunnel everything through a single UDP port
