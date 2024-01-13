@@ -6,6 +6,7 @@
 
 #include <QtNetwork/qtcpserver.h>
 #include <QtNetwork/qtcpsocket.h>
+#include <QtCore/qstring.h>
 
 namespace talaunch {
 
@@ -25,6 +26,7 @@ namespace talaunch {
         void quit();
         void gameFailedToLaunch(QString gameGuid);
         void gameExitedWithError(quint32 exitCode);
+        void gameFileVersionMismatch(QString message);
 
     public:
         LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout);

@@ -1,5 +1,6 @@
 #include "GpgNetGameLauncher.h"
 #include "taflib/Watchdog.h"
+#include "taflib/nswfl_crc32.h"
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfileinfo.h>
 #include "QtCore/qthread.h"
@@ -16,7 +17,8 @@ GpgNetGameLauncher::GpgNetGameLauncher(
     m_lockOptions(lockOptions),
     m_maxUnits(maxUnits),
     m_launchClient(launchClient),
-    m_gpgNetClient(gpgNetclient)
+    m_gpgNetClient(gpgNetclient),
+    m_enableGameFileVersionVerify(false)
 {
     m_gpgNetClient.sendGameState("Idle", "Idle");
     QObject::connect(&m_pollStillActiveTimer, &QTimer::timeout, this, &GpgNetGameLauncher::pollJdplayStillActive);
@@ -172,6 +174,14 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 m_gpgNetClient.sendGameOption("MapDetails", mapDetails);
             }
         }
+        else if (msg.startsWith("/enable_game_file_version_verify"))
+        {
+            setEnableGameFileVersionVerify(true);
+        }
+        else if (msg.startsWith("/disable_game_file_version_verify"))
+        {
+            setEnableGameFileVersionVerify(false);
+        }
         else if (msg.startsWith("/rating_type ") && msg.size() > 13)
         {
             if (!m_isHost) {
@@ -277,6 +287,11 @@ void GpgNetGameLauncher::onStartApplication()
     QString sessionName = m_thisPlayerName + "'s Game";
     createTAInitFile(m_iniTemplate, m_iniTarget, sessionName, m_mapName, m_playerLimit, m_lockOptions, m_maxUnits, m_randomPositions);
     copyOnlineDll(m_gamePath + "/online.dll");
+    if (m_enableGameFileVersionVerify && !verifyGameFileVersions())
+    {
+        qWarning() << "[GpgNetGameLauncher::doLaunchGame] aborting launch";
+        return;
+    }
     m_alreadyLaunched = false;
 
     qInfo() << "[GpgNetGameLauncher::onStartApplication] m_launchClient.launch()";
@@ -334,4 +349,81 @@ void GpgNetGameLauncher::copyOnlineDll(QString target)
     if (!fileInfo.exists()) {
       qWarning() << "[GpgNetGameLauncher::copyOnlineDll] copy online.dll failed!";
     }
+}
+
+bool GpgNetGameLauncher::verifyGameFileVersions()
+{
+    for (auto it = m_gameFileVersions.begin(); it != m_gameFileVersions.end(); ++it)
+    {
+        QFile file(m_gamePath + "/" + it.key());
+        if (file.exists() && !it.value().empty())
+        {
+            if (!file.open(QIODevice::ReadOnly))
+            {
+                qWarning() << "[GpgNetGameLauncher::verifyGameFileVersions]" << file.fileName() << "unable to open for reading";
+                m_launchClient.failGameFileVersions(file.fileName(), "unable to open for reading");
+                return false;
+            }
+
+            unsigned int fileCrc32(-1);
+            {
+                taflib::CRC32 crc32;
+                crc32.Initialize();
+                const qint64 bufferSize = 4096;
+                char buffer[bufferSize];
+                while (!file.atEnd())
+                {
+                    qint64 bytesRead = file.read(buffer, bufferSize);
+                    crc32.PartialCRC(&fileCrc32, (const unsigned char*)buffer, bytesRead);
+                }
+
+                file.close();
+                fileCrc32 ^= -1;
+            }
+
+            if (!it.value().contains(fileCrc32))
+            {
+                qWarning() << "[GpgNetGameLauncher::verifyGameFileVersions]" << file.fileName() << "crc32 version mismatch" << QString::number(fileCrc32, 16);
+                m_launchClient.failGameFileVersions(file.fileName(), QString(" (crc=") + QString::number(fileCrc32, 16) + ") fails version verification.  It is not whitelisted for competitive play.  Please revert to an official version, or play an unranked game instead.");
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void GpgNetGameLauncher::parseGameFileVersions(QString versions)
+{
+    for (QString item : versions.split(";"))
+    {
+        QStringList fileAndCrcs = item.split(":");
+        if (fileAndCrcs.size() == 2)
+        {
+            QString filename = fileAndCrcs[0];
+            QStringList crcs = fileAndCrcs[1].split(",");
+            for (QString s : crcs)
+            {
+                bool ok;
+                qint64 crc32 = s.toLongLong(&ok, 16);
+                if (ok)
+                {
+                    qInfo() << "[GpgNetGameLauncher::parseGameFileVersions] game file version:" << filename << QString::number(crc32, 16);
+                    m_gameFileVersions[filename].insert(crc32);
+                }
+                else
+                {
+                    qWarning() << "[GpgNetGameLauncher::parseGameFileVersions] unable to parse " << s << "as a crc32";
+                }
+            }
+        }
+        else
+        {
+            qWarning() << "[GpgNetGameLauncher::parseGameFileVersions] unable to parse game file version:" << item;
+        }
+    }
+}
+
+void GpgNetGameLauncher::setEnableGameFileVersionVerify(bool enable)
+{
+    m_enableGameFileVersionVerify = enable;
 }

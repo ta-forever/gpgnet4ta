@@ -126,6 +126,13 @@ void RunAs(QString cmd, QStringList args, QString verb = "runas")
     CloseHandle(ShExecInfo.hProcess);
 }
 
+void GameFileVersionMismatchMsgBox(taflib::MessageBoxThread& msgbox, QString message)
+{
+    QString err = "Unable to launch game!\n\n";
+    err += message;
+    QMetaObject::invokeMethod(&msgbox, "onMessage", Qt::QueuedConnection, Q_ARG(QString, "TAForever"), Q_ARG(QString, err), Q_ARG(unsigned int, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL));
+}
+
 void UnableToLaunchMsgBox(taflib::MessageBoxThread& msgbox, QString guid)
 {
     QMap<QString, QString> appSettings = GetDplayLobbableApp(guid);
@@ -295,6 +302,9 @@ int doMain(int argc, char* argv[])
     talaunch::LaunchServer launchServer(QHostAddress("127.0.0.1"), parser.value("bindport").toInt(), parser.value("keepalivetimeout").toInt());
     taflib::MessageBoxThread msgbox;
     QObject::connect(&launchServer, &talaunch::LaunchServer::quit, &app, &QCoreApplication::quit);
+    QObject::connect(&launchServer, &talaunch::LaunchServer::gameFileVersionMismatch, [&msgbox](QString message) {
+        GameFileVersionMismatchMsgBox(msgbox, message);
+    });
     QObject::connect(&launchServer, &talaunch::LaunchServer::gameFailedToLaunch, [&msgbox](QString guid) {
         UnableToLaunchMsgBox(msgbox, guid);
     });

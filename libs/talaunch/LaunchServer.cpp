@@ -96,6 +96,13 @@ void LaunchServer::onReadyReadTcp()
             m_shutdownCounter = m_keepAliveTimeout;
             return;
         }
+        else if (args.size() >= 1 && args[0] == "/failversion")
+        {
+            QString message = args.mid(1).join(" ");
+            m_jdPlay.reset();
+            notifyClients("FAIL");
+            emit gameFileVersionMismatch(message);
+        }
         else if (args.size() >= 4 && args[0] == "/host")
         {
             launchGame(args[1], args[2], args[3], true, false);

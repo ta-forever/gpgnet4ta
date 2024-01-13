@@ -3,6 +3,8 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/qmap.h>
 #include <QtCore/qsharedpointer.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qset.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qtimer.h>
 
@@ -37,10 +39,16 @@ class GpgNetGameLauncher: public QObject
     int m_quitCount = 0;
     QTimer m_quitCountResetTimer;
 
+    QMap<QString, QSet<qint64> > m_gameFileVersions;    // key: filename; value: list of permitted crc32
+    bool m_enableGameFileVersionVerify;
+
 public:
     GpgNetGameLauncher(
         QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
         talaunch::LaunchClient &launchClient, gpgnet::GpgNetClient &gpgNetClient);
+
+    void parseGameFileVersions(QString versions);
+    void setEnableGameFileVersionVerify(bool enable);
 
     void onCreateLobby(int protocol, int localPort, QString playerName, QString, int playerId, int natTraversal);
     void onHostGame(QString mapName, QString mapDetails);
@@ -60,4 +68,5 @@ public slots:
 private:
     static void createTAInitFile(QString tmplateFilename, QString iniFilename, QString session, QString mission, int playerLimit, bool lockOptions, int maxUnits, bool randomPositions);
     static void copyOnlineDll(QString gamePath);
+    bool verifyGameFileVersions();
 };

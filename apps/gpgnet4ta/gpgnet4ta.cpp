@@ -632,6 +632,7 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("players", "Max number of players 2 to 10.", "players", "10"));
     parser.addOption(QCommandLineOption("proactiveresend", "Measure packet-loss during game setup and thereafter send multiple copies of packets accordingly."));
     parser.addOption(QCommandLineOption("runtests", "Flag to just run tests and exit"));
+    parser.addOption(QCommandLineOption("verify", "Game file CRC32's to verify.  <filename>:<crc>,<crc>,...;<filename>:<crc>,<crc>,...;...", "verify", ""));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -705,6 +706,8 @@ int doMain(int argc, char* argv[])
             1000,
             launchClient,
             gpgNetClient);
+
+        launcher.parseGameFileVersions(parser.value("verify"));
 
         // TaLobby is a conglomerate of objects that handles a man-in-the-middle relay of TA network traffic
         // Together they work to tunnel everything through a single UDP port

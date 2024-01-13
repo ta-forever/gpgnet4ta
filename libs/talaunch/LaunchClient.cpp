@@ -82,6 +82,30 @@ void LaunchClient::setRequireSearch(bool requireSearch)
     m_requireSearch = requireSearch;
 }
 
+bool LaunchClient::failGameFileVersions(QString filename, QString reason)
+{
+    connect(m_serverAddress, m_serverPort);
+    if (m_tcpSocket.waitForConnected(3))
+    {
+        QString message = QString("/failversion %1 %2)").arg(filename).arg(reason);
+        qInfo() << "[LaunchClient::failGameFileVersions]" << message;
+        m_tcpSocket.write(message.toUtf8());
+        m_tcpSocket.flush();
+        if (!m_tcpSocket.waitForReadyRead(30000))
+        {
+            qInfo() << "[LaunchClient::failGameFileVersions] Did not receive a reply from server";
+            m_state = State::FAIL;
+        }
+        onReadyReadTcp();
+    }
+    else
+    {
+        qInfo() << "[LaunchClient::failGameFileVersions] cannot failGameFileVersions due to no connection to launch server";
+    }
+
+    return isApplicationRunning();
+}
+
 bool LaunchClient::startApplication()
 {
     connect(m_serverAddress, m_serverPort);
@@ -103,7 +127,7 @@ bool LaunchClient::startApplication()
     }
     else
     {
-        qInfo() << "[LaunchClient::startApplication] cannot startApplication due to no connection to startApplication server";
+        qInfo() << "[LaunchClient::startApplication] cannot startApplication due to no connection to launch server";
         m_state = State::CONNECTING;
     }
 

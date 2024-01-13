@@ -32,6 +32,7 @@ namespace talaunch {
         bool startApplication();
         bool isApplicationRunning();
         bool isGameLaunched();          // players have progressed from the battleroom to the game
+        bool failGameFileVersions(QString filename, QString reason);
 
     private:
         void onReadyReadTcp();
