@@ -40,7 +40,7 @@ namespace tareplay {
             int gamePlayerNumber;   // 1..10
         };
 
-        static const quint32 GAME_EXPIRY_TICKS = 60;
+        static const quint32 GAME_EXPIRY_TICKS = 3600;
         struct GameContext
         {
             GameContext();
