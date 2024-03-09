@@ -1,8 +1,10 @@
 #pragma once
 
+#include "nswfl_crc32.h"
 #include "tapacket/TADemoParser.h"
 #include "QtCore/qobject.h"
 #include <queue>
+#include <set>
 
 namespace jdplay {
     class JDPlay;
@@ -112,6 +114,9 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::vector<const UnitInfo*> m_demoUnitInfoLinear;              // pointers into m_demoUnitInfo
     std::uint32_t m_demoUnitsCrc;
     std::queue<std::pair<tapacket::Packet, std::vector<tapacket::bytestring> > > m_pendingGamePackets; // source player number (NOT dpid) and subpak
+    std::queue<unsigned> m_recentChatMessageCrcsExpireyQueue;
+    std::set<unsigned> m_recentChatMessageCrcsSet;
+    taflib::CRC32 m_crc;
 
 public:
     Replayer(std::istream*);

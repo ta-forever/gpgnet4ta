@@ -946,9 +946,18 @@ bool Replayer::doPlay()
             {
             case tapacket::SubPacketCode::CHAT_05:
             {
-                if (!m_nochat)
+                unsigned crc = m_crc.FullCRC(move.data(), 65);
+                if (!m_nochat && 0u == m_recentChatMessageCrcsSet.count(crc))
                 {
                     filteredMoves += move;
+                }
+                m_recentChatMessageCrcsSet.insert(crc);
+                m_recentChatMessageCrcsExpireyQueue.push(crc);
+                while (m_recentChatMessageCrcsExpireyQueue.size() > 16)
+                {
+                    crc = m_recentChatMessageCrcsExpireyQueue.front();
+                    m_recentChatMessageCrcsExpireyQueue.pop();
+                    m_recentChatMessageCrcsSet.erase(crc);
                 }
                 break;
             }
