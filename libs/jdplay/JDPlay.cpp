@@ -390,7 +390,7 @@ namespace jdplay {
         ::SysFreeString(lpoleguid);
 
         if (hr != S_OK) {
-            SET_LAST_ERROR("initialize() - ERROR: invalid GUID");
+            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: invalid GUID");
             return false;
         }
 
@@ -408,7 +408,7 @@ namespace jdplay {
             hr = CoInitialize(NULL);
 
             if (hr != S_OK) {
-                SET_LAST_ERROR("initialize() - ERROR: failed to initialize COM");
+                SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to initialize COM");
                 return false;
             }
 
@@ -418,7 +418,7 @@ namespace jdplay {
             hr = CoCreateInstance(CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay3, (LPVOID*)&lpDP);
 
             if (hr != S_OK) {
-                SET_LAST_ERROR("initialize() - ERROR: failed to initialize DirectPlay");
+                SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to initialize DirectPlay");
                 return false;
             }
 
@@ -938,75 +938,77 @@ namespace jdplay {
         isInitialized = false;
     }
 
-    const char* JDPlay::getDPERR(HRESULT hr) {
-        if (DP_OK) return "DP_OK";
-        if (DPERR_ALREADYINITIALIZED) return "DPERR_ALREADYINITIALIZED";
-        if (DPERR_ACCESSDENIED) return "DPERR_ACCESSDENIED";
-        if (DPERR_ACTIVEPLAYERS) return "DPERR_ACTIVEPLAYERS";
-        if (DPERR_BUFFERTOOSMALL) return "DPERR_BUFFERTOOSMALL";
-        if (DPERR_CANTADDPLAYER) return "DPERR_CANTADDPLAYER";
-        if (DPERR_CANTCREATEGROUP) return "DPERR_CANTCREATEGROUP";
-        if (DPERR_CANTCREATEPLAYER) return "DPERR_CANTCREATEPLAYER";
-        if (DPERR_CANTCREATESESSION) return "DPERR_CANTCREATESESSION";
-        if (DPERR_CAPSNOTAVAILABLEYET) return "DPERR_CAPSNOTAVAILABLEYET";
-        if (DPERR_EXCEPTION) return "DPERR_CAPSNOTAVAILABLEYET";
-        if (DPERR_GENERIC) return "DPERR_GENERIC";
-        if (DPERR_INVALIDFLAGS) return "DPERR_INVALIDFLAGS";
-        if (DPERR_INVALIDOBJECT) return "DPERR_INVALIDOBJECT";
-        if (DPERR_INVALIDPARAMS) return "DPERR_INVALIDPARAMS";
-        if (DPERR_INVALIDPLAYER) return "DPERR_INVALIDPLAYER";
-        if (DPERR_INVALIDGROUP) return "DPERR_INVALIDGROUP";
-        if (DPERR_NOCAPS) return "DPERR_NOCAPS";
-        if (DPERR_NOCONNECTION) return "DPERR_NOCONNECTION";
-        if (DPERR_NOMEMORY) return "DPERR_NOMEMORY";
-        if (DPERR_OUTOFMEMORY) return "DPERR_OUTOFMEMORY";
-        if (DPERR_NOMESSAGES) return "DPERR_NOMESSAGES";
-        if (DPERR_NONAMESERVERFOUND) return "DPERR_NONAMESERVERFOUND";
-        if (DPERR_NOPLAYERS) return "DPERR_NOPLAYERS";
-        if (DPERR_NOSESSIONS) return "DPERR_NOSESSIONS";
-        if (DPERR_PENDING) return "DPERR_PENDING";
-        if (DPERR_SENDTOOBIG) return "DPERR_SENDTOOBIG";
-        if (DPERR_TIMEOUT) return "DPERR_TIMEOUT";
-        if (DPERR_UNAVAILABLE) return "DPERR_UNAVAILABLE";
-        if (DPERR_UNSUPPORTED) return "DPERR_UNSUPPORTED";
-        if (DPERR_BUSY) return "DPERR_BUSY";
-        if (DPERR_USERCANCEL) return "DPERR_USERCANCEL";
-        if (DPERR_NOINTERFACE) return "DPERR_NOINTERFACE";
-        if (DPERR_CANNOTCREATESERVER) return "DPERR_CANNOTCREATESERVER";
-        if (DPERR_PLAYERLOST) return "DPERR_PLAYERLOST";
-        if (DPERR_SESSIONLOST) return "DPERR_SESSIONLOST";
-        if (DPERR_UNINITIALIZED) return "DPERR_UNINITIALIZED";
-        if (DPERR_NONEWPLAYERS) return "DPERR_NONEWPLAYERS";
-        if (DPERR_INVALIDPASSWORD) return "DPERR_INVALIDPASSWORD";
-        if (DPERR_CONNECTING) return "DPERR_CONNECTING";
-        if (DPERR_CONNECTIONLOST) return "DPERR_CONNECTIONLOST";
-        if (DPERR_UNKNOWNMESSAGE) return "DPERR_UNKNOWNMESSAGE";
-        if (DPERR_CANCELFAILED) return "DPERR_CANCELFAILED";
-        if (DPERR_INVALIDPRIORITY) return "DPERR_INVALIDPRIORITY";
-        if (DPERR_NOTHANDLED) return "DPERR_NOTHANDLED";
-        if (DPERR_CANCELLED) return "DPERR_CANCELLED";
-        if (DPERR_ABORTED) return "DPERR_ABORTED";
-        if (DPERR_BUFFERTOOLARGE) return "DPERR_BUFFERTOOLARGE";
-        if (DPERR_CANTCREATEPROCESS) return "DPERR_CANTCREATEPROCESS";
-        if (DPERR_APPNOTSTARTED) return "DPERR_APPNOTSTARTED";
-        if (DPERR_INVALIDINTERFACE) return "DPERR_INVALIDINTERFACE";
-        if (DPERR_NOSERVICEPROVIDER) return "DPERR_NOSERVICEPROVIDER";
-        if (DPERR_UNKNOWNAPPLICATION) return "DPERR_UNKNOWNAPPLICATION";
-        if (DPERR_NOTLOBBIED) return "DPERR_NOTLOBBIED";
-        if (DPERR_SERVICEPROVIDERLOADED) return "DPERR_SERVICEPROVIDERLOADED";
-        if (DPERR_ALREADYREGISTERED) return "DPERR_ALREADYREGISTERED";
-        if (DPERR_NOTREGISTERED) return "DPERR_NOTREGISTERED";
-        if (DPERR_AUTHENTICATIONFAILED) return "DPERR_AUTHENTICATIONFAILED";
-        if (DPERR_CANTLOADSSPI) return "DPERR_CANTLOADSSPI";
-        if (DPERR_ENCRYPTIONFAILED) return "DPERR_ENCRYPTIONFAILED";
-        if (DPERR_SIGNFAILED) return "DPERR_SIGNFAILED";
-        if (DPERR_CANTLOADSECURITYPACKAGE) return "DPERR_CANTLOADSECURITYPACKAGE";
-        if (DPERR_ENCRYPTIONNOTSUPPORTED) return "DPERR_ENCRYPTIONNOTSUPPORTED";
-        if (DPERR_CANTLOADCAPI) return "DPERR_CANTLOADCAPI";
-        if (DPERR_NOTLOGGEDIN) return "DPERR_NOTLOGGEDIN";
-        if (DPERR_LOGONDENIED) return "DPERR_LOGONDENIED";
+    std::string JDPlay::getDPERR(HRESULT hr) {
+        if (hr == DP_OK) return "DP_OK";
+        if (hr == DPERR_ALREADYINITIALIZED) return "DPERR_ALREADYINITIALIZED";
+        if (hr == DPERR_ACCESSDENIED) return "DPERR_ACCESSDENIED";
+        if (hr == DPERR_ACTIVEPLAYERS) return "DPERR_ACTIVEPLAYERS";
+        if (hr == DPERR_BUFFERTOOSMALL) return "DPERR_BUFFERTOOSMALL";
+        if (hr == DPERR_CANTADDPLAYER) return "DPERR_CANTADDPLAYER";
+        if (hr == DPERR_CANTCREATEGROUP) return "DPERR_CANTCREATEGROUP";
+        if (hr == DPERR_CANTCREATEPLAYER) return "DPERR_CANTCREATEPLAYER";
+        if (hr == DPERR_CANTCREATESESSION) return "DPERR_CANTCREATESESSION";
+        if (hr == DPERR_CAPSNOTAVAILABLEYET) return "DPERR_CAPSNOTAVAILABLEYET";
+        if (hr == DPERR_EXCEPTION) return "DPERR_CAPSNOTAVAILABLEYET";
+        if (hr == DPERR_GENERIC) return "DPERR_GENERIC";
+        if (hr == DPERR_INVALIDFLAGS) return "DPERR_INVALIDFLAGS";
+        if (hr == DPERR_INVALIDOBJECT) return "DPERR_INVALIDOBJECT";
+        if (hr == DPERR_INVALIDPARAMS) return "DPERR_INVALIDPARAMS";
+        if (hr == DPERR_INVALIDPLAYER) return "DPERR_INVALIDPLAYER";
+        if (hr == DPERR_INVALIDGROUP) return "DPERR_INVALIDGROUP";
+        if (hr == DPERR_NOCAPS) return "DPERR_NOCAPS";
+        if (hr == DPERR_NOCONNECTION) return "DPERR_NOCONNECTION";
+        if (hr == DPERR_NOMEMORY) return "DPERR_NOMEMORY";
+        if (hr == DPERR_OUTOFMEMORY) return "DPERR_OUTOFMEMORY";
+        if (hr == DPERR_NOMESSAGES) return "DPERR_NOMESSAGES";
+        if (hr == DPERR_NONAMESERVERFOUND) return "DPERR_NONAMESERVERFOUND";
+        if (hr == DPERR_NOPLAYERS) return "DPERR_NOPLAYERS";
+        if (hr == DPERR_NOSESSIONS) return "DPERR_NOSESSIONS";
+        if (hr == DPERR_PENDING) return "DPERR_PENDING";
+        if (hr == DPERR_SENDTOOBIG) return "DPERR_SENDTOOBIG";
+        if (hr == DPERR_TIMEOUT) return "DPERR_TIMEOUT";
+        if (hr == DPERR_UNAVAILABLE) return "DPERR_UNAVAILABLE";
+        if (hr == DPERR_UNSUPPORTED) return "DPERR_UNSUPPORTED";
+        if (hr == DPERR_BUSY) return "DPERR_BUSY";
+        if (hr == DPERR_USERCANCEL) return "DPERR_USERCANCEL";
+        if (hr == DPERR_NOINTERFACE) return "DPERR_NOINTERFACE";
+        if (hr == DPERR_CANNOTCREATESERVER) return "DPERR_CANNOTCREATESERVER";
+        if (hr == DPERR_PLAYERLOST) return "DPERR_PLAYERLOST";
+        if (hr == DPERR_SESSIONLOST) return "DPERR_SESSIONLOST";
+        if (hr == DPERR_UNINITIALIZED) return "DPERR_UNINITIALIZED";
+        if (hr == DPERR_NONEWPLAYERS) return "DPERR_NONEWPLAYERS";
+        if (hr == DPERR_INVALIDPASSWORD) return "DPERR_INVALIDPASSWORD";
+        if (hr == DPERR_CONNECTING) return "DPERR_CONNECTING";
+        if (hr == DPERR_CONNECTIONLOST) return "DPERR_CONNECTIONLOST";
+        if (hr == DPERR_UNKNOWNMESSAGE) return "DPERR_UNKNOWNMESSAGE";
+        if (hr == DPERR_CANCELFAILED) return "DPERR_CANCELFAILED";
+        if (hr == DPERR_INVALIDPRIORITY) return "DPERR_INVALIDPRIORITY";
+        if (hr == DPERR_NOTHANDLED) return "DPERR_NOTHANDLED";
+        if (hr == DPERR_CANCELLED) return "DPERR_CANCELLED";
+        if (hr == DPERR_ABORTED) return "DPERR_ABORTED";
+        if (hr == DPERR_BUFFERTOOLARGE) return "DPERR_BUFFERTOOLARGE";
+        if (hr == DPERR_CANTCREATEPROCESS) return "DPERR_CANTCREATEPROCESS";
+        if (hr == DPERR_APPNOTSTARTED) return "DPERR_APPNOTSTARTED";
+        if (hr == DPERR_INVALIDINTERFACE) return "DPERR_INVALIDINTERFACE";
+        if (hr == DPERR_NOSERVICEPROVIDER) return "DPERR_NOSERVICEPROVIDER";
+        if (hr == DPERR_UNKNOWNAPPLICATION) return "DPERR_UNKNOWNAPPLICATION";
+        if (hr == DPERR_NOTLOBBIED) return "DPERR_NOTLOBBIED";
+        if (hr == DPERR_SERVICEPROVIDERLOADED) return "DPERR_SERVICEPROVIDERLOADED";
+        if (hr == DPERR_ALREADYREGISTERED) return "DPERR_ALREADYREGISTERED";
+        if (hr == DPERR_NOTREGISTERED) return "DPERR_NOTREGISTERED";
+        if (hr == DPERR_AUTHENTICATIONFAILED) return "DPERR_AUTHENTICATIONFAILED";
+        if (hr == DPERR_CANTLOADSSPI) return "DPERR_CANTLOADSSPI";
+        if (hr == DPERR_ENCRYPTIONFAILED) return "DPERR_ENCRYPTIONFAILED";
+        if (hr == DPERR_SIGNFAILED) return "DPERR_SIGNFAILED";
+        if (hr == DPERR_CANTLOADSECURITYPACKAGE) return "DPERR_CANTLOADSECURITYPACKAGE";
+        if (hr == DPERR_ENCRYPTIONNOTSUPPORTED) return "DPERR_ENCRYPTIONNOTSUPPORTED";
+        if (hr == DPERR_CANTLOADCAPI) return "DPERR_CANTLOADCAPI";
+        if (hr == DPERR_NOTLOGGEDIN) return "DPERR_NOTLOGGEDIN";
+        if (hr == DPERR_LOGONDENIED) return "DPERR_LOGONDENIED";
 
-        return "ERROR";
+        std::ostringstream ss;
+        ss << std::hex << "0x" << hr;
+        return ss.str();
     }
 
     std::string GuidToString(const GUID& guid) {

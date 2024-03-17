@@ -112,7 +112,7 @@ namespace jdplay {
 
     private:
         void deInitialize();
-        const char* getDPERR(HRESULT hr);
+        std::string getDPERR(HRESULT hr);
     };
 
 }
