@@ -305,7 +305,7 @@ TafnetGameNode::TafnetGameNode(
     });
 
     m_pendingEnumRequestsTimer.connect(&m_pendingEnumRequestsTimer, &QTimer::timeout, [this] { processPendingEnumRequests(); });
-    m_pendingEnumRequestsTimer.setInterval(1000);
+    m_pendingEnumRequestsTimer.setInterval(500);
     m_pendingEnumRequestsTimer.start();
 }
 
