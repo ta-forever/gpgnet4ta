@@ -56,7 +56,7 @@ Replayer::DpPlayer::DpPlayer(std::uint32_t dpid) :
     unitSyncAckCount(0),
     unitSyncReceiveCount(0),
     hasTaken(false),
-    warnedWatcherNotPermitted(false)
+    warnedWatcherState(WarnedWatcherState::INITIAL)
 { }
 
 Replayer::UnitInfo::UnitInfo() :
@@ -703,18 +703,19 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::WAIT_GO:
         tapacket::TPlayerInfo playerInfo(dpPlayer.statusPacket);
-        if (playerInfo.isClickedIn() && !playerInfo.isWatcher())
+        if (playerInfo.isClickedIn() && (!playerInfo.isWatcher() || dpPlayer.warnedWatcherState == WarnedWatcherState::PROCEED_REGARDLESS))
         {
             return 1;
         }
-        else if (playerInfo.isClickedIn() && !dpPlayer.warnedWatcherNotPermitted)
+        else if (playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::INITIAL)
         {
-            dpPlayer.warnedWatcherNotPermitted = true;
+            dpPlayer.warnedWatcherState = WarnedWatcherState::HAVE_WARNED;
             this->say(hostDpId, "Please join as a regular player, not as a watcher");
+            this->say(hostDpId, "(or green-off / green-on again to proceed as watcher)");
         }
-        else if (!playerInfo.isClickedIn())
+        else if (!playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::HAVE_WARNED)
         {
-            dpPlayer.warnedWatcherNotPermitted = false;
+            dpPlayer.warnedWatcherState = WarnedWatcherState::PROCEED_REGARDLESS;
         }
         break;
     }

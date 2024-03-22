@@ -52,6 +52,13 @@ class Replayer : public QObject, public tapacket::DemoParser
         PLAYING = 9
     };
 
+    enum class WarnedWatcherState
+    {
+        INITIAL,
+        HAVE_WARNED,
+        PROCEED_REGARDLESS
+    };
+
     struct DpPlayer
     {
         DpPlayer(std::uint32_t dpid);
@@ -67,7 +74,7 @@ class Replayer : public QObject, public tapacket::DemoParser
                                     //(alternatively: responded with crc on) 
         int unitSyncReceiveCount;   //Number of $1a it claims to have recieved 
         bool hasTaken;              //True if this player has taken control over someone.
-        bool warnedWatcherNotPermitted;
+        WarnedWatcherState warnedWatcherState;
     };
 
     struct UnitInfo
