@@ -130,9 +130,13 @@ public:
     {
         if (m_verbose)
         {
-            qInfo() << "t:" << packet.time << ", "
-                << "sender:" << int(packet.sender) << ", "
-                << "data:" << QByteArray((const char*)packet.data.data(), packet.data.size()).toHex();
+            qInfo() << "t:" << packet.time << ", sender:" << int(packet.sender);
+            for (auto p : unpaked)
+            {
+                std::ostringstream ss;
+                taflib::HexDump((const char*)p.data(), p.size(), ss);
+                qInfo() << ss.str().c_str();
+            }
         }
     }
 
@@ -223,13 +227,13 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("playername", "What does the watcher want to call him/herself?", "playername", "BILLY_IDOL"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport"));
     parser.addOption(QCommandLineOption("info", "Just print out some info about the demo and exit"));
-    parser.addOption(QCommandLineOption("detail", "Print out detailed information about the replay"));
+    parser.addOption(QCommandLineOption("detail", "Print out detailed information about the replay", "detail"));
     parser.addOption(QCommandLineOption("nochat", "supress all ingame chat"));
     parser.process(app);
 
     if (parser.isSet("info") || parser.isSet("detail"))
     {
-        doDemoInfo(parser.value("demourl"), parser.isSet("detail"), 100);
+        doDemoInfo(parser.value("demourl"), parser.isSet("detail"), parser.value("detail").toInt());
         return 0;
     }
 
