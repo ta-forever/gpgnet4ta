@@ -221,7 +221,7 @@ int doMain(int argc, char* argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption(QCommandLineOption("logfile", "path to file in which to write logs.", "logfile", ""));
-    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "5"));
+    parser.addOption(QCommandLineOption("loglevel", "level of noise in log files. 0 (silent) to 5 (debug).", "logfile", "4"));
     parser.addOption(QCommandLineOption("demourl", "gpgnet://host:port/gameid where host:port is the Replay Server.  Or file://TAG_ROCK_loses_on_GoW_again.tad to replay a local file", "demourl", "gpgnet://taforever.com:15000/1234"));
     parser.addOption(QCommandLineOption("gamemod", "Which TA mod to launch.", "gamemod"));
     parser.addOption(QCommandLineOption("playername", "What does the watcher want to call him/herself?", "playername", "BILLY_IDOL"));

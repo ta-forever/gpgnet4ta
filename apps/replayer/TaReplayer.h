@@ -36,6 +36,8 @@ class Replayer : public QObject, public tapacket::DemoParser
         double cumulativeMetalShared;
         double cumulativeEnergy;
         double cumulativeEnergyShared;
+
+        bool IsVisible();
     };
 
     enum class DpPlayerState
