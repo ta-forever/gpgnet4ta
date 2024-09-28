@@ -35,7 +35,7 @@ namespace tareplay {
 
         QString m_replayServerHostName;
         quint16 m_replayServerPort;
-        quint16 m_tafGameId;
+        quint32 m_tafGameId;
         quint32 m_position;
 
         QTcpSocket m_tcpSocket;
