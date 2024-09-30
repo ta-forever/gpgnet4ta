@@ -343,7 +343,7 @@ bool Replayer::doLobby()
 
     while (m_jdPlay->dpReceive(buffer, bytesReceived, fromId, toId))
     {
-        if (fromId == DPID_SYSMSG && toId == m_demoPlayers.front()->dpId)
+        if (fromId == DPID_SYSMSG && toId == m_nominatedHostDemoPlayer->dpId)
         {
             onLobbySystemMessage(fromId, toId, buffer, bytesReceived);
             return false;
@@ -392,23 +392,25 @@ void Replayer::sendPlayerInfos()
         id2.dpids[n] = m_demoPlayers[n]->dpId;
     }
     tapacket::bytestring bs = id2.asSubPacket();
-    this->send(m_demoPlayers[0]->dpId, 0, bs);
+    this->send(m_nominatedHostDemoPlayer->dpId, 0, bs);
 
-    int ordinalId = 0;
+    std::set<int> availableSlots({ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
     for (const auto& demoPlayer : m_demoPlayers)
     {
-        demoPlayer->ordinalId = ordinalId++;
         if (demoPlayer->IsVisible())
         {
+            tapacket::TPlayerInfo playerInfo(demoPlayer->statusPacket);
+            demoPlayer->ordinalId = playerInfo.getSlotNumber();
+            availableSlots.erase(demoPlayer->ordinalId);
             tapacket::bytestring bs = tapacket::TIdent3(demoPlayer->dpId, demoPlayer->ordinalId).asSubPacket();
-            this->send(m_demoPlayers[0]->dpId, 0, bs);
+            this->send(m_nominatedHostDemoPlayer->dpId, 0, bs);
         }
     }
     for (const auto& dpPlayer : m_dpPlayers)
     {
-        dpPlayer.second->ordinalId = ordinalId++;
+        dpPlayer.second->ordinalId = availableSlots.empty() ? 0 : *availableSlots.begin();
         tapacket::bytestring bs = tapacket::TIdent3(dpPlayer.first, dpPlayer.second->ordinalId).asSubPacket();
-        this->send(m_demoPlayers[0]->dpId, 0, bs);
+        this->send(m_nominatedHostDemoPlayer->dpId, 0, bs);
     }
     for (const auto& demoPlayer : m_demoPlayers)
     {
@@ -420,7 +422,7 @@ void Replayer::sendPlayerInfos()
             playerInfo.setAllowWatch(true);
             playerInfo.setCheat(true);
             tapacket::bytestring bs = playerInfo.asSubPacket();
-            this->send(m_demoPlayers[0]->dpId, 0, bs);
+            this->send(m_nominatedHostDemoPlayer->dpId, 0, bs);
         }
     }
 }
@@ -470,8 +472,17 @@ void Replayer::onCompletedLoadingDemoPlayers()
 
     for (std::size_t n = 0u; n < m_demoPlayers.size(); ++n)
     {
+        if (!m_nominatedHostDemoPlayer && m_demoPlayers[n]->IsVisible())
+        {
+            m_nominatedHostDemoPlayer = m_demoPlayers[n];
+            if (n != 0u)
+            {
+                m_nominatedHostDemoPlayer->statusPacket = m_demoPlayers[0u]->statusPacket;
+            }
+        }
         qInfo() << "[Replayer::onCompletedLoadingDemoPlayers] ordinalId:" << m_demoPlayers[n]->ordinalId << "name:" << m_demoPlayers[n]->name.c_str() << "originalDpId:" << m_demoPlayers[n]->originalDpId << "dpId:" << m_demoPlayers[n]->dpId << "isVisible:" << m_demoPlayers[n]->IsVisible();
     }
+    qInfo() << "[Replayer::onCompletedLoadingDemoPlayers] nominated host=" << m_nominatedHostDemoPlayer->name.c_str();
 
     m_jdPlay->dpEnumPlayers();
 }
@@ -607,7 +618,7 @@ void Replayer::onLobbyTaMessage(std::uint32_t sourceDplayId, std::uint32_t other
 
 int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
 {
-    std::uint32_t hostDpId = m_demoPlayers[0]->dpId;
+    std::uint32_t hostDpId = m_nominatedHostDemoPlayer->dpId;
     std::uint32_t dpPlayerId = dpPlayer.dpid;
     switch (dpPlayer.state)
     {
@@ -741,39 +752,19 @@ int Replayer::doSyncWatcher(DpPlayer& dpPlayer)
     }
     case DpPlayerState::WAIT_GO:
         tapacket::TPlayerInfo playerInfo(dpPlayer.statusPacket);
-        if (m_demoPlayers.size() < 10u)
+        if (playerInfo.isClickedIn() && (!playerInfo.isWatcher() || dpPlayer.warnedWatcherState == WarnedWatcherState::PROCEED_REGARDLESS))
         {
-            if (playerInfo.isClickedIn() && (!playerInfo.isWatcher() || dpPlayer.warnedWatcherState == WarnedWatcherState::PROCEED_REGARDLESS))
-            {
-                return 1;
-            }
-            else if (playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::INITIAL)
-            {
-                dpPlayer.warnedWatcherState = WarnedWatcherState::HAVE_WARNED;
-                this->say(hostDpId, "Please join as a regular player, not as a watcher");
-                this->say(hostDpId, "(or green-off / green-on again to proceed as watcher)");
-            }
-            else if (!playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::HAVE_WARNED)
-            {
-                dpPlayer.warnedWatcherState = WarnedWatcherState::PROCEED_REGARDLESS;
-            }
+            return 1;
         }
-        else
+        else if (playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::INITIAL)
         {
-            if (playerInfo.isClickedIn() && (playerInfo.isWatcher() || dpPlayer.warnedWatcherState == WarnedWatcherState::PROCEED_REGARDLESS))
-            {
-                return 1;
-            }
-            else if (playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::INITIAL)
-            {
-                dpPlayer.warnedWatcherState = WarnedWatcherState::HAVE_WARNED;
-                this->say(hostDpId, "Please join as watcher to watch 10 player game");
-                this->say(hostDpId, "(or green-off / green-on again to proceed regardless)");
-            }
-            else if (!playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::HAVE_WARNED)
-            {
-                dpPlayer.warnedWatcherState = WarnedWatcherState::PROCEED_REGARDLESS;
-            }
+            dpPlayer.warnedWatcherState = WarnedWatcherState::HAVE_WARNED;
+            this->say(hostDpId, "Please join as a regular player, not as a watcher");
+            this->say(hostDpId, "(or green-off / green-on again to proceed as watcher)");
+        }
+        else if (!playerInfo.isClickedIn() && dpPlayer.warnedWatcherState == WarnedWatcherState::HAVE_WARNED)
+        {
+            dpPlayer.warnedWatcherState = WarnedWatcherState::PROCEED_REGARDLESS;
         }
         break;
     }
@@ -788,14 +779,14 @@ void Replayer::doLaunch()
         if (demoPlayer->IsVisible())
         {
             tapacket::TIdent3 id3(demoPlayer->dpId, demoPlayer->ordinalId);
-            this->send(m_demoPlayers[0]->dpId, 0, id3.asSubPacket());
+            this->send(m_nominatedHostDemoPlayer->dpId, 0, id3.asSubPacket());
         }
     }
 
     for (const auto& dpPlayer : m_dpPlayers)
     {
         tapacket::TIdent3 id3(dpPlayer.first, dpPlayer.second->ordinalId);
-        this->send(m_demoPlayers[0]->dpId, 0, id3.asSubPacket());
+        this->send(m_nominatedHostDemoPlayer->dpId, 0, id3.asSubPacket());
         dpPlayer.second->state = DpPlayerState::LOADING;
     }
 
@@ -806,8 +797,8 @@ void Replayer::doLaunch()
 
     static const std::uint8_t replayerServerMsg[] = { std::uint8_t(tapacket::SubPacketCode::REPLAYER_SERVER_FA), 0x06 };
     static const std::uint8_t loadingStartedMsg[] = { std::uint8_t(tapacket::SubPacketCode::LOADING_STARTED_08), 0x06 };
-    this->send(m_demoPlayers[0]->dpId, 0, tapacket::bytestring(replayerServerMsg, sizeof(replayerServerMsg)));
-    this->send(m_demoPlayers[0]->dpId, 0, tapacket::bytestring(loadingStartedMsg, sizeof(loadingStartedMsg)));
+    this->send(m_nominatedHostDemoPlayer->dpId, 0, tapacket::bytestring(replayerServerMsg, sizeof(replayerServerMsg)));
+    this->send(m_nominatedHostDemoPlayer->dpId, 0, tapacket::bytestring(loadingStartedMsg, sizeof(loadingStartedMsg)));
 }
 
 bool Replayer::doLoad()
@@ -852,8 +843,8 @@ bool Replayer::doLoad()
         for (const auto& dpPlayer : m_dpPlayers)
         {
             qInfo() << "[doLoad] starting dp player" << dpPlayer.first;
-            const std::uint8_t startMsg[] = { std::uint8_t(tapacket::SubPacketCode::START_1E), 1 + dpPlayer.second->ordinalId };
-            this->send(m_demoPlayers[0]->dpId, dpPlayer.first, tapacket::bytestring(startMsg, sizeof(startMsg)));
+            const std::uint8_t startMsg[] = { std::uint8_t(tapacket::SubPacketCode::START_1E), std::min(9u, m_demoPlayers.size()) };
+            this->send(m_nominatedHostDemoPlayer->dpId, dpPlayer.first, tapacket::bytestring(startMsg, sizeof(startMsg)));
         }
     }
 
@@ -979,7 +970,7 @@ bool Replayer::doPlay()
     {
         while (m_jdPlay->dpReceive(buffer, bytesReceived, fromId, toId))
         {
-            if (toId == m_demoPlayers[0]->dpId && m_demoPlayersById.count(fromId) == 0u)
+            if (toId == m_nominatedHostDemoPlayer->dpId && m_demoPlayersById.count(fromId) == 0u)
             {
                 onPlayingTaMessage(fromId, toId, buffer, bytesReceived);
             }
@@ -1093,6 +1084,9 @@ bool Replayer::doPlay()
                 filteredMoves += move;
                 break;
             }
+
+            case tapacket::SubPacketCode::START_1E:
+                break;
 
             case tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
             {
@@ -1307,13 +1301,15 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
         case tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
         {
             std::uint32_t ticks = *(std::uint32_t*) & s[3];
+
+            unsigned number = 0u;
             for (auto& dpPlayer : m_dpPlayers)
             {
                 if (dpPlayer.second->dpid == sourceDplayId)
                 {
                     if (ticks >= 100u && dpPlayer.second->ticks < 100u)
                     {
-                        createSonar(sourceDplayId, dpPlayer.second->ordinalId - m_demoPlayers.size());
+                        createSonar(sourceDplayId, number++);
                     }
                     dpPlayer.second->ticks = ticks;
                 }

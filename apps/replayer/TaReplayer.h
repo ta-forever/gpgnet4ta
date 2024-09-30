@@ -117,6 +117,7 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::vector<std::uint32_t> m_dpIdsPrealloc;
     tapacket::Header m_header;
     std::vector<std::shared_ptr<DemoPlayer> > m_demoPlayers;
+    std::shared_ptr<DemoPlayer> m_nominatedHostDemoPlayer;
     std::map<std::uint32_t, std::shared_ptr<DemoPlayer> > m_demoPlayersById;// keyed by dpid  @todo do we need this?
     std::map<std::uint32_t, std::shared_ptr<DpPlayer> > m_dpPlayers;  // keyed by dpid
     std::map<std::uint32_t, UnitInfo> m_demoUnitInfo;               // keyed by unit id
