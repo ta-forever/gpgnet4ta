@@ -36,6 +36,7 @@ class Replayer : public QObject, public tapacket::DemoParser
         double cumulativeMetalShared;
         double cumulativeEnergy;
         double cumulativeEnergyShared;
+        bool isVisible;
 
         bool IsVisible();
     };
@@ -152,7 +153,7 @@ private:
     void onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t otherDplayId, const std::uint8_t* _payload, int _payloadSize);
 
     void send(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak);
-    void sendUdp(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak);
+    void sendUdp(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak, std::uint8_t formatPrefix = 0x03);
     void say(std::uint32_t fromId, const std::string& text);
     void createSonar(std::uint32_t receivingDpId, unsigned number);
     std::shared_ptr<DemoPlayer> getDemoPlayerByOriginalDpId(std::uint32_t originalDpId);

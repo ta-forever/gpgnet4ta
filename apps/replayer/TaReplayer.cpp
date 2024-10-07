@@ -43,12 +43,13 @@ Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
     cumulativeMetal(0.0),
     cumulativeMetalShared(0.0),
     cumulativeEnergy(0.0),
-    cumulativeEnergyShared(0.0)
+    cumulativeEnergyShared(0.0),
+    isVisible(true)
 { }
 
 bool Replayer::DemoPlayer::IsVisible()
 {
-    return dpId > 0u;
+    return isVisible;
 }
 
 Replayer::DpPlayer::DpPlayer(std::uint32_t dpid) :
@@ -83,10 +84,11 @@ void Replayer::send(std::uint32_t fromId, std::uint32_t toId, const tapacket::by
     m_jdPlay->dpSend(fromId, toId, 1, (void*)bs.data(), bs.size());
 }
 
-void Replayer::sendUdp(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak)
+void Replayer::sendUdp(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak, std::uint8_t formatPrefix)
 {
     tapacket::bytestring bs = tapacket::TPacket::trivialSmartpak(subpak, 0);
     tapacket::TPacket::encrypt(bs);
+    bs[0] = formatPrefix;
     m_jdPlay->dpSend(fromId, toId, 0, (void*)bs.data(), bs.size());
 }
 
@@ -438,16 +440,13 @@ void Replayer::onCompletedLoadingDemoPlayers()
     std::set<std::uint32_t> usedDpIds;
     for (std::size_t n = 0u; n < m_demoPlayers.size(); ++n)
     {
-        if (n < 9u)
+        m_demoPlayers[n]->isVisible = n < 9u;
+        if (m_demoPlayers[n]->isVisible)
         {
             std::uint32_t dpid = m_demoPlayers[n]->dpId = m_dpIdsPrealloc[n];
             m_demoPlayersById[dpid] = m_demoPlayers[n];
             m_jdPlay->dpSetPlayerName(dpid, m_demoPlayers[n]->name.c_str());
             usedDpIds.insert(dpid);
-        }
-        else
-        {
-            m_demoPlayers[n]->dpId = 0u;
         }
     }
 
@@ -1011,14 +1010,26 @@ bool Replayer::doPlay()
 
         if (!sender->IsVisible())
         {
+            // remove once supporting tdraw.dll > v2024.10.08 is fully deployed
             qDebug() << "[doPlay] Dropping packets because player invisible";
             continue;
         }
 
-        std::uint32_t senderDpId = sender->IsVisible() ? sender->dpId : m_dpPlayers.rbegin()->second->dpid;
-        qDebug() << "[doPlay] senderDpId:" << senderDpId;
-
+        std::uint32_t senderDpId = sender->dpId;
         tapacket::bytestring filteredMoves;
+        tapacket::bytestring hackmsg(65, '\0');
+        if (!sender->IsVisible())
+        {
+            hackmsg[0] = std::uint8_t(tapacket::SubPacketCode::CHAT_05);
+            hackmsg[2] = 0x2d;  // msgid: hack on/off
+            hackmsg[3] = 6;     // msg bytes
+            hackmsg[5] = 1;     // hack on
+            senderDpId = m_nominatedHostDemoPlayer->dpId;
+            filteredMoves += hackmsg;
+        }
+
+        qDebug() << "[doPlay] senderDpId:" << senderDpId << ", isVisible:" << sender->IsVisible();
+
         for (auto& move : moves)
         {
             std::string subPacketCodeString = tapacket::TPacket::toString(tapacket::SubPacketCode(move[0]));
@@ -1185,7 +1196,7 @@ bool Replayer::doPlay()
         //    tapacket::HexDump(filteredMoves.data(), filteredMoves.size(), std::cout);
         //}
 
-        if (filteredMoves.size() > 0)
+        if (filteredMoves.size() > hackmsg.size())
         {
             //std::cout << "sender=" << int(packet.sender) << '\n';
             //std::cout << "raw:\n";
@@ -1309,6 +1320,7 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                 {
                     if (ticks >= 100u && dpPlayer.second->ticks < 100u)
                     {
+                        // remove once supporting tdraw.dll > v2024.10.08 is fully deployed
                         createSonar(sourceDplayId, number++);
                     }
                     dpPlayer.second->ticks = ticks;
