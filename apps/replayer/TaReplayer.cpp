@@ -1196,7 +1196,7 @@ bool Replayer::doPlay()
         //    tapacket::HexDump(filteredMoves.data(), filteredMoves.size(), std::cout);
         //}
 
-        if (filteredMoves.size() > hackmsg.size())
+        if (filteredMoves.size() > 0u && filteredMoves != hackmsg)
         {
             //std::cout << "sender=" << int(packet.sender) << '\n';
             //std::cout << "raw:\n";
