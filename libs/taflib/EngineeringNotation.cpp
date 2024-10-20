@@ -7,11 +7,11 @@ static QString _engineeringNotation(double x, char k)
     {
         return QString("%1").arg(x, 0, 'g', 2);
     }
-    if (x >= 1e12)
+    else if (x >= 1e12)
     {
         return _engineeringNotation(x / 1e12, 'T');
     }
-    if (x >= 1e9)
+    else if (x >= 1e9)
     {
         return _engineeringNotation(x / 1e9, 'G');
     }
@@ -73,7 +73,7 @@ static double twoOrThreSigFigs(double x)
         return 0.0;
     }
 
-    int order = std::floor(std::log(x) / std::log(10.0));
+    int order = std::floor(std::log(std::fabs(x)) / std::log(10.0));
     if (order % 3 == 2)
     {
         order -= 2;

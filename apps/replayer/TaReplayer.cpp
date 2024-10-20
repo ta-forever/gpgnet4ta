@@ -41,9 +41,12 @@ Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
     originalDpId(0u),
     ticks(0u),
     cumulativeMetal(0.0),
-    cumulativeMetalShared(0.0),
+    cumulativeMetalSharedToOther(0.0),
+    cumulativeMetalSharedFromOther(0.0),
     cumulativeEnergy(0.0),
-    cumulativeEnergyShared(0.0),
+    cumulativeEnergySharedToOther(0.0),
+    cumulativeEnergySharedFromOther(0.0),
+    ticksAtLastShareResourcesPacket(0u),
     isVisible(true)
 { }
 
@@ -1138,8 +1141,16 @@ bool Replayer::doPlay()
 
             case tapacket::SubPacketCode::PLAYER_RESOURCE_INFO_28:
             {
-                sender->cumulativeMetal = *(float*)&move[46];
-                sender->cumulativeEnergy = *(float*)&move[34];
+                double metal = *(float*)&move[46];
+                double energy = *(float*)&move[34];
+                if (std::isfinite(metal))
+                {
+                    sender->cumulativeMetal = std::max(metal, sender->cumulativeMetal);
+                }
+                if (std::isfinite(energy))
+                {
+                    sender->cumulativeEnergy = std::max(energy, sender->cumulativeEnergy);
+                }
                 filteredMoves += move;
                 break;
             }
@@ -1147,19 +1158,37 @@ bool Replayer::doPlay()
             {
                 std::uint32_t originalDpId = *(std::uint32_t*) & move[9];
                 auto benefactor = getDemoPlayerByOriginalDpId(originalDpId);
-                if (benefactor)
+                originalDpId = *(std::uint32_t*)&move[5];
+                auto donor = getDemoPlayerByOriginalDpId(originalDpId);
+                const float amount = *(float*)&move[13];
+                const char type = move[1];
+                if (donor && (donor->ticksAtLastShareResourcesPacket != donor->ticks || donor->ticksAtLastShareResourcesPacket == 0))
                 {
-                    const float amount = *(float*)&move[13];
-                    const char type = move[1];
-                    if (type == 2)
+                    if (std::isfinite(amount))
                     {
-                        benefactor->cumulativeMetalShared += double(amount);
-                    }
-                    else
-                    {
-                        benefactor->cumulativeEnergyShared += double(amount);
+                        if (type == 2)
+                        {
+                            if (donor) {
+                                donor->cumulativeMetalSharedToOther += double(amount);
+                            }
+                            if (benefactor) {
+                                benefactor->cumulativeMetalSharedFromOther += double(amount);
+                            }
+                        }
+                        else if (type == 1)
+                        {
+                            if (donor) {
+                                donor->cumulativeMetalSharedToOther += double(amount);
+                            }
+                            if (benefactor) {
+                                benefactor->cumulativeEnergySharedFromOther += double(amount);
+                            }
+                        }
                     }
                 }
+                if (donor) donor->ticksAtLastShareResourcesPacket = donor->ticks;
+                if (donor) *(std::uint32_t*)&move[5] = donor->dpId;
+                if (benefactor) *(std::uint32_t*)&move[9] = benefactor->dpId;
                 filteredMoves += move;
                 break;
             }
@@ -1258,13 +1287,23 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                 for (auto player : m_demoPlayers)
                 {
                     std::ostringstream ss;
-                    double metalProduced = (player->cumulativeMetal - player->cumulativeMetalShared);
-                    double energyProduced = (player->cumulativeEnergy - player->cumulativeEnergyShared);
-                    double metalShared = player->cumulativeMetalShared;
+                    double metalProduced = player->cumulativeMetal;
+                    double energyProduced = player->cumulativeEnergy;
+                    double metalShared = player->cumulativeMetalSharedFromOther - player->cumulativeMetalSharedToOther;
+                    double energyShared = player->cumulativeEnergySharedFromOther - player->cumulativeEnergySharedToOther;
+
+                    QString metalSharedStr = metalShared >= 0.0
+                        ? '+' + taflib::engineeringNotation(std::fabs(metalShared))
+                        : '-' + taflib::engineeringNotation(std::fabs(metalShared));
+
+                    QString energySharedStr = energyShared >= 0.0
+                        ? '+' + taflib::engineeringNotation(std::fabs(energyShared))
+                        : '-' + taflib::engineeringNotation(std::fabs(energyShared));
+
+
                     ss << std::setw(15) << player->name << std::setw(0)
-                        << " Metal: " << taflib::engineeringNotation(metalProduced).toStdString() 
-                        << " Energy: " << taflib::engineeringNotation(energyProduced).toStdString()
-                        << " Shared M: " << taflib::engineeringNotation(metalShared).toStdString();
+                        << " Metal: " << taflib::engineeringNotation(metalProduced).toStdString() << metalSharedStr.toStdString()
+                        << " Energy: " << taflib::engineeringNotation(energyProduced).toStdString() << energySharedStr.toStdString();
                     this->say(player->dpId, ss.str());
                 }
             }

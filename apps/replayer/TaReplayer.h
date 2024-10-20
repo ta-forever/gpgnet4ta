@@ -33,9 +33,12 @@ class Replayer : public QObject, public tapacket::DemoParser
         tapacket::bytestring statusPacket;
         std::uint32_t ticks;
         double cumulativeMetal;
-        double cumulativeMetalShared;
+        double cumulativeMetalSharedToOther;
+        double cumulativeMetalSharedFromOther;
         double cumulativeEnergy;
-        double cumulativeEnergyShared;
+        double cumulativeEnergySharedToOther;
+        double cumulativeEnergySharedFromOther;
+        std::uint32_t ticksAtLastShareResourcesPacket;
         bool isVisible;
 
         bool IsVisible();
