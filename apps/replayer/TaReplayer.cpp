@@ -1178,7 +1178,7 @@ bool Replayer::doPlay()
                         else if (type == 1)
                         {
                             if (donor) {
-                                donor->cumulativeMetalSharedToOther += double(amount);
+                                donor->cumulativeEnergySharedToOther += double(amount);
                             }
                             if (benefactor) {
                                 benefactor->cumulativeEnergySharedFromOther += double(amount);
