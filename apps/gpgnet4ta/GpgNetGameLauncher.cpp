@@ -384,7 +384,7 @@ bool GpgNetGameLauncher::verifyGameFileVersions()
             if (!it.value().contains(fileCrc32))
             {
                 qWarning() << "[GpgNetGameLauncher::verifyGameFileVersions]" << file.fileName() << "crc32 version mismatch" << QString::number(fileCrc32, 16);
-                m_launchClient.failGameFileVersions(file.fileName(), QString(" (crc=") + QString::number(fileCrc32, 16) + ") fails version verification.  It is not whitelisted for competitive play.  Please revert to an official version, or play an unranked game instead.");
+                m_launchClient.failGameFileVersions(file.fileName(), QString(" (crc=") + QString::number(fileCrc32, 16) + ") fails version verification.  It is not whitelisted for competitive play.  Please revert/reinstall to latest official version, or play an unranked game instead.");
                 return false;
             }
         }
