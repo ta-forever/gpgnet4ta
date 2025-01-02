@@ -1014,8 +1014,8 @@ bool Replayer::doPlay()
         if (!sender->IsVisible())
         {
             // remove once supporting tdraw.dll > v2024.10.08 is fully deployed
-            qDebug() << "[doPlay] Dropping packets because player invisible";
-            continue;
+            //qDebug() << "[doPlay] Dropping packets because player invisible";
+            //continue;
         }
 
         std::uint32_t senderDpId = sender->dpId;
@@ -1360,7 +1360,7 @@ void Replayer::onPlayingTaMessage(std::uint32_t sourceDplayId, std::uint32_t oth
                     if (ticks >= 100u && dpPlayer.second->ticks < 100u)
                     {
                         // remove once supporting tdraw.dll > v2024.10.08 is fully deployed
-                        createSonar(sourceDplayId, number++);
+                        //createSonar(sourceDplayId, number++);
                     }
                     dpPlayer.second->ticks = ticks;
                 }
