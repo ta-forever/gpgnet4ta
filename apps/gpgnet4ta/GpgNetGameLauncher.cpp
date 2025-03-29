@@ -210,7 +210,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 m_gpgNetClient.sendGameOption("ReplayDelaySeconds", msg.mid(22));
             }
         }
-        else if (msg.startsWith("/title ") && msg.size() > 6)
+        else if (msg.startsWith("/title ") && msg.size() > 7)
         {
             if (!m_isHost) {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set title.  ignoring";
@@ -221,7 +221,7 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
             else
             {
                 qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting title";
-                m_gpgNetClient.sendGameOption("Title", msg.mid(6));
+                m_gpgNetClient.sendGameOption("Title", msg.mid(7));
             }
         }
         else if (msg == "/quit")
@@ -238,6 +238,20 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
                 m_quitCountResetTimer.setSingleShot(true);
                 m_quitCountResetTimer.setInterval(1000);
                 m_quitCountResetTimer.start();
+            }
+        }
+        else if (msg.startsWith("/max_players ") && msg.size() > 13)
+        {
+            if (!m_isHost) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] Player is not host.  Cannot set max_players.  ignoring";
+            }
+            else if (m_alreadyStarted) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring";
+            }
+            else
+            {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] setting max_players";
+                m_gpgNetClient.sendGameOption("Slots", msg.mid(13));
             }
         }
     }
