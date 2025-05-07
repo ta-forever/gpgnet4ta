@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(gpgnet4ta)
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 17)
 
 find_package(Qt5 COMPONENTS Core Network REQUIRED)
 
@@ -32,8 +32,11 @@ if (WIN32)
     set(DIRECT_PLAY_LIB_DIR "${DIRECTX_SDK_DIR}/Lib/x86")
     set(DIRECT_PLAY_LIBS "dplayx;dxguid")
 
+    add_subdirectory(libs/dplayreg)
     add_subdirectory(libs/jdplay)
     add_subdirectory(apps/replayer)
+    add_subdirectory(libs/rwe)
+    add_subdirectory(libs/tafencrypt)
     add_subdirectory(apps/talauncher)
 ENDIF()
 

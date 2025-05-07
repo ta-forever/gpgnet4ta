@@ -18,6 +18,7 @@ target_link_libraries(talauncher
     taflib
     talaunch
     jdplay
+    dplayreg
     Qt5::Core
     Qt5::Network
     ${DIRECT_PLAY_LIBS}

@@ -4,102 +4,13 @@
 #include <QtCore/qdir.h>
 #include <QtCore/quuid.h>
 
+#include "dplayreg/DPlayReg.h"
 #include "taflib/Logger.h"
 #include "taflib/MessageBoxThread.h"
 #include "talaunch/LaunchServer.h"
 #include "VersionString.h"
 
 #include <iostream>
-
-bool CheckDplayLobbyableApplication(QString guid, QString path, QString file, QString commandLine, QString currentDirectory)
-{
-    QString registryPath = QString(R"(%1\%2)")
-        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
-        .arg("Applications");
-    QSettings registry(registryPath, QSettings::NativeFormat);
-    QStringList applications = registry.childGroups();
-
-    qInfo() << "\nCHECK:" << guid << path << file << commandLine << currentDirectory;
-    Q_FOREACH(QString appName, applications)
-    {
-        QString nthGuid = registry.value(appName + "/Guid").toString();
-        QString nthPath = registry.value(appName + "/Path").toString();
-        QString nthFile = registry.value(appName + "/File").toString();
-        QString nthCommandLine = registry.value(appName + "/CommandLine").toString();
-        QString nthCurrentDirectory = registry.value(appName + "/CurrentDirectory").toString();
-        if (QString::compare(guid, nthGuid, Qt::CaseInsensitive) == 0 &&
-            QString::compare(path, nthPath, Qt::CaseInsensitive) == 0 &&
-            QString::compare(file, nthFile, Qt::CaseInsensitive) == 0 &&
-            QString::compare(commandLine, nthCommandLine) == 0 &&
-            QString::compare(currentDirectory, nthCurrentDirectory, Qt::CaseInsensitive) ==0)
-        {
-            qInfo() << "MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
-            return true;
-        }
-        qInfo() << "NO MATCH:" << nthGuid << nthPath << nthFile << nthCommandLine << nthCurrentDirectory;
-
-    }
-    return false;
-}
-
-void RegisterDplayLobbyableApplication(QString name, QString guid, QString path, QString file, QString commandLine, QString currentDirectory)
-{
-    QString registryPath = QString(R"(%1\%2)")
-        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay\Applications)")
-        .arg(name);
-
-    QSettings registry(registryPath, QSettings::NativeFormat);
-    registry.setValue("Guid", guid);
-    registry.setValue("Path", path);
-    registry.setValue("File", file);
-    registry.setValue("CommandLine", commandLine);
-    registry.setValue("CurrentDirectory", currentDirectory);
-}
-
-QString GetDplayLobbableAppPath(QString appGuid, QString defaultPath)
-{
-    QString registryPath = QString(R"(%1\%2)")
-        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
-        .arg("Applications");
-    QSettings registry(registryPath, QSettings::NativeFormat);
-    QStringList applications = registry.childGroups();
-    Q_FOREACH(QString appName, applications)
-    {
-        QString nthGuid = registry.value(appName + "/Guid").toString();
-        if (QString::compare(appGuid, nthGuid) == 0)
-        {
-            return registry.value(appName + "/Path").toString();
-        }
-    }
-    return defaultPath;
-}
-
-
-QMap<QString, QString> GetDplayLobbableApp(QString appGuid)
-{
-    QMap<QString, QString> result;
-
-    QString registryPath = QString(R"(%1\%2)")
-        .arg(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectPlay)")
-        .arg("Applications");
-    QSettings registry(registryPath, QSettings::NativeFormat);
-    QStringList applications = registry.childGroups();
-    Q_FOREACH(QString appName, applications)
-    {
-        QString nthGuid = registry.value(appName + "/Guid").toString();
-        if (QString::compare(appGuid, nthGuid) == 0)
-        {
-            result["Guid"] = nthGuid;
-            result["Path"] = registry.value(appName + "/Path", QVariant("<no Path>")).toString();
-            result["File"] = registry.value(appName + "/File", QVariant("<no File>")).toString();
-            result["CommandLine"] = registry.value(appName + "/CommandLine", QVariant("<no CommandLine>")).toString();
-            result["CurrentDirectory"] = registry.value(appName + "/CurrentDirectory", QVariant("<no CurrentDirectory>")).toString();
-            return result;
-        }
-    }
-    return result;
-}
-
 
 void RunAs(QString cmd, QStringList args, QString verb = "runas")
 {
@@ -135,7 +46,7 @@ void GameFileVersionMismatchMsgBox(taflib::MessageBoxThread& msgbox, QString mes
 
 void UnableToLaunchMsgBox(taflib::MessageBoxThread& msgbox, QString guid)
 {
-    QMap<QString, QString> appSettings = GetDplayLobbableApp(guid);
+    QMap<QString, QString> appSettings = dplayreg::GetDplayLobbableApp(guid);
     QString err;
     if (appSettings.contains("Path") && appSettings.contains("File"))
     {
@@ -202,10 +113,10 @@ int handleRegisterDplay(const QCoreApplication &app, const QCommandLineParser& p
 
     if (parser.isSet("alreadyuac"))
     {
-        RegisterDplayLobbyableApplication(
+        dplayreg::RegisterDplayLobbyableApplication(
             dplayAppName, dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath"));
     }
-    else if (!CheckDplayLobbyableApplication(
+    else if (!dplayreg::CheckDplayLobbyableApplication(
             dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
     {
         QStringList args;
@@ -217,7 +128,7 @@ int handleRegisterDplay(const QCoreApplication &app, const QCommandLineParser& p
         args << "--gameargs" << parser.value("gameargs");
 
         RunAs(app.applicationFilePath(), args);
-        while (!CheckDplayLobbyableApplication(dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
+        while (!dplayreg::CheckDplayLobbyableApplication(dplayGuid, parser.value("gamepath"), parser.value("gameexe"), dplayGameArgs, parser.value("gamepath")))
         {
             QString err = QString("Unable to update DirectPlay registration for ") + parser.value("gamemod").toUpper() + " at path \"" + parser.value("gamepath") + "\\" + parser.value("gameexe") + "\". ";
             err += "Probably talauncher was unable to gain admin privileges. Attempt to launch anyway?";

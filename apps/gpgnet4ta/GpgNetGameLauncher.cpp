@@ -7,12 +7,13 @@
 #include <cstring>
 
 GpgNetGameLauncher::GpgNetGameLauncher(
-    QString iniTemplate, QString gamePath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
+    QString iniTemplate, QString gamePath, QString iniTarget, QString guid, int gameId, int playerLimit, bool lockOptions, int maxUnits,
     talaunch::LaunchClient &launchClient, gpgnet::GpgNetClient &gpgNetclient) :
     m_iniTemplate(iniTemplate),
     m_gamePath(gamePath),
     m_iniTarget(iniTarget),
     m_guid(guid),
+    m_gameId(gameId),
     m_playerLimit(playerLimit),
     m_lockOptions(lockOptions),
     m_maxUnits(maxUnits),
@@ -80,10 +81,11 @@ void GpgNetGameLauncher::onHostGame(QString mapName, QString mapDetails)
     try
     {
         taflib::Watchdog wd("GpgNetGameLauncher::onHostGame", 1000);
-        qInfo() << "[GpgNetGameLauncher::handleHostGame] mapname=" << mapName;
+        qInfo() << "[GpgNetGameLauncher::onHostGame] mapname=" << mapName;
 
         m_mapName = mapName;
         m_launchClient.setGameGuid(m_guid);
+        m_launchClient.setGameId(m_gameId);
         m_launchClient.setAddress("127.0.0.1");
         m_launchClient.setIsHost(true);
  
@@ -115,13 +117,14 @@ void GpgNetGameLauncher::onJoinGame(QString host, QString playerName, QString, i
     try
     {
         taflib::Watchdog wd("GpgNetGameLauncher::onJoinGame", 1000);
-        qInfo() << "[GpgNetGameLauncher::onJoinGame] playername=" << playerName << "playerId=" << playerId << "guid" << m_guid;
+        qInfo() << "[GpgNetGameLauncher::onJoinGame] playername=" << playerName << "playerId=" << playerId << "guid" << m_guid << "gameId" << m_gameId;
 
         const char* hostOn47624 = "127.0.0.1"; // game address ... or a GameReceiver proxy
         char hostip[257] = { 0 };
         std::strncpy(hostip, hostOn47624, 256);
 
         m_launchClient.setGameGuid(m_guid);
+        m_launchClient.setGameId(m_gameId);
         m_launchClient.setAddress(hostip);
         m_launchClient.setIsHost(false);
 
@@ -149,7 +152,17 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
     try
     {
         taflib::Watchdog wd("GpgNetGameLauncher::onExtendedMessage", 3000);
-        if (msg.startsWith("/launch"))
+        QStringList args = msg.trimmed().split(' ');
+        if (args.isEmpty())
+        {
+            return;
+        }
+
+        if (args[0] == "/set_hash_api_token" && args.size() >= 2)
+        {
+            m_launchClient.setSubmitGameFileHashesToken(args[1]);
+        }
+        else if (msg.startsWith("/launch"))
         {
             if (!msg.endsWith("/launch"))
             {

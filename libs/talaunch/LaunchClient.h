@@ -16,18 +16,24 @@ namespace talaunch {
 
         QString m_playerName;
         QString m_gameGuid;
+        int m_gameId;
         QString m_gameAddress;
         bool m_isHost;
         bool m_requireSearch;
+        QString m_submitGameFileHashesEndpoint;
+        QString m_submitGameFileHashesToken;
 
     public:
         LaunchClient(QHostAddress addr, quint16 port);
 
         void setPlayerName(QString playerName);
         void setGameGuid(QString gameGuid);
+        void setGameId(int gameId);
         void setAddress(QString address);
         void setIsHost(bool isHost);
         void setRequireSearch(bool requireSearch);  // false (default) for playing game, true for joining replay.  I don't know why
+        void setSubmitGameFileHashesEndpoint(QString endpoint);
+        void setSubmitGameFileHashesToken(QString token);
 
         bool startApplication();
         bool isApplicationRunning();

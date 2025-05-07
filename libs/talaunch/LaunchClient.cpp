@@ -9,6 +9,7 @@ LaunchClient::LaunchClient(QHostAddress addr, quint16 port) :
     m_serverPort(port),
     m_state(State::CONNECTING),
     m_gameGuid("{99797420-F5F5-11CF-9827-00A0241496C8}"),
+    m_gameId(0),
     m_playerName("BILLYIDOL"),
     m_gameAddress("127.0.0.1"),
     m_isHost(true),
@@ -67,6 +68,11 @@ void LaunchClient::setGameGuid(QString gameGuid)
     m_gameGuid = gameGuid;
 }
 
+void LaunchClient::setGameId(int gameId)
+{
+    m_gameId = gameId;
+}
+
 void LaunchClient::setAddress(QString address)
 {
     m_gameAddress = address;
@@ -80,6 +86,16 @@ void LaunchClient::setIsHost(bool isHost)
 void LaunchClient::setRequireSearch(bool requireSearch)
 {
     m_requireSearch = requireSearch;
+}
+
+void LaunchClient::setSubmitGameFileHashesEndpoint(QString endpoint)
+{
+    m_submitGameFileHashesEndpoint = endpoint;
+}
+
+void LaunchClient::setSubmitGameFileHashesToken(QString token)
+{
+    m_submitGameFileHashesToken = token;
 }
 
 bool LaunchClient::failGameFileVersions(QString filename, QString reason)
@@ -114,8 +130,11 @@ bool LaunchClient::startApplication()
         static const char* cmd[2][2] = {{ "/join", "/searchjoin"},
                                         { "/host", "/host"}};
 
-        QString args = QStringList({ cmd[m_isHost][m_requireSearch], m_gameGuid, m_playerName, m_gameAddress }).join(' ');
-        qInfo() << "[LaunchClient::startApplication]" << args;
+        QString args = QStringList({
+            cmd[m_isHost][m_requireSearch], QString::number(m_gameId), m_gameGuid, m_playerName, m_gameAddress,
+            m_submitGameFileHashesEndpoint, m_submitGameFileHashesToken
+            }).join(' ');
+        qInfo() << "[LaunchClient::startApplication]" << QString(args).replace(m_submitGameFileHashesToken, "*****");
         m_tcpSocket.write(args.toUtf8());
         m_tcpSocket.flush();
         if (!m_tcpSocket.waitForReadyRead(30000))

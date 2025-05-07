@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: taforever/ci-ubuntu-focal:latest
+    env:
+      PUB_KEY: ${{ secrets.UID_PUBLIC_KEY_PEM }}
 
     steps:
     - uses: actions/checkout@v2
@@ -20,6 +22,9 @@ jobs:
     - name: Get release tag from GITHUB_REF
       id: vars
       run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
+
+    - name: Write PUB key into file
+      run: echo "$PUB_KEY" > faf_pub.pem
 
     - name: Windows x86
       run: |

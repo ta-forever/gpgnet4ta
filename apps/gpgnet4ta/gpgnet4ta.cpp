@@ -617,8 +617,11 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("democompilerurl", "host:port/gameid of TA Demo Compiler", "democompilerurl"));
     parser.addOption(QCommandLineOption("deviation", "Player rating deviation.", "deviation"));
     parser.addOption(QCommandLineOption("gamemod", "Name of the game variant (used to generate a DirectPlay registration that doesn't conflict with another variant.", "gamemod", DEFAULT_DPLAY_REGISTERED_GAME_MOD));
+    parser.addOption(QCommandLineOption("gameid", "Server supplied ID of the game", "gameid", 0));
     parser.addOption(QCommandLineOption("gamepath", "Path from which to launch game. (required for --registerdplay).", "path", DEFAULT_DPLAY_REGISTERED_GAME_PATH));
     parser.addOption(QCommandLineOption("gpgnet", "Uri to GPGNet.", "host:port"));
+    parser.addOption(QCommandLineOption("hashendpoint", "API endpoint to submit game file hashes to on launch", "hashendpoint", "https://api.taforever.com/game/launch_codes"));
+    parser.addOption(QCommandLineOption("hashtoken", "API endpoint token. Initial value incase of immediate launch.  Delayed launch reqiures refreshed token to be provided later", "hashtoken", ""));
     parser.addOption(QCommandLineOption("israted", "Flag to indicate game is ranked.  Affects some of the messages sent to players."));
     parser.addOption(QCommandLineOption("irc", "user@host:port/channel for the ingame irc channel to join.", "irc"));
     parser.addOption(QCommandLineOption("launchserverport", "Specifies port that LaunchServer is listening on", "launchserverport", "48684"));
@@ -694,6 +697,9 @@ int doMain(int argc, char* argv[])
 
         // LaunchClient connects the a LaunchServer (typically instantiated by the TALauncer app)
         talaunch::LaunchClient launchClient(QHostAddress("127.0.0.1"), parser.value("launchserverport").toInt());
+        // LaunchServer sends game file hashes to API for server verification
+        launchClient.setSubmitGameFileHashesEndpoint(parser.value("hashendpoint"));
+        launchClient.setSubmitGameFileHashesToken(parser.value("hashtoken"));
 
         // GpgNetGameLauncher interprets instructions from GpgNetClient to launch TA as a host or as a joiner
         GpgNetGameLauncher launcher(
@@ -701,6 +707,7 @@ int doMain(int argc, char* argv[])
             gamePath,
             gamePath + "/" + DEFAULT_GAME_INI,
             dplayGuid,
+            parser.value("gameid").toInt(),
             parser.value("players").toInt(),
             parser.isSet("lockoptions"),
             1000,

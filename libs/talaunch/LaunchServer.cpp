@@ -1,11 +1,26 @@
 #include "LaunchServer.h"
 
+#include "dplayreg/DPlayReg.h"
+#include "rwe/hpi/HpiArchive.h"
+#include "tafencrypt/ServerEncrypt.h"
 #include "taflib/HexDump.h"
 
 #include <sstream>
+#include <fstream>
+
+#include <QtCore/qcryptographichash.h>
+#include <QtCore/qdir.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qjsonarray.h>
+#include <QtCore/qjsondocument.h>
+#include <QtCore/qjsonobject.h>
 #include <QtCore/qregularexpression.h>
 #include <QtCore/qsettings.h>
 #include <QtCore/qthread.h>
+#include <QtCore/qurlquery.h>
+
+#include <QtNetwork/qnetworkreply.h>
 
 using namespace talaunch;
 
@@ -81,7 +96,7 @@ void LaunchServer::onReadyReadTcp()
     {
         QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
         QByteArray datas = sender->readAll();
-        QStringList args = QString::fromUtf8(datas.data(), datas.size()).replace(QRegularExpression("[\n\r]"), "").split(' ');
+        QStringList args = QString::fromUtf8(datas.data(), datas.size()).replace(QRegularExpression("[\n\r]"), "").trimmed().split(' ');
 
         if (args.size() == 0)
         {
@@ -103,17 +118,21 @@ void LaunchServer::onReadyReadTcp()
             notifyClients("FAIL");
             emit gameFileVersionMismatch(message);
         }
-        else if (args.size() >= 4 && args[0] == "/host")
+        else if (args.size() >= 5 && args[0] == "/host")
         {
-            launchGame(args[1], args[2], args[3], true, false);
+            args.push_back(""); // default endpoint
+            args.push_back(""); // default token
+            launchGame(args[1], args[2], args[3], args[4], args[5], args[6], true, false);
         }
-        else if (args.size() >= 4 && args[0] == "/join")
+        else if (args.size() >= 5 && args[0] == "/join")
         {
-            launchGame(args[1], args[2], args[3], false, false);
+            args.push_back(""); // default endpoint
+            args.push_back(""); // default token
+            launchGame(args[1], args[2], args[3], args[4], args[5], args[6], false, false);
         }
-        else if (args.size() >= 4 && args[0] == "/searchjoin")
+        else if (args.size() >= 5 && args[0] == "/searchjoin")
         {
-            launchGame(args[1], args[2], args[3], false, true);
+            launchGame(args[1], args[2], args[3], args[4], "", "", false, true);
         }
     }
     catch (const std::exception & e)
@@ -132,13 +151,16 @@ static bool TrueLog(const char* s)
     return true;
 }
 
-void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, bool asHost, bool doSearch)
+void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, QString _ipaddr,
+    QString submitHashesEndPoint, QString submitHashesToken, bool asHost, bool doSearch)
 {
     if (m_jdPlay)
     {
         return;
     }
 
+    bool okGameId;
+    int gameId = _gameId.toInt(&okGameId);
     std::string guid = _guid.toStdString();
     std::string player = _player.toStdString();
     std::string ipaddr = _ipaddr.toStdString();
@@ -192,6 +214,20 @@ void LaunchServer::launchGame(QString _guid, QString _player, QString _ipaddr, b
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_joinIsDisabled = false;
         notifyClients("RUNNING");
+
+        if (okGameId && !submitHashesEndPoint.isEmpty() && !submitHashesToken.isEmpty())
+        {
+            auto countDown = std::make_shared<int>(60);
+            m_submitGameFileHashes = [this, countDown, gameId, _guid, submitHashesEndPoint, submitHashesToken]() {
+                --(*countDown);
+                if (*countDown == 0)
+                {
+                    QString gameFileHashesJson = getGameFileHashes(gameId, _guid);
+                    this->submitGameFileHashes(gameId, gameId, gameFileHashesJson, submitHashesEndPoint, submitHashesToken);
+                }
+                return (*countDown <= 0);
+            };
+        }
     }
 }
 
@@ -200,35 +236,44 @@ void LaunchServer::timerEvent(QTimerEvent* event)
     try
     {
         DWORD exitCode;
-        if (m_jdPlay && !m_jdPlay->pollStillActive(exitCode))
+        if (m_jdPlay)
         {
-            qInfo() << QString("[LaunchServer::timerEvent] process exited with code 0x%1 (%2)").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
-            if (exitCode == 0)
+            if (!m_jdPlay->pollStillActive(exitCode))
             {
-                notifyClients("IDLE");
+                qInfo() << QString("[LaunchServer::timerEvent] process exited with code 0x%1 (%2)").arg(exitCode, 8, 16, QChar('0')).arg(qint32(exitCode), 0, 10);
+                if (exitCode == 0)
+                {
+                    notifyClients("IDLE");
+                }
+                else
+                {
+                    notifyClients(QString("FAIL %1").arg(exitCode, 0, 16, QChar('0')));
+                    emit gameExitedWithError(exitCode);
+                }
+                m_jdPlay.reset();
+                m_submitGameFileHashes = nullptr;
             }
-            else
+            else if (m_jdPlay->isHost() && !m_joinIsDisabled)
             {
-                notifyClients(QString("FAIL %1").arg(exitCode, 0, 16, QChar('0')));
-                emit gameExitedWithError(exitCode);
+                DPSESSIONDESC2& desc = m_jdPlay->enumSessions();
+                std::string jdLog = m_jdPlay->getLogString();
+                if (jdLog.size() > 0)
+                {
+                    qInfo() << "[LaunchServer::timerEvent] jdplay->enumSessions:\n" << jdLog.c_str();
+                }
+                if (desc.dwFlags & DPSESSION_JOINDISABLED)
+                {
+                    m_joinIsDisabled = true;
+                    notifyClients("LAUNCHED");
+                }
             }
-            m_jdPlay.reset();
-        }
-        else if (m_jdPlay && m_jdPlay->isHost() && !m_joinIsDisabled)
-        {
-            DPSESSIONDESC2 & desc = m_jdPlay->enumSessions();
-            std::string jdLog = m_jdPlay->getLogString();
-            if (jdLog.size() > 0)
-            {
-                qInfo() << "[LaunchServer::timerEvent] jdplay->enumSessions:\n" << jdLog.c_str();
-            }
-            if (desc.dwFlags & DPSESSION_JOINDISABLED)
-            {
-                m_joinIsDisabled = true;
-                notifyClients("LAUNCHED");
-            }
-        }
 
+            // is it time to submit game file hashes yet?
+            if (m_submitGameFileHashes && m_submitGameFileHashes())
+            {
+                m_submitGameFileHashes = nullptr;
+            }
+        }
 
         if (!m_jdPlay || exitCode != STILL_ACTIVE)
         {
@@ -259,4 +304,148 @@ void LaunchServer::notifyClients(QString _msg)
         socket->write(msg.c_str(), 1+msg.size());
         socket->flush();
     }
+}
+
+static QString sha256OfFile(const QString& filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    if (!hash.addData(&file)) {
+        return QString();
+    }
+
+    return QString(hash.result().toHex());
+}
+
+static QString generateGameFileHashes(int gameId, const QMap<QString, QString>& dplayApp) {
+    QJsonObject root;
+    root["gameId"] = gameId;
+
+    QString dirPath = dplayApp.value("CurrentDirectory");
+    QString exeFile = dplayApp.value("File");
+    QString guid = dplayApp.value("Guid");
+
+    if (dirPath.isEmpty()) {
+        root["status"] = "error: missing CurrentDirectory";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+    if (exeFile.isEmpty()) {
+        root["status"] = "error: missing File";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+    if (guid.isEmpty()) {
+        root["status"] = "error: missing Guid";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+
+    root["guid"] = guid;
+
+    QDir dir(dirPath);
+    if (!dir.exists()) {
+        root["status"] = "error: directory does not exist";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+
+    QJsonObject hashes;
+
+    // 1. Hash main executable
+    QString exePath = dir.absoluteFilePath(exeFile);
+    QFileInfo exeInfo(exePath);
+    if (!exeInfo.exists() || !exeInfo.isFile()) {
+        root["status"] = "error: executable not found";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+
+    QString exeHash = sha256OfFile(exePath);
+    if (exeHash.isEmpty()) {
+        root["status"] = "error: failed to hash executable";
+        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    }
+    hashes.insert(exeInfo.fileName(), exeHash);
+
+    // 2. Hash DLLs, GP3s
+    auto addHashes = [&](const QStringList& patterns) {
+        for (const QString& pattern : patterns) {
+            QStringList files = dir.entryList(QStringList() << pattern, QDir::Files);
+            for (const QString& f : files) {
+                QString fullPath = dir.absoluteFilePath(f);
+                QString hash = sha256OfFile(fullPath);
+                if (!hash.isEmpty()) {
+                    hashes.insert(f, hash);
+                }
+            }
+        }
+    };
+
+    addHashes({ "*.dll", "*.gp3" });
+
+    // Handle *.ufo files that contain a units* directory
+    QStringList ufoFiles = dir.entryList(QStringList() << "*.ufo", QDir::Files);
+    for (const QString& f : ufoFiles) {
+        QString fullPath = dir.absoluteFilePath(f);
+
+        std::ifstream file(fullPath.toStdString(), std::ios::binary);
+        rwe::HpiArchive archive(&file);
+        auto matchingDirs = archive.findRootDirectoriesWithPrefix("units");
+
+        if (!matchingDirs.empty()) {
+            QString hash = sha256OfFile(fullPath);
+            if (!hash.isEmpty()) {
+                hashes.insert(f, hash);
+            }
+        }
+    }
+
+    // 3. List subdirectories (non-recursive)
+    QJsonArray subdirs;
+    QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& entry : entries) {
+        subdirs.append(entry.fileName());
+    }
+
+    root["files"] = hashes;
+    root["subdirectories"] = subdirs;
+    root["status"] = "success";
+
+    QJsonDocument doc(root);
+    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+}
+
+QString LaunchServer::getGameFileHashes(int gameId, QString guid)
+{
+    QMap<QString, QString> dplayApp = dplayreg::GetDplayLobbableApp(guid);
+    QString json = generateGameFileHashes(gameId, dplayApp);
+    return json;
+}
+
+void LaunchServer::submitGameFileHashes(int gameId, int token, QString json, QString endpoint, QString accessToken)
+{
+    std::string encrypted = tafencrypt::ServerEncrypt(json.toStdString());
+
+    qDebug() << "[submitGameFileHashes] endpoint=" << endpoint;
+    qDebug() << "[submitGameFileHashes] accessToken=" << accessToken.mid(0, 16);
+
+    QUrl submitUrl(endpoint);
+    QNetworkRequest postRequest(submitUrl);
+    postRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    postRequest.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken).toUtf8());
+
+    QUrlQuery postData;
+    postData.addQueryItem("gameId", QString::number(gameId));
+    postData.addQueryItem("data", QString::fromStdString(encrypted));
+
+    QNetworkReply* postReply = m_nam.post(postRequest, postData.toString(QUrl::FullyEncoded).toUtf8());
+    connect(postReply, &QNetworkReply::finished, this, [=]() {
+        if (postReply->error() == QNetworkReply::NoError) {
+            qDebug() << "Launch code submitted successfully gameid=" << gameId;
+        }
+        else {
+            qWarning() << "Submit failed gameId=" << gameId << postReply->errorString();
+            qDebug() << postReply->readAll();  // optional: dump server response
+        }
+        postReply->deleteLater();
+    });
 }

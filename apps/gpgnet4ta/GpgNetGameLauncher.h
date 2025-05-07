@@ -19,6 +19,7 @@ class GpgNetGameLauncher: public QObject
     const QString m_gamePath;
     const QString m_iniTarget;
     const QString m_guid;
+    const int m_gameId;
     const int m_playerLimit;
     const bool m_lockOptions;
     const int m_maxUnits;
@@ -44,7 +45,7 @@ class GpgNetGameLauncher: public QObject
 
 public:
     GpgNetGameLauncher(
-        QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int playerLimit, bool lockOptions, int maxUnits,
+        QString iniTemplate, QString gamepath, QString iniTarget, QString guid, int gameId, int playerLimit, bool lockOptions, int maxUnits,
         talaunch::LaunchClient &launchClient, gpgnet::GpgNetClient &gpgNetClient);
 
     void parseGameFileVersions(QString versions);
