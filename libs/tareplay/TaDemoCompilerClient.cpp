@@ -186,7 +186,7 @@ void TaDemoCompilerClient::sendDebugRequest(quint32 gameId)
     m_protocol.sendArgument(gameId);
 }
 
-void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std::string& name, tapacket::DPAddress* , tapacket::DPAddress* )
+void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, const std::string& name, tapacket::DPAddress* tcp, tapacket::DPAddress* udp)
 {
     if (dplayId > 0u && !name.empty())
     {
@@ -212,9 +212,13 @@ void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, co
         }
         else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0,16)) == 0)
         {
-            qInfo() << "[TaDemoCompilerClient::onDplaySuperEnumPlayerReply] demo compiler doesn't understand how to deal with AIs. Not forwarding Hello for" << name.c_str();
-            //sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+            registerLocalAi(dplayId, QString::fromStdString(name));
         }
+    }
+
+    for (QSharedPointer<TaDemoCompilerClient> aiContext : m_aiContexts.values())
+    {
+        aiContext->onDplaySuperEnumPlayerReply(dplayId, name, tcp, udp);
     }
 }
 
@@ -244,9 +248,13 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         }
         else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0, 16)) == 0)
         {
-            qInfo() << "[TaDemoCompilerClient::onDplayCreateOrForwardPlayer] demo compiler doesn't understand how to deal with AIs. Not forwarding Hello for" << name.c_str();
-            //sendHello(m_tafGameId, dplayId, m_playerPublicAddr);
+            registerLocalAi(dplayId, QString::fromStdString(name));
         }
+    }
+
+    for (QSharedPointer<TaDemoCompilerClient> aiContext : m_aiContexts.values())
+    {
+        aiContext->onDplayCreateOrForwardPlayer(command, dplayId, name, tcp, udp);
     }
 }
 
@@ -257,6 +265,16 @@ void TaDemoCompilerClient::onDplayDeletePlayer(std::uint32_t dplayId)
     {
         m_localPlayerDplayId = 0u;
     }
+
+    for (QSharedPointer<TaDemoCompilerClient> aiContext : m_aiContexts.values())
+    {
+        aiContext->onDplayDeletePlayer(dplayId);
+    }
+
+    if (isLocalAiRegistered(dplayId))
+    {
+        m_aiContexts.remove(dplayId);
+    }
 }
 
 void TaDemoCompilerClient::onTaPacket(
@@ -266,6 +284,12 @@ void TaDemoCompilerClient::onTaPacket(
 {
     if (!isLocalSource) //sourceDplayId != m_localPlayerDplayId)
     {
+        return;
+    }
+
+    if (isLocalAiRegistered(sourceDplayId))
+    {
+        getLocalAi(sourceDplayId)->onTaPacket(sourceDplayId, otherDplayId, isLocalSource, encrypted, sizeEncrypted, subpaks);
         return;
     }
 
@@ -341,3 +365,38 @@ void TaDemoCompilerClient::onTaPacket(
         sendMoves(filteredMoves);
     }
 }
+
+bool TaDemoCompilerClient::isLocalAiName(const std::string &name)
+{
+    QString truncatedName = m_localPlayerName.left(12);
+    return QString::fromStdString(name).indexOf(QString("AI:%1").arg(truncatedName)) == 0;
+}
+
+bool TaDemoCompilerClient::isLocalAiRegistered(quint32 dpid)
+{
+    return m_aiContexts.contains(dpid);
+}
+
+void TaDemoCompilerClient::registerLocalAi(quint32 dpid, QString name)
+{
+    if (!isLocalAiRegistered(dpid))
+    {
+        QSharedPointer<TaDemoCompilerClient> aiContext(new TaDemoCompilerClient(m_taDemoCompilerHostName, m_taDemoCompilerPort, m_tafGameId));
+        aiContext->setHostPlayerName(m_hostPlayerName);
+        aiContext->setLocalPlayerName(name);
+        m_aiContexts[dpid] = aiContext;
+    }
+}
+
+QSharedPointer<TaDemoCompilerClient> TaDemoCompilerClient::getLocalAi(quint32 dpid)
+{
+    if (m_aiContexts.contains(dpid))
+    {
+        return m_aiContexts[dpid];
+    }
+    else
+    {
+        return QSharedPointer<TaDemoCompilerClient>();
+    }
+}
+
