@@ -13,7 +13,8 @@ TaDemoCompilerClient::TaDemoCompilerClient(QString taDemoCompilerHostName, quint
     m_protocol(m_datastream),
     m_localPlayerDplayId(0u),
     m_hostDplayId(0u),
-    m_ticks(-1)
+    m_ticks(-1),
+    m_initialConnectionAchieved(false)
 {
     m_datastream.setByteOrder(QDataStream::LittleEndian);
     QObject::connect(&m_tcpSocket, &QTcpSocket::stateChanged, this, &TaDemoCompilerClient::onSocketStateChanged);
@@ -61,10 +62,11 @@ void TaDemoCompilerClient::onSocketStateChanged(QAbstractSocket::SocketState soc
         {
             qInfo() << "[TaDemoCompilerClient::onSocketStateChanged] socket connected";
             m_datastream.resetStatus();
-            if (m_tafGameId > 0u && m_localPlayerDplayId > 0u)
+            if (m_initialConnectionAchieved && m_tafGameId > 0u && m_localPlayerDplayId > 0u)
             {
                 sendReconnect(m_tafGameId, m_localPlayerDplayId);
             }
+            m_initialConnectionAchieved = true;
         }
     }
     catch (const std::exception & e)
@@ -205,12 +207,12 @@ void TaDemoCompilerClient::onDplaySuperEnumPlayerReply(std::uint32_t dplayId, co
         {
             throw std::runtime_error("you need to determine and setLocalPlayerName() before GameMonitor receives any packets!");
         }
-        else if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
+        else if (name.c_str() == m_localPlayerName && m_localPlayerDplayId == 0 && dplayId != 0)
         {
             m_localPlayerDplayId = dplayId;
             sendHello(m_tafGameId, dplayId, m_localPlayerName);
         }
-        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0,16)) == 0)
+        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0,16)) == 0 && m_aiContexts.keys().count(dplayId) == 0)
         {
             registerLocalAi(dplayId, QString::fromStdString(name));
         }
@@ -241,12 +243,12 @@ void TaDemoCompilerClient::onDplayCreateOrForwardPlayer(std::uint16_t command, s
         {
             throw std::runtime_error("you need to determine and setLocalPlayerName() before GameMonitor receives any packets!");
         }
-        if (name.c_str() == m_localPlayerName && dplayId != m_localPlayerDplayId)
+        if (name.c_str() == m_localPlayerName && m_localPlayerDplayId == 0 && dplayId != 0)
         {
             m_localPlayerDplayId = dplayId;
             sendHello(m_tafGameId, dplayId, m_localPlayerName);
         }
-        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0, 16)) == 0)
+        else if (QString::fromStdString(name).indexOf(QString("AI:%1").arg(m_localPlayerName).mid(0, 16)) == 0 && m_aiContexts.keys().count(dplayId) == 0)
         {
             registerLocalAi(dplayId, QString::fromStdString(name));
         }
@@ -377,7 +379,7 @@ bool TaDemoCompilerClient::isLocalAiRegistered(quint32 dpid)
     return m_aiContexts.contains(dpid);
 }
 
-void TaDemoCompilerClient::registerLocalAi(quint32 dpid, QString name)
+QSharedPointer<TaDemoCompilerClient> TaDemoCompilerClient::registerLocalAi(quint32 dpid, QString name)
 {
     if (!isLocalAiRegistered(dpid))
     {
@@ -385,6 +387,11 @@ void TaDemoCompilerClient::registerLocalAi(quint32 dpid, QString name)
         aiContext->setHostPlayerName(m_hostPlayerName);
         aiContext->setLocalPlayerName(name);
         m_aiContexts[dpid] = aiContext;
+        return aiContext;
+    }
+    else
+    {
+        return QSharedPointer<TaDemoCompilerClient>();
     }
 }
 

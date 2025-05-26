@@ -52,7 +52,7 @@ namespace tareplay {
         void onReadyRead();
         bool isLocalAiName(const std::string &name);
         bool isLocalAiRegistered(quint32 dpid);
-        void registerLocalAi(quint32 dpid, QString name);
+        QSharedPointer<TaDemoCompilerClient> registerLocalAi(quint32 dpid, QString name);
         QSharedPointer<TaDemoCompilerClient> getLocalAi(quint32 dpid);
 
         QTcpSocket m_tcpSocket;
@@ -68,6 +68,7 @@ namespace tareplay {
         qint64 m_ticks;
         QSet<quint32> m_dpConnectedPlayers;
         QMap<quint32, QSharedPointer<TaDemoCompilerClient> > m_aiContexts;
+        bool m_initialConnectionAchieved;
     };
 
 }
