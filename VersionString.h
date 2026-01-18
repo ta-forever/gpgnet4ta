@@ -1,3 +1,3 @@
 #ifndef VERSION_STRING
-#define VERSION_STRING "2025.5.23"
+#define VERSION_STRING "2026.1.18"
 #endif
