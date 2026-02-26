@@ -24,7 +24,7 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 }
 
 TaLobby::TaLobby(
-    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize):
+    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
@@ -35,7 +35,7 @@ TaLobby::TaLobby(
 {
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
-    m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW));
+    m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW, repairAsymmetricAlliances));
     m_packetParser.reset(new tapacket::TAPacketParser());
     m_packetParser->subscribe(m_gameMonitor.data());
     m_pingTimer.setInterval(3000);

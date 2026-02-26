@@ -36,7 +36,7 @@ class TaLobby : public QObject
     QMap<QString, quint32> m_tafnetIdsByPlayerName;
 
 public:
-    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize);
+    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances);
     void enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);

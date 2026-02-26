@@ -56,7 +56,7 @@ std::ostream & PlayerData::print(std::ostream &s) const
 }
 
 
-GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks) :
+GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances) :
 m_gameStartsAfterTickCount(gameStartsAfterTickCount),
 m_drawGameTicks(drawGameTicks),
 m_hostDplayId(0u),
@@ -65,7 +65,8 @@ m_gameLaunched(false),
 m_gameStarted(false),
 m_cheatsEnabled(false),
 m_suspiciousStatus(false),
-m_gameEventHandler(gameEventHandler)
+m_gameEventHandler(gameEventHandler),
+m_repairAsymmetricAlliances(repairAsymmetricAlliances)
 { }
 
 void GameMonitor2::setHostPlayerName(const std::string &playerName)
@@ -573,6 +574,53 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
     }
 }
 
+static void repairAsymmetricAlliances(std::map<std::uint32_t, PlayerData>& players)
+{
+    bool anyRepair = true;
+    while (anyRepair)
+    {
+        anyRepair = false;
+        for (const std::pair<std::uint32_t, PlayerData> & p : players)
+        {
+            std:uint32_t dpid = p.first;
+            auto& player = p.second;
+            if (player.isWatcher || player.isDead)
+            {
+                continue;
+            }
+            bool hasMutualAlly = false;
+            for (std::uint32_t allyId : player.allies)
+            {
+                if (players.count(allyId) && players.at(allyId).allies.count(dpid))
+                {
+                    hasMutualAlly = true;
+                    break;
+                }
+            }
+            if (hasMutualAlly)
+            {
+                continue;
+            }
+            for (const std::pair<std::uint32_t, PlayerData>& pOther: players)
+            {
+                std::uint32_t otherDpid = pOther.first;
+                auto& other = pOther.second;
+                if (otherDpid == dpid || other.isWatcher || other.isDead)
+                {
+                    continue;
+                }
+                if (other.allies.count(dpid) && !player.allies.count(otherDpid))
+                {
+                    LOG_INFO("[repairAsymmetricAlliances] repairing asymmetric alliance: '"
+                        << player.name.c_str() << "' -> '" << other.name.c_str() << "'");
+                    players.at(dpid).allies.insert(otherDpid);
+                    anyRepair = true;
+                }
+            }
+        }
+    }
+}
+
 void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
 {
     WATCHDOG("GameMonitor2::onGameTick", 100);
@@ -590,6 +638,12 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
 
     if (!m_gameStarted && tick > m_gameStartsAfterTickCount)
     {
+        if (m_repairAsymmetricAlliances)
+        {
+            repairAsymmetricAlliances(m_players);
+            updatePlayerArmies();
+        }
+
         // server logic requires alliances to be locked at launch so we require teams to be set before game starts (tick > m_gameStartsAfterTickCount)
         // so here we grab the player status (in particular the alliances) at time of game start
         m_frozenPlayers = m_players;
@@ -1062,7 +1116,7 @@ void GameMonitor2::test(int allianceMethod)
     qInfo() << "[GameMonitor2::test] =========== allianceMethod:" << allianceMethod;
     {
         // normal 1v1 player1 wins
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1105,7 +1159,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 with host as watcher player3 wins
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1138,7 +1192,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 with local non-host player as watcher player3 wins
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1171,7 +1225,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 with remote non-host player as watcher player1 wins
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1204,7 +1258,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 with local host player as watcher player3 wins
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player1");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1237,7 +1291,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 remote watcher leaves
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1272,7 +1326,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 1v1 player2 disconnects
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1310,7 +1364,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // 1v1 forced draw
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1342,7 +1396,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // 1v1 agreed draw after start
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1364,7 +1418,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // 1v1 agreed draw before start
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1389,7 +1443,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // 1v1 players bail before start
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1412,7 +1466,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 2v2 players3,4 win
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1483,7 +1537,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // normal 2v2 agreed draw after 1 and 3 die
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1520,6 +1574,10 @@ void GameMonitor2::test(int allianceMethod)
         // original teams 1+2 vs 3+4 still in effect
         gm.onUnitDied(1, 1);
         gm.onUnitDied(3, 3001);
+        gm.onGameTick(1, 2101);
+        gm.onGameTick(2, 2101);
+        gm.onGameTick(3, 2101);
+        gm.onGameTick(4, 2101);
         TESTASSERT(gm.isGameStarted());
         TESTASSERT(!gm.isGameOver());
 
@@ -1534,8 +1592,102 @@ void GameMonitor2::test(int allianceMethod)
     }
 
     {
+        // normal 2v2 but one player missing mutual alliance
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 4, "player4", NULL, NULL);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
+        gm.onGameTick(1, 10);
+        gm.onGameTick(2, 10);
+        gm.onGameTick(3, 10);
+        gm.onGameTick(4, 10);
+        TESTASSERT(!gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+
+        // normal pregame alliances
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, false);   // but 2 forgets to reciprocate
+        SetTestAlliance(allianceMethod, gm, 3, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 3, true);
+        gm.onGameTick(1, 101);
+        gm.onGameTick(2, 101);
+        gm.onGameTick(3, 101);
+        gm.onGameTick(4, 101);
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+
+        // team 3+4 dies
+        gm.onUnitDied(3, 3001);
+        gm.onUnitDied(4, 4501);
+        gm.onGameTick(1, 2101);
+        gm.onGameTick(2, 2101);
+        gm.onGameTick(3, 2101);
+        gm.onGameTick(4, 2101);
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+    }
+
+    {
+        // normal 2v2 but one player missing mutual alliance, and we turn on the fix
+        GameMonitor2 gm(NULL, 100, 10, true /* fix on */);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 4, "player4", NULL, NULL);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
+        gm.onGameTick(1, 10);
+        gm.onGameTick(2, 10);
+        gm.onGameTick(3, 10);
+        gm.onGameTick(4, 10);
+        TESTASSERT(!gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+
+        // normal pregame alliances
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, false);   // but 2 forgets to reciprocate
+        SetTestAlliance(allianceMethod, gm, 3, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 3, true);
+        gm.onGameTick(1, 101);
+        gm.onGameTick(2, 101);
+        gm.onGameTick(3, 101);
+        gm.onGameTick(4, 101);
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+
+        // team 3+4 dies
+        gm.onUnitDied(3, 3001);
+        gm.onUnitDied(4, 4501);
+        gm.onGameTick(1, 2101);
+        gm.onGameTick(2, 2101);
+        gm.onGameTick(3, 2101);
+        gm.onGameTick(4, 2101);
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(gm.isGameOver());
+
+        const auto& gr = gm.getGameResult();
+        TESTASSERT(gr.status == GameResult::Status::READY_RESULT);
+        TESTASSERT(gr.results.size() == 4);
+        TestGameResult(gr.results, 1, 1);
+        TestGameResult(gr.results, 2, 1);
+        TestGameResult(gr.results, 3, -1);
+        TestGameResult(gr.results, 4, -1);
+    }
+
+    {
         // compstomp host's AIs humans win
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
@@ -1573,7 +1725,7 @@ void GameMonitor2::test(int allianceMethod)
 
     {
         // compstomp remote's AIs humans win
-        GameMonitor2 gm(NULL, 100, 10);
+        GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
         gm.setLocalPlayerName("player2");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);

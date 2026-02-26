@@ -112,13 +112,14 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     std::map<std::uint32_t, PlayerData> m_frozenPlayers;// m_players (in particular the teams and alliances) as is was at time of game start
     std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
+    bool m_repairAsymmetricAlliances;
 
     GameEventHandler *m_gameEventHandler;
 
 public:
     static void test(int allianceMethod);
 
-    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks);
+    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances);
 
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
