@@ -7,6 +7,10 @@
 #include <set>
 #include <vector>
 
+#ifdef QT_CORE_LIB
+#include <QtCore/qvector.h>
+#endif
+
 #include "TAPacketParser.h"
 #include "tapacket/TPacket.h"
 
@@ -113,13 +117,18 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
     bool m_repairAsymmetricAlliances;
+    bool m_allowExternalAlliances;      // if false, never switch away from dplay-based alliance inference
+    bool m_allowExternalDeaths;         // if false, never switch away from dplay-based death detection
+    bool m_externalAlliancesEnabled;    // true = currently using onExternalPlayerStatus for alliances
+    bool m_externalDeathsEnabled;       // true = currently using onExternalPlayerStatus for death detection
 
     GameEventHandler *m_gameEventHandler;
 
 public:
     static void test(int allianceMethod);
 
-    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances);
+    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
+                 bool allowExternalAlliances = true, bool allowExternalDeaths = true);
 
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
@@ -158,6 +167,15 @@ public:
     virtual void onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId);
     virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId);
     virtual void onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick);
+
+#ifdef QT_CORE_LIB
+    // allyFlags is 10x10 row-major: allyFlags[i*10+j] != 0 => slot i allied with slot j
+    // propertyMasks: WATCH=0x40, HUMANPLAYER=0x80, PLAYERCHEATING=0x2000
+    virtual void onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives, const QVector<int>& allyTeams,
+                                        const QVector<int>& raceSides, const QVector<int>& propertyMasks,
+                                        const QVector<int>& infoTypes, const QVector<int>& myTypes,
+                                        const QVector<int>& dplayIds, const QVector<int>& winLoseTimes, const QVector<int>& unitsNumbers);
+#endif
 
 protected:
 

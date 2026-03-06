@@ -116,6 +116,7 @@ void LaunchServer::onReadyReadTcp()
             QString message = args.mid(1).join(" ");
             m_jdPlay.reset();
             notifyClients("FAIL");
+            closeTAFGameState();
             emit gameFileVersionMismatch(message);
         }
         else if (args.size() >= 5 && args[0] == "/host")
@@ -185,6 +186,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -197,6 +199,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -206,6 +209,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -214,6 +218,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_joinIsDisabled = false;
         notifyClients("RUNNING");
+        openTAFGameState();
 
         if (okGameId && !submitHashesEndPoint.isEmpty() && !submitHashesToken.isEmpty())
         {
@@ -244,10 +249,12 @@ void LaunchServer::timerEvent(QTimerEvent* event)
                 if (exitCode == 0)
                 {
                     notifyClients("IDLE");
+                    closeTAFGameState();
                 }
                 else
                 {
                     notifyClients(QString("FAIL %1").arg(exitCode, 0, 16, QChar('0')));
+                    closeTAFGameState();
                     emit gameExitedWithError(exitCode);
                 }
                 m_jdPlay.reset();
@@ -273,6 +280,8 @@ void LaunchServer::timerEvent(QTimerEvent* event)
             {
                 m_submitGameFileHashes = nullptr;
             }
+
+            pollTAFGameState();
         }
 
         if (!m_jdPlay || exitCode != STILL_ACTIVE)
@@ -294,6 +303,96 @@ void LaunchServer::timerEvent(QTimerEvent* event)
     {
         qWarning() << "[LaunchServer::timerEvent] general exception:";
     }
+}
+
+void LaunchServer::openTAFGameState()
+{
+    m_tafGameStateMap = OpenFileMapping(FILE_MAP_READ, FALSE, TAFGAMESTATE_SHMEM_NAME);
+    if (m_tafGameStateMap) {
+        m_tafGameStateView = MapViewOfFile(m_tafGameStateMap, FILE_MAP_READ, 0, 0, sizeof(TAFGameState));
+    }
+    memset(&m_tafGameStatePrev, 0, sizeof(m_tafGameStatePrev));
+}
+
+void LaunchServer::closeTAFGameState()
+{
+    if (m_tafGameStateView) { UnmapViewOfFile(m_tafGameStateView); m_tafGameStateView = nullptr; }
+    if (m_tafGameStateMap)  { CloseHandle(m_tafGameStateMap);       m_tafGameStateMap  = NULL;   }
+    memset(&m_tafGameStatePrev, 0, sizeof(m_tafGameStatePrev));
+}
+
+void LaunchServer::pollTAFGameState()
+{
+    if (!m_tafGameStateMap)
+    {
+        openTAFGameState();
+    }
+    if (!m_tafGameStateView)
+    {
+        return;
+    }
+    const TAFGameState* shm = static_cast<const TAFGameState*>(m_tafGameStateView);
+
+    // Seqlock read: spin until we get a clean even-sequence snapshot.
+    // Bounded to guard against TA crashing mid-write and leaving an odd sequenceNumber forever.
+    TAFGameState snapshot;
+    uint32_t seq1;
+    int retries = 0;
+    while (true) {
+        if (++retries > 100)
+        {
+            return;        // writer stuck or process dead — try again next tick
+        }
+        seq1 = shm->sequenceNumber;
+        if (seq1 == 0)
+        {
+            return;              // never written
+        }
+        if (seq1 & 1)
+        {
+            continue;             // write in progress — spin
+        }
+        MemoryBarrier();
+        snapshot = *shm;                    // copy the whole struct
+        MemoryBarrier();
+        if (shm->sequenceNumber == seq1)
+        {
+            break;  // clean read
+        }
+    }
+
+    if (snapshot.magic != TAFGAMESTATE_MAGIC)
+    {
+        return;
+    }
+    if (snapshot.sequenceNumber == m_tafGameStatePrev.sequenceNumber)
+    {
+        return;
+    }
+
+    m_tafGameStatePrev = snapshot;
+
+    QStringList tokens;
+    tokens << "PLAYER_STATUS";
+    for (int i = 0; i < 10; i++) {
+        // format: "f0,...,f9:active:team:raceSide:propertyMask:infoType:myType:dplayId:winLoseTime:units"
+        QStringList flags;
+        for (int j = 0; j < 10; j++)
+            flags << QString::number(snapshot.playerAllyFlags[i][j]);
+        tokens << (flags.join(',')
+                   + ':' + QString::number(snapshot.playerActive[i])
+                   + ':' + QString::number(snapshot.playerAllyTeam[i])
+                   + ':' + QString::number(snapshot.playerRaceSide[i])
+                   + ':' + QString::number(snapshot.playerPropertyMask[i])
+                   + ':' + QString::number(snapshot.playerInfoType[i])
+                   + ':' + QString::number(snapshot.playerMyType[i])
+                   + ':' + QString::number(snapshot.playerDirectPlayId[i])
+                   + ':' + QString::number(snapshot.playerWinLoseTime[i])
+                   + ':' + QString::number(snapshot.playerUnitsNumber[i]));
+    }
+    QString msg = tokens.join(" ");
+    qInfo() << "[LaunchServer::notifyClients]" << msg;
+    notifyClients(msg);
 }
 
 void LaunchServer::notifyClients(QString _msg)

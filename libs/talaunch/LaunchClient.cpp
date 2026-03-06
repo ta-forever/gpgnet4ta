@@ -191,4 +191,32 @@ void LaunchClient::onReadyReadTcp()
     {
         m_state = State::FAIL;
     }
+    else if (response[0] == "PLAYER_STATUS")
+    {
+        if (response.size() == 11)
+        {
+            // each token is "f0,...,f9:active:team:raceSide:propertyMask:infoType:myType:dplayId:winLoseTime:units"
+            QVector<int> allyFlags(100, 0), actives(10), allyTeams(10);
+            QVector<int> raceSides(10), propertyMasks(10), infoTypes(10), myTypes(10);
+            QVector<int> dplayIds(10), winLoseTimes(10), unitsNumbers(10);
+            for (int i = 0; i < 10; i++) {
+                QStringList tok = response[i+1].split(':');
+                QStringList flags = tok.value(0).split(',');
+                for (int j = 0; j < 10 && j < flags.size(); j++)
+                    allyFlags[i*10 + j] = flags[j].toInt();
+                actives[i]      = tok.value(1).toInt();
+                allyTeams[i]    = tok.value(2).toInt();
+                raceSides[i]    = tok.value(3).toInt();
+                propertyMasks[i] = tok.value(4).toInt();
+                infoTypes[i]    = tok.value(5).toInt();
+                myTypes[i]      = tok.value(6).toInt();
+                dplayIds[i]     = tok.value(7).toInt();
+                winLoseTimes[i] = tok.value(8).toInt();
+                unitsNumbers[i] = tok.value(9).toInt();
+            }
+            emit playerStatusReceived(allyFlags, actives, allyTeams,
+                                      raceSides, propertyMasks, infoTypes, myTypes,
+                                      dplayIds, winLoseTimes, unitsNumbers);
+        }
+    }
 }

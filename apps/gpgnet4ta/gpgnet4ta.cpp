@@ -637,6 +637,8 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("runtests", "Flag to just run tests and exit"));
     parser.addOption(QCommandLineOption("verify", "Game file CRC32's to verify.  <filename>:<crc>,<crc>,...;<filename>:<crc>,<crc>,...;...", "verify", ""));
     parser.addOption(QCommandLineOption("repairAsymmetricAlliances", "Flag to turn on a workaround for teams bug where one player someones is left stranded without a team"));
+    parser.addOption(QCommandLineOption("noExternalAlliances", "Always derive alliance info from dplay packets; ignore shared-memory player status for alliances."));
+    parser.addOption(QCommandLineOption("noExternalDeaths", "Always derive player deaths from dplay packets; ignore shared-memory player status for death detection."));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -723,7 +725,8 @@ int doMain(int argc, char* argv[])
         // That UDP port is expected to be one brokered by the FAF ICE adapter independently of gpgnet4ta
         // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
         // (viz all the Qt signal connections from GpgNetClient to TaLobby)
-        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"), parser.value("maxpacketsize").toInt(), parser.isSet("repairAsymmetricAlliances"));
+        TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"), parser.value("maxpacketsize").toInt(), parser.isSet("repairAsymmetricAlliances"),
+                      !parser.isSet("noExternalAlliances"), !parser.isSet("noExternalDeaths"));
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
@@ -795,6 +798,9 @@ int doMain(int argc, char* argv[])
                 ircForward->open();
             });
         }
+
+        QObject::connect(&launchClient, &talaunch::LaunchClient::playerStatusReceived,
+                         &lobby,        &TaLobby::onExternalPlayerStatus);
 
         taflib::ConsoleReader consoleReader(QHostAddress("127.0.0.1"), parser.value("consoleport").toInt());
         QObject::connect(&consoleReader, &taflib::ConsoleReader::textReceived, &launcher, &GpgNetGameLauncher::onExtendedMessage);

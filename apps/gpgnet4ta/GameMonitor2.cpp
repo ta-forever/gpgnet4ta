@@ -56,7 +56,8 @@ std::ostream & PlayerData::print(std::ostream &s) const
 }
 
 
-GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances) :
+GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
+                           bool allowExternalAlliances, bool allowExternalDeaths) :
 m_gameStartsAfterTickCount(gameStartsAfterTickCount),
 m_drawGameTicks(drawGameTicks),
 m_hostDplayId(0u),
@@ -66,7 +67,11 @@ m_gameStarted(false),
 m_cheatsEnabled(false),
 m_suspiciousStatus(false),
 m_gameEventHandler(gameEventHandler),
-m_repairAsymmetricAlliances(repairAsymmetricAlliances)
+m_repairAsymmetricAlliances(repairAsymmetricAlliances),
+m_allowExternalAlliances(allowExternalAlliances),
+m_allowExternalDeaths(allowExternalDeaths),
+m_externalAlliancesEnabled(false),
+m_externalDeathsEnabled(false)
 { }
 
 void GameMonitor2::setHostPlayerName(const std::string &playerName)
@@ -133,6 +138,8 @@ void GameMonitor2::reset()
     m_mapName.clear();
     m_players.clear();
     m_gameResult = GameResult();
+    m_externalAlliancesEnabled = false;
+    m_externalDeathsEnabled = false;
 }
 
 std::set<std::string> GameMonitor2::getPlayerNames(bool queryIsPlayer, bool queryIsWatcher) const
@@ -402,6 +409,11 @@ void GameMonitor2::onAlliance(std::uint32_t subjectDpid, std::uint32_t objectDpi
         return;
     }
 
+    if (m_externalAlliancesEnabled)
+    {
+        return;
+    }
+
     const bool wasAllied = itSubject->second.allies.count(objectDpid);
     LOG_INFO("[GameMonitor2::onAlliance] subject=" << itSubject->second.name.c_str() << "object=" << itObject->second.name.c_str() << "wasAllied=" << wasAllied << "isAllied=" << isAllied);
 
@@ -440,6 +452,11 @@ void GameMonitor2::onTeamSelection(std::uint32_t fromDplayId, int teamNumber)
     if (itSubject == m_players.end())
     {
         LOG_WARNING("[GameMonitor2::onTeamSelection] ERROR unexpected subjectDpid=" << fromDplayId);
+        return;
+    }
+
+    if (m_externalAlliancesEnabled)
+    {
         return;
     }
 
@@ -497,7 +514,7 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         return;
     }
 
-    if (unitId % m_maxUnits == 1)
+    if (unitId % m_maxUnits == 1 && !m_externalDeathsEnabled)
     {
         LOG_INFO("[GameMonitor2::onUnitDied] sourcedplayId=" << sourceDplayId << " tick=" << getMostRecentGameTick() << " unitId=" << unitId << "(commander), maxUnits=" << m_maxUnits);
         std::ostringstream ss;
@@ -522,6 +539,125 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         }
     }
 }
+
+#ifdef QT_CORE_LIB
+void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives, const QVector<int>& allyTeams,
+                                          const QVector<int>& raceSides, const QVector<int>& propertyMasks,
+                                          const QVector<int>& infoTypes, const QVector<int>& myTypes,
+                                          const QVector<int>& dplayIds, const QVector<int>& winLoseTimes, const QVector<int>& unitsNumbers)
+{
+    WATCHDOG("GameMonitor2::onExternalPlayerStatus", 100);
+
+    // Switch from dplay-based inference to authoritative TA memory on first external status,
+    // unless disabled by command-line option.
+    if (m_allowExternalAlliances) m_externalAlliancesEnabled = true;
+    if (m_allowExternalDeaths)    m_externalDeathsEnabled    = true;
+
+    // Build slot -> dplayid lookup
+    std::map<int, std::uint32_t> slotToDpid;
+    for (const auto& kv : m_players)
+    {
+        if (kv.second.slotNumber >= 0 && kv.second.slotNumber < 10)
+            slotToDpid[kv.second.slotNumber] = kv.first;
+    }
+
+    bool deathChange    = false;
+    bool allianceChange = false;
+
+    for (const auto& kv : slotToDpid)
+    {
+        int slot = kv.first;
+        std::uint32_t dpid = kv.second;
+        PlayerData& p = m_players[dpid];
+
+        // Watcher update — authoritative from TA memory; watchers are not part of the game
+        bool isWatcher = (propertyMasks[slot] & 0x40) != 0;
+        if (m_externalAlliancesEnabled && p.isWatcher != isWatcher)
+        {
+            p.isWatcher = isWatcher;
+            allianceChange = true;
+            LOG_INFO("[GameMonitor2::onExternalPlayerStatus] slot " << slot
+                     << " player '" << p.name.c_str() << "' isWatcher=" << isWatcher);
+        }
+
+        // Death detection (skip watchers — they have no commander)
+        if (m_externalDeathsEnabled && !isWatcher && actives[slot] == 0 && !p.isDead)
+        {
+            p.isDead = true;
+            deathChange = true;
+            LOG_INFO("[GameMonitor2::onExternalPlayerStatus] slot " << slot
+                     << " player '" << p.name.c_str() << "' died");
+        }
+    }
+
+    // Alliance update (pre-game only; teams frozen at game start)
+    if (m_externalAlliancesEnabled && !m_gameStarted)
+    {
+        for (const auto& kv : slotToDpid)
+        {
+            int slot = kv.first;
+            std::uint32_t dpid = kv.second;
+
+            if (actives[slot] == 0)
+            {
+                continue;  // skip inactive slots
+            }
+
+            PlayerData& p = m_players[dpid];
+            std::set<std::uint32_t> newAllies;
+            for (int j = 0; j < 10; j++)
+            {
+                if (j == slot)
+                {
+                    continue;
+                }
+                if (allyFlags[slot*10 + j] != 0)
+                {
+                    auto it = slotToDpid.find(j);
+                    if (it != slotToDpid.end())
+                    {
+                        newAllies.insert(it->second);
+                    }
+                }
+            }
+            if (p.allies != newAllies)
+            {
+                p.allies = newAllies;
+                allianceChange = true;
+            }
+
+            if (p.battleroomTeamSelection != allyTeams[slot])
+            {
+                p.battleroomTeamSelection = allyTeams[slot];
+                allianceChange = true;
+            }
+        }
+    }
+
+    if (allianceChange)
+    {
+        updatePlayerArmies();
+        notifyPlayerStatuses();
+
+        // mutual draw check (all allied)
+        int winningTeam;
+        if (checkEndGameCondition(winningTeam) && winningTeam < 0)
+            latchEndGameResult(winningTeam);
+    }
+
+    if (deathChange)
+    {
+        int winningTeam;
+        if (checkEndGameCondition(winningTeam))
+        {
+            if (winningTeam > 0)
+                latchEndGameTick(getMostRecentGameTick() + m_drawGameTicks);
+            else
+                latchEndGameResult(winningTeam);
+        }
+    }
+}
+#endif
 
 void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId)
 {
@@ -561,7 +697,7 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         updatePlayerArmies();
         notifyPlayerStatuses();
     }
-    else
+    else if (!m_externalDeathsEnabled)
     {
         m_players[rejectedDplayId].isDead = true;
 
@@ -769,6 +905,11 @@ std::set<std::string> GameMonitor2::getMutualAllyNames(std::uint32_t playerId, c
 // anyway alliance has to be created mutually to have any effect ...
 bool GameMonitor2::updateAlliances(std::uint32_t sender, const std::string &chat)
 {
+    if (m_externalAlliancesEnabled)
+    {
+        return false;
+    }
+
     if (sender == 0u)
     {
         std::size_t senderStart = chat.find_first_of('<');

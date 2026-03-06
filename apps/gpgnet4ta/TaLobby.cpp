@@ -24,7 +24,8 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 }
 
 TaLobby::TaLobby(
-    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances):
+    QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances,
+    bool allowExternalAlliances, bool allowExternalDeaths):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
@@ -35,7 +36,8 @@ TaLobby::TaLobby(
 {
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
-    m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW, repairAsymmetricAlliances));
+    m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW, repairAsymmetricAlliances,
+                                         allowExternalAlliances, allowExternalDeaths));
     m_packetParser.reset(new tapacket::TAPacketParser());
     m_packetParser->subscribe(m_gameMonitor.data());
     m_pingTimer.setInterval(3000);
@@ -269,6 +271,19 @@ std::string TaLobby::getPlayerNameFromTafnetId(std::uint32_t tafnetId)
         }
     }
     return std::string();
+}
+
+void TaLobby::onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> allyTeams,
+                                     QVector<int> raceSides, QVector<int> propertyMasks,
+                                     QVector<int> infoTypes, QVector<int> myTypes,
+                                     QVector<int> dplayIds, QVector<int> winLoseTimes, QVector<int> unitsNumbers)
+{
+    if (m_gameMonitor)
+    {
+        m_gameMonitor->onExternalPlayerStatus(allyFlags, actives, allyTeams,
+                                              raceSides, propertyMasks, infoTypes, myTypes,
+                                              dplayIds, winLoseTimes, unitsNumbers);
+    }
 }
 
 void TaLobby::onExtendedMessage(QString msg)

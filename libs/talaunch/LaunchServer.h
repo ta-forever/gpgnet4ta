@@ -1,8 +1,10 @@
 #pragma once
 
 #include "jdplay/JDPlay.h"
+#include "tafgamestate.h"
 
 #include <memory>
+#include <windows.h>
 
 #include <QtNetwork/qtcpserver.h>
 #include <QtNetwork/qtcpsocket.h>
@@ -24,6 +26,9 @@ namespace talaunch {
         bool m_loggedAConnection;
         bool m_joinIsDisabled;
         QNetworkAccessManager m_nam;
+        HANDLE       m_tafGameStateMap  = NULL;
+        void*        m_tafGameStateView = NULL;
+        TAFGameState m_tafGameStatePrev = {};
 
     signals:
         void quit();
@@ -44,6 +49,9 @@ namespace talaunch {
         void notifyClients(QString msg);
         QString getGameFileHashes(int gameId, QString guid);
         void submitGameFileHashes(int gameId, int token, QString json, const QString endpoint, const QString accessToken);
+        void openTAFGameState();
+        void closeTAFGameState();
+        void pollTAFGameState();
     };
 
 }
