@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cinttypes>
+#include <deque>
 #include <functional>
+#include <set>
 #include <QtNetwork/qudpsocket.h>
 #include <QtCore/qtimer.h>
 
@@ -22,6 +24,17 @@ namespace tafnet
     const std::int64_t DEAD_PEER_TIMEOUT = 3 * 60 * 1000;    // milliseoncds, until give up pinging and delete their connection
     const std::size_t RECENT_PING_BUFFER_SIZE = 5;      // for estimating expected ping
 
+    // Lag-switch countermeasure: buffer UDP game data when a peer goes silent,
+    // replay it all when they come back so damage packets are never lost.
+    const std::int64_t LAGSWITCH_DETECT_THRESHOLD = 800;       // ms of ACK silence before considering peer stalled
+    const std::int64_t LAGSWITCH_MAX_BUFFER_TIME = 5000;       // ms max duration to buffer before giving up
+    const std::size_t  LAGSWITCH_MAX_BUFFER_PACKETS = 500;     // max buffered UDP packets per peer
+    const std::size_t  LAGSWITCH_FLUSH_BATCH_SIZE = 50;        // max packets replayed per timer tick (rate-limit)
+    const std::int64_t SLIDING_BUFFER_WINDOW_MS = 1000;        // ms of recently-sent packets retained for retroactive replay
+
+    // Capability flags exchanged via extended HELLO payload
+    const std::uint8_t CAPABILITY_UDP_SEQ = 0x01;              // peer supports ACTION_UDP_DATA_SEQ
+
     struct Payload
     {
         static const unsigned ACTION_INVALID = 0;
@@ -41,6 +54,7 @@ namespace tafnet
         static const unsigned ACTION_PACKSIZE_TEST = 11;
         static const unsigned ACTION_PACKSIZE_ACK = 12;
         static const unsigned ACTION_HELLO = 13;
+        static const unsigned ACTION_UDP_DATA_SEQ = 14; // sequenced fire-and-forget UDP (seq-based dedup, no ACK)
 
         std::uint8_t action;
         QSharedPointer<QByteArray> buf;
@@ -135,12 +149,51 @@ namespace tafnet
             std::uint32_t lastTimeoutSeq;
             std::uint32_t lastResendReqSeq;
 
+            std::int64_t timestampLastDataReceived;  // updated on ANY incoming traffic from this peer (ACK, game data, etc.)
+
             ResendRate();
             int getResendRate(bool incSendCount);
             void registerAck();
             std::int64_t getSuccessfulPingTime();
         };
         std::map<std::uint32_t, ResendRate> m_resendRates;      // keyed by peer tafnet player id
+
+        // Seq-based dedup tracker for receiving side (replaces CRC dedup for seq-capable peers)
+        struct UdpSeqTracker
+        {
+            std::uint32_t highWaterMark = 0;
+            std::set<std::uint32_t> receivedInWindow;
+            static const std::uint32_t WINDOW_SIZE = 256;
+
+            bool isDuplicate(std::uint32_t seq);
+        };
+        std::map<std::uint32_t, UdpSeqTracker> m_udpSeqTrackers;    // keyed by peer tafnet player id
+
+        // Lag-switch countermeasure: per-peer UDP replay buffer
+        struct SlidingEntry
+        {
+            QByteArray data;
+            std::int64_t timestamp;
+            std::uint32_t seq;
+        };
+
+        struct UdpReplayBuffer
+        {
+            std::deque<QByteArray> packets;     // stall buffer: unsent payloads (legacy mode)
+            bool peerStalled = false;
+            std::int64_t stallDetectedAt = 0;
+
+            // Seq mode: monotonic counter and sliding window for retroactive replay
+            std::uint32_t nextSendSeq = 1;
+            std::deque<SlidingEntry> slidingBuffer;         // recently-sent packets (time-windowed)
+            std::deque<SlidingEntry> retroactiveSnapshot;   // captured from slidingBuffer on first stall detection
+            std::deque<SlidingEntry> stallPackets;           // stall buffer with seq (seq mode)
+        };
+        std::map<std::uint32_t, UdpReplayBuffer> m_udpReplayBuffers;  // keyed by peer tafnet player id
+        bool isPeerStalled(std::uint32_t peerPlayerId) const;
+
+        // Peer capability flags (parsed from extended HELLO payload)
+        std::map<std::uint32_t, std::uint8_t> m_peerCapabilities;
         const std::uint32_t m_maxPacketSize;                    // upper limit on the otherwise auto-discovered UDP packet size
         const bool m_proactiveResendEnabled;
 

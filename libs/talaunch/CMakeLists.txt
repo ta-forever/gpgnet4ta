@@ -14,6 +14,8 @@ if (WIN32)
         Qt5::Network
         tafencrypt
         rwe
+        dplayreg
+        jdplay
     )
 
 else()

@@ -137,7 +137,8 @@ TafnetNode::ResendRate::ResendRate() :
     timestampLastPingAck(0),
     timestampFirstPing(0),
     lastTimeoutSeq(0),
-    lastResendReqSeq(0)
+    lastResendReqSeq(0),
+    timestampLastDataReceived(0)
 { }
 
 int TafnetNode::ResendRate::getResendRate(bool incSendCount)
@@ -206,6 +207,63 @@ std::int64_t TafnetNode::ResendRate::getSuccessfulPingTime()
     {
         return -1;
     }
+}
+
+bool TafnetNode::isPeerStalled(std::uint32_t peerPlayerId) const
+{
+    auto it = m_resendRates.find(peerPlayerId);
+    if (it == m_resendRates.end())
+        return false;
+
+    const ResendRate& stats = it->second;
+
+    // Don't flag as stalled if we've never received data (still connecting)
+    if (stats.timestampLastDataReceived == 0)
+        return false;
+
+    std::int64_t tNow = QDateTime::currentMSecsSinceEpoch();
+    return (tNow - stats.timestampLastDataReceived) > LAGSWITCH_DETECT_THRESHOLD;
+}
+
+bool TafnetNode::UdpSeqTracker::isDuplicate(std::uint32_t seq)
+{
+    if (seq == 0)
+        return false;
+
+    if (highWaterMark == 0)
+    {
+        // First packet — initialize
+        highWaterMark = seq;
+        receivedInWindow.insert(seq);
+        return false;
+    }
+
+    if (seq > highWaterMark)
+    {
+        // New high — advance window
+        highWaterMark = seq;
+        receivedInWindow.insert(seq);
+
+        // Expire entries below window floor
+        std::uint32_t floor = (highWaterMark > WINDOW_SIZE) ? highWaterMark - WINDOW_SIZE : 0;
+        auto it = receivedInWindow.begin();
+        while (it != receivedInWindow.end() && *it < floor)
+            it = receivedInWindow.erase(it);
+
+        return false;
+    }
+
+    // seq <= highWaterMark — check if within window
+    std::uint32_t floor = (highWaterMark > WINDOW_SIZE) ? highWaterMark - WINDOW_SIZE : 0;
+    if (seq < floor)
+        return true;   // below window — assume already received
+
+    if (receivedInWindow.count(seq))
+        return true;   // already received within window
+
+    // New packet within window (out-of-order arrival)
+    receivedInWindow.insert(seq);
+    return false;
 }
 
 TafnetNode::HostAndPort::HostAndPort() :
@@ -289,6 +347,109 @@ void TafnetNode::onResendTimer()
                 if (--maxResendAtOnce <= 0)
                 {
                     break;
+                }
+            }
+        }
+
+        // Lag-switch countermeasure: check for stalled peers that have recovered
+        // and flush their replay buffers (rate-limited to avoid socket burst)
+        for (auto& pair : m_udpReplayBuffers)
+        {
+            std::uint32_t peerPlayerId = pair.first;
+            UdpReplayBuffer& replayBuf = pair.second;
+
+            if (!replayBuf.peerStalled)
+                continue;
+
+            bool peerSupportsSeq = m_peerCapabilities.count(peerPlayerId) &&
+                                   (m_peerCapabilities[peerPlayerId] & CAPABILITY_UDP_SEQ);
+
+            if (!isPeerStalled(peerPlayerId))
+            {
+                if (peerSupportsSeq)
+                {
+                    // Seq mode recovery — replay retroactive snapshot + stall buffer (rate-limited)
+                    std::size_t flushed = 0;
+
+                    // First: flush retroactive snapshot (pre-detection packets)
+                    while (!replayBuf.retroactiveSnapshot.empty() && flushed < LAGSWITCH_FLUSH_BATCH_SIZE)
+                    {
+                        const SlidingEntry& entry = replayBuf.retroactiveSnapshot.front();
+                        int nRepeats = m_resendRates[peerPlayerId].getResendRate(false);
+                        sendMessage(peerPlayerId, Payload::ACTION_UDP_DATA_SEQ, entry.seq,
+                                    entry.data.data(), entry.data.size(), nRepeats);
+                        replayBuf.retroactiveSnapshot.pop_front();
+                        ++flushed;
+                    }
+
+                    // Then: flush stall-buffered packets
+                    while (!replayBuf.stallPackets.empty() && flushed < LAGSWITCH_FLUSH_BATCH_SIZE)
+                    {
+                        const SlidingEntry& entry = replayBuf.stallPackets.front();
+                        int nRepeats = m_resendRates[peerPlayerId].getResendRate(false);
+                        sendMessage(peerPlayerId, Payload::ACTION_UDP_DATA_SEQ, entry.seq,
+                                    entry.data.data(), entry.data.size(), nRepeats);
+                        replayBuf.stallPackets.pop_front();
+                        ++flushed;
+                    }
+
+                    if (flushed > 0)
+                    {
+                        qInfo() << "[TafnetNode::onResendTimer] peer" << peerPlayerId
+                                << "recovered (seq mode), flushed" << flushed << "packets"
+                                << "remaining retro:" << replayBuf.retroactiveSnapshot.size()
+                                << "stall:" << replayBuf.stallPackets.size();
+                    }
+
+                    if (replayBuf.retroactiveSnapshot.empty() && replayBuf.stallPackets.empty())
+                    {
+                        replayBuf.peerStalled = false;
+                        replayBuf.stallDetectedAt = 0;
+                    }
+                }
+                else
+                {
+                    // Legacy mode recovery — flush packet buffer (rate-limited)
+                    if (replayBuf.packets.empty())
+                    {
+                        replayBuf.peerStalled = false;
+                        replayBuf.stallDetectedAt = 0;
+                        continue;
+                    }
+
+                    qInfo() << "[TafnetNode::onResendTimer] peer" << peerPlayerId
+                            << "recovered, replaying" << replayBuf.packets.size() << "buffered UDP packets";
+
+                    std::size_t flushed = 0;
+                    while (!replayBuf.packets.empty() && flushed < LAGSWITCH_FLUSH_BATCH_SIZE)
+                    {
+                        const QByteArray& pkt = replayBuf.packets.front();
+                        int nRepeats = m_resendRates[peerPlayerId].getResendRate(false);
+                        sendMessage(peerPlayerId, Payload::ACTION_UDP_DATA, 0, pkt.data(), pkt.size(), nRepeats);
+                        replayBuf.packets.pop_front();
+                        ++flushed;
+                    }
+
+                    if (replayBuf.packets.empty())
+                    {
+                        replayBuf.peerStalled = false;
+                        replayBuf.stallDetectedAt = 0;
+                    }
+                }
+            }
+            else
+            {
+                // Still stalled — check if we've exceeded max buffer time
+                qint64 tNow = QDateTime::currentMSecsSinceEpoch();
+                if (tNow - replayBuf.stallDetectedAt > LAGSWITCH_MAX_BUFFER_TIME)
+                {
+                    qWarning() << "[TafnetNode::onResendTimer] peer" << peerPlayerId
+                               << "stall exceeded max buffer time, discarding packets";
+                    replayBuf.packets.clear();
+                    replayBuf.stallPackets.clear();
+                    replayBuf.retroactiveSnapshot.clear();
+                    replayBuf.peerStalled = false;
+                    replayBuf.stallDetectedAt = 0;
                 }
             }
         }
@@ -377,6 +538,10 @@ void TafnetNode::onReadyRead()
             DataBuffer &tcpSendBuffer = m_sendBuffer[peerPlayerId];
             bool &resendRequestEnabled = m_resendRequestEnabled[peerPlayerId].value;
 
+            // Lag-switch detection: record wall-clock time of ANY incoming traffic from this peer.
+            // This is used by isPeerStalled() to detect network blackouts and trigger UDP replay buffering.
+            m_resendRates[peerPlayerId].timestampLastDataReceived = QDateTime::currentMSecsSinceEpoch();
+
             if (tafBufferedHeader->action == Payload::ACTION_TCP_ACK)
             {
                 taflib::Watchdog wd("TafnetNode::onReadyRead TCP_ACK", 100);
@@ -458,6 +623,20 @@ void TafnetNode::onReadyRead()
                 }
             }
 
+            else if (tafBufferedHeader->action == Payload::ACTION_UDP_DATA_SEQ)
+            {
+                // Sequenced fire-and-forget UDP — use seq-based dedup, no ACK
+                taflib::Watchdog wd("TafnetNode::onReadyRead UDP_DATA_SEQ", 100);
+                std::uint32_t seq = tafBufferedHeader->seq;
+                UdpSeqTracker& tracker = m_udpSeqTrackers[peerPlayerId];
+                if (!tracker.isDuplicate(seq))
+                {
+                    handleMessage(Payload::ACTION_UDP_DATA, peerPlayerId,
+                                  datas.data() + sizeof(TafnetBufferedHeader),
+                                  datas.size() - sizeof(TafnetBufferedHeader));
+                }
+            }
+
             else if (tafBufferedHeader->action >= Payload::ACTION_TCP_DATA)
             {
                 // received data that requires ACK
@@ -525,6 +704,15 @@ void TafnetNode::onReadyRead()
 
 void TafnetNode::handleMessage(std::uint8_t action, std::uint32_t peerPlayerId, char* data, int len)
 {
+    // Parse capability flags from extended HELLO payload (6+ bytes: "HELLO" + caps byte)
+    if (action == Payload::ACTION_HELLO && len > 5)
+    {
+        std::uint8_t caps = static_cast<std::uint8_t>(data[5]);
+        m_peerCapabilities[peerPlayerId] = caps;
+        qInfo() << "[TafnetNode::handleMessage] peer" << peerPlayerId
+                << "capabilities:" << caps
+                << "udp_seq:" << bool(caps & CAPABILITY_UDP_SEQ);
+    }
     m_handleMessage(action, peerPlayerId, data, len);
 }
 
@@ -578,7 +766,11 @@ void TafnetNode::connectToPeer(QHostAddress peer, quint16 peerPort, std::uint32_
     m_reassemblyBuffer.erase(peerPlayerId);
     m_resendRates.erase(peerPlayerId);
     m_resendRequestEnabled.erase(peerPlayerId);
-    forwardGameData(peerPlayerId, Payload::ACTION_HELLO, "HELLO", 5);
+    m_udpReplayBuffers.erase(peerPlayerId);
+    m_peerCapabilities.erase(peerPlayerId);
+    m_udpSeqTrackers.erase(peerPlayerId);
+    char helloWithCaps[6] = { 'H', 'E', 'L', 'L', 'O', CAPABILITY_UDP_SEQ };
+    forwardGameData(peerPlayerId, Payload::ACTION_HELLO, helloWithCaps, 6);
 }
 
 void TafnetNode::disconnectFromPeer(std::uint32_t peerPlayerId)
@@ -595,6 +787,9 @@ void TafnetNode::disconnectFromPeer(std::uint32_t peerPlayerId)
     m_reassemblyBuffer.erase(peerPlayerId);
     m_resendRates.erase(peerPlayerId);
     m_resendRequestEnabled.erase(peerPlayerId);
+    m_udpReplayBuffers.erase(peerPlayerId);
+    m_peerCapabilities.erase(peerPlayerId);
+    m_udpSeqTrackers.erase(peerPlayerId);
 }
 
 void TafnetNode::sendMessage(std::uint32_t destPlayerId, std::uint32_t action, std::uint32_t seq, const char* data, int len, int nRepeats)
@@ -681,8 +876,129 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
     }
     else
     {
-        int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
-        sendMessage(destPlayerId, action, 0, data, len, nRepeats);
+        // Fire-and-forget UDP path — with lag-switch replay buffering
+        UdpReplayBuffer& replayBuf = m_udpReplayBuffers[destPlayerId];
+        bool stalled = isPeerStalled(destPlayerId);
+        bool peerSupportsSeq = m_peerCapabilities.count(destPlayerId) &&
+                               (m_peerCapabilities[destPlayerId] & CAPABILITY_UDP_SEQ);
+
+        if (peerSupportsSeq)
+        {
+            // --- Seq mode: sequenced UDP with sliding buffer for retroactive replay ---
+            std::uint32_t seq = replayBuf.nextSendSeq++;
+            std::int64_t tNow = QDateTime::currentMSecsSinceEpoch();
+
+            // Always maintain sliding buffer (time-windowed recent packets)
+            replayBuf.slidingBuffer.push_back({QByteArray(data, len), tNow, seq});
+            while (!replayBuf.slidingBuffer.empty() &&
+                   tNow - replayBuf.slidingBuffer.front().timestamp > SLIDING_BUFFER_WINDOW_MS)
+            {
+                replayBuf.slidingBuffer.pop_front();
+            }
+
+            if (stalled)
+            {
+                if (!replayBuf.peerStalled)
+                {
+                    // First stall detection — snapshot sliding buffer for retroactive replay on recovery
+                    replayBuf.peerStalled = true;
+                    replayBuf.stallDetectedAt = tNow;
+                    replayBuf.retroactiveSnapshot.assign(
+                        replayBuf.slidingBuffer.begin(), replayBuf.slidingBuffer.end());
+                    qInfo() << "[TafnetNode::forwardGameData] peer" << destPlayerId
+                            << "stall detected (seq mode), captured" << replayBuf.retroactiveSnapshot.size()
+                            << "sliding buffer packets for retroactive replay on recovery";
+                }
+
+                // Buffer current packet for replay on recovery (with seq)
+                if (tNow - replayBuf.stallDetectedAt > LAGSWITCH_MAX_BUFFER_TIME
+                    || replayBuf.stallPackets.size() >= LAGSWITCH_MAX_BUFFER_PACKETS)
+                {
+                    if (!replayBuf.stallPackets.empty())
+                        replayBuf.stallPackets.pop_front();
+                }
+                replayBuf.stallPackets.push_back({QByteArray(data, len), tNow, seq});
+            }
+            else
+            {
+                // Not stalled — flush any buffered packets from a prior stall
+                if (replayBuf.peerStalled)
+                {
+                    std::size_t retroCount = replayBuf.retroactiveSnapshot.size();
+                    std::size_t stallCount = replayBuf.stallPackets.size();
+                    qInfo() << "[TafnetNode::forwardGameData] peer" << destPlayerId
+                            << "recovered (seq mode), replaying" << retroCount
+                            << "retroactive +" << stallCount << "stall-buffered packets";
+
+                    // Replay retroactive snapshot (pre-detection packets — receiver dedup handles already-received ones)
+                    for (const SlidingEntry& entry : replayBuf.retroactiveSnapshot)
+                    {
+                        int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                        sendMessage(destPlayerId, Payload::ACTION_UDP_DATA_SEQ, entry.seq,
+                                    entry.data.data(), entry.data.size(), nRepeats);
+                    }
+                    replayBuf.retroactiveSnapshot.clear();
+
+                    // Replay stall-buffered packets
+                    for (const SlidingEntry& entry : replayBuf.stallPackets)
+                    {
+                        int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                        sendMessage(destPlayerId, Payload::ACTION_UDP_DATA_SEQ, entry.seq,
+                                    entry.data.data(), entry.data.size(), nRepeats);
+                    }
+                    replayBuf.stallPackets.clear();
+                    replayBuf.peerStalled = false;
+                    replayBuf.stallDetectedAt = 0;
+                }
+
+                // Send current packet normally with seq
+                int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                sendMessage(destPlayerId, Payload::ACTION_UDP_DATA_SEQ, seq, data, len, nRepeats);
+            }
+        }
+        else
+        {
+            // --- Legacy mode: fire-and-forget with CRC dedup on receiver ---
+            if (stalled)
+            {
+                if (!replayBuf.peerStalled)
+                {
+                    replayBuf.peerStalled = true;
+                    replayBuf.stallDetectedAt = QDateTime::currentMSecsSinceEpoch();
+                    qInfo() << "[TafnetNode::forwardGameData] peer" << destPlayerId
+                            << "stall detected, buffering UDP packets for replay";
+                }
+
+                qint64 tNow = QDateTime::currentMSecsSinceEpoch();
+                if (tNow - replayBuf.stallDetectedAt > LAGSWITCH_MAX_BUFFER_TIME
+                    || replayBuf.packets.size() >= LAGSWITCH_MAX_BUFFER_PACKETS)
+                {
+                    if (!replayBuf.packets.empty())
+                        replayBuf.packets.pop_front();
+                }
+                replayBuf.packets.push_back(QByteArray(data, len));
+            }
+            else
+            {
+                if (replayBuf.peerStalled)
+                {
+                    qInfo() << "[TafnetNode::forwardGameData] peer" << destPlayerId
+                            << "recovered, replaying" << replayBuf.packets.size() << "buffered UDP packets";
+
+                    for (const QByteArray& pkt : replayBuf.packets)
+                    {
+                        int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                        sendMessage(destPlayerId, action, 0, pkt.data(), pkt.size(), nRepeats);
+                    }
+                    replayBuf.packets.clear();
+                    replayBuf.peerStalled = false;
+                    replayBuf.stallDetectedAt = 0;
+                }
+
+                int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                sendMessage(destPlayerId, action, 0, data, len, nRepeats);
+            }
+        }
     }
 }
 
