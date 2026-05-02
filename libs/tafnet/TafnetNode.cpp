@@ -918,6 +918,14 @@ void TafnetNode::forwardGameData(std::uint32_t destPlayerId, std::uint32_t actio
                         replayBuf.stallPackets.pop_front();
                 }
                 replayBuf.stallPackets.push_back({QByteArray(data, len), tNow, seq});
+
+                // Also try the immediate path. isPeerStalled() only proves inbound silence;
+                // the outbound link is often still working — most commonly because the peer's
+                // TA is paused on lockstep waiting for some other peer, not because their
+                // network is down. If this copy makes it through, the eventual replay on
+                // recovery is filtered by the receiver's seq-based dedup (UdpSeqTracker).
+                int nRepeats = m_resendRates[destPlayerId].getResendRate(false);
+                sendMessage(destPlayerId, Payload::ACTION_UDP_DATA_SEQ, seq, data, len, nRepeats);
             }
             else
             {
