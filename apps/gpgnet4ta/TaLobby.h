@@ -60,8 +60,6 @@ public slots:
 
 public slots:
     void echoToGame(bool isPrivate, QString name, QString chat);
-    void onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> allyTeams,
-                                QVector<int> raceSides, QVector<int> propertyMasks,
-                                QVector<int> infoTypes, QVector<int> myTypes,
-                                QVector<int> dplayIds, QVector<int> winLoseTimes, QVector<int> unitsNumbers);
+    void onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
+                                QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
 };

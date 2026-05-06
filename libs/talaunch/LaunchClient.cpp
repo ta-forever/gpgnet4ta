@@ -172,7 +172,41 @@ void LaunchClient::onReadyReadTcp()
 
     QByteArray data = m_tcpSocket.readAll();
     QStringList response = QString::fromUtf8(data).split(" ");
-    qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
+
+    // For PLAYER_STATUS, log only on STRUCTURAL change — compress unit count to 0/1
+    // (zero / non-zero) so pure unit-count drift during active gameplay doesn't spam logs.
+    // Other messages (state transitions etc.) always log.
+    bool isPlayerStatus = !response.isEmpty() && response[0] == "PLAYER_STATUS";
+    QString structuralKey;
+    if (isPlayerStatus)
+    {
+        // Per-slot token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
+        QStringList structural;
+        structural << response[0];
+        for (int i = 1; i < response.size(); ++i)
+        {
+            QStringList parts = response[i].split(':');
+            if (parts.size() >= 6)
+            {
+                parts[2] = QString::number(parts[2].toInt() > 0 ? 1 : 0);
+                structural << parts.join(':');
+            }
+            else
+            {
+                structural << response[i];
+            }
+        }
+        structuralKey = structural.join(' ');
+    }
+    const bool isHeartbeatOrCountDrift = isPlayerStatus && structuralKey == m_lastPlayerStatusKey;
+    if (!isHeartbeatOrCountDrift)
+    {
+        qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
+    }
+    if (isPlayerStatus)
+    {
+        m_lastPlayerStatusKey = structuralKey;
+    }
 
     State oldState = m_state;
     if (response[0] == "IDLE")
@@ -193,30 +227,25 @@ void LaunchClient::onReadyReadTcp()
     }
     else if (response[0] == "PLAYER_STATUS")
     {
+        // Expect: "PLAYER_STATUS" + 10 per-slot tokens = 11.
         if (response.size() == 11)
         {
-            // each token is "f0,...,f9:active:team:raceSide:propertyMask:infoType:myType:dplayId:winLoseTime:units"
-            QVector<int> allyFlags(100, 0), actives(10), allyTeams(10);
-            QVector<int> raceSides(10), propertyMasks(10), infoTypes(10), myTypes(10);
-            QVector<int> dplayIds(10), winLoseTimes(10), unitsNumbers(10);
+            // each per-slot token is "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
+            QVector<int> allyFlags(100, 0), actives(10), unitCounts(10), allyTeams(10);
+            QVector<int> propertyMasks(10), dplayIds(10);
             for (int i = 0; i < 10; i++) {
                 QStringList tok = response[i+1].split(':');
                 QStringList flags = tok.value(0).split(',');
                 for (int j = 0; j < 10 && j < flags.size(); j++)
                     allyFlags[i*10 + j] = flags[j].toInt();
-                actives[i]      = tok.value(1).toInt();
-                allyTeams[i]    = tok.value(2).toInt();
-                raceSides[i]    = tok.value(3).toInt();
+                actives[i]       = tok.value(1).toInt();
+                unitCounts[i]    = tok.value(2).toInt();
+                allyTeams[i]     = tok.value(3).toInt();
                 propertyMasks[i] = tok.value(4).toInt();
-                infoTypes[i]    = tok.value(5).toInt();
-                myTypes[i]      = tok.value(6).toInt();
-                dplayIds[i]     = tok.value(7).toInt();
-                winLoseTimes[i] = tok.value(8).toInt();
-                unitsNumbers[i] = tok.value(9).toInt();
+                dplayIds[i]      = tok.value(5).toInt();
             }
-            emit playerStatusReceived(allyFlags, actives, allyTeams,
-                                      raceSides, propertyMasks, infoTypes, myTypes,
-                                      dplayIds, winLoseTimes, unitsNumbers);
+            emit playerStatusReceived(allyFlags, actives, unitCounts, allyTeams,
+                                      propertyMasks, dplayIds);
         }
     }
 }

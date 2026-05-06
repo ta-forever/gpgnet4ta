@@ -24,11 +24,18 @@
 
 using namespace talaunch;
 
-static const int TICK_RATE_MILLISEC = 1000;
+// 200ms poll cadence. The original 1000ms left only ~1s of headroom against
+// GameMonitor2's m_drawGameTicks deferral window (~2s) for engine-bit-driven
+// outcome corrections to land before the deferred latch fires. 200ms gives
+// comfortable margin without meaningful CPU cost.
+static const int TICK_RATE_MILLISEC = 200;
 
 LaunchServer::LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout):
     m_keepAliveTimeout(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
-    m_shutdownCounter(keepAliveTimeout),
+    // m_shutdownCounter is in ticks (decremented per timerEvent). The original code
+    // initialised it from a seconds value, which only happened to be correct when
+    // TICK_RATE_MILLISEC was 1000. Now that the poll cadence is faster, convert.
+    m_shutdownCounter(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
     m_loggedAConnection(false)
 {
     qInfo() << "[LaunchServer::LaunchServer] starting server on addr" << addr << "port" << port;
@@ -319,6 +326,7 @@ void LaunchServer::closeTAFGameState()
     if (m_tafGameStateView) { UnmapViewOfFile(m_tafGameStateView); m_tafGameStateView = nullptr; }
     if (m_tafGameStateMap)  { CloseHandle(m_tafGameStateMap);       m_tafGameStateMap  = NULL;   }
     memset(&m_tafGameStatePrev, 0, sizeof(m_tafGameStatePrev));
+    m_lastPlayerStatusMsg.clear();
 }
 
 void LaunchServer::pollTAFGameState()
@@ -373,25 +381,39 @@ void LaunchServer::pollTAFGameState()
     m_tafGameStatePrev = snapshot;
 
     QStringList tokens;
+    QStringList structuralTokens;        // for log-dedup only — compresses unit count to a 0/1
+                                         // "is the player at zero?" so unit-count drift during
+                                         // active gameplay doesn't spam the log.
     tokens << "PLAYER_STATUS";
+    structuralTokens << "PLAYER_STATUS";
     for (int i = 0; i < 10; i++) {
-        // format: "f0,...,f9:active:team:raceSide:propertyMask:infoType:myType:dplayId:winLoseTime:units"
+        // format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
         QStringList flags;
         for (int j = 0; j < 10; j++)
             flags << QString::number(snapshot.playerAllyFlags[i][j]);
-        tokens << (flags.join(',')
+        const QString flagJoin = flags.join(',');
+        tokens << (flagJoin
                    + ':' + QString::number(snapshot.playerActive[i])
+                   + ':' + QString::number(snapshot.playerUnitsNumber[i])
                    + ':' + QString::number(snapshot.playerAllyTeam[i])
-                   + ':' + QString::number(snapshot.playerRaceSide[i])
                    + ':' + QString::number(snapshot.playerPropertyMask[i])
-                   + ':' + QString::number(snapshot.playerInfoType[i])
-                   + ':' + QString::number(snapshot.playerMyType[i])
-                   + ':' + QString::number(snapshot.playerDirectPlayId[i])
-                   + ':' + QString::number(snapshot.playerWinLoseTime[i])
-                   + ':' + QString::number(snapshot.playerUnitsNumber[i]));
+                   + ':' + QString::number(snapshot.playerDirectPlayId[i]));
+        structuralTokens << (flagJoin
+                   + ':' + QString::number(snapshot.playerActive[i])
+                   + ':' + QString::number(snapshot.playerUnitsNumber[i] > 0 ? 1 : 0)
+                   + ':' + QString::number(snapshot.playerAllyTeam[i])
+                   + ':' + QString::number(snapshot.playerPropertyMask[i])
+                   + ':' + QString::number(snapshot.playerDirectPlayId[i]));
     }
     QString msg = tokens.join(" ");
-    qInfo() << "[LaunchServer::notifyClients]" << msg;
+    QString structuralKey = structuralTokens.join(" ");
+    // Log only on structural change (active / unit-zero crossing / ally team / property mask
+    // / dplayId). Pure unit-count drift during active gameplay is suppressed. We still forward
+    // every poll's full message to clients regardless — the dedup is for log volume only.
+    if (structuralKey != m_lastPlayerStatusMsg) {
+        qInfo() << "[LaunchServer::notifyClients]" << msg;
+        m_lastPlayerStatusMsg = structuralKey;
+    }
     notifyClients(msg);
 }
 

@@ -2,6 +2,7 @@
 
 #include <QtNetwork/qtcpsocket.h>
 #include <QtNetwork/qhostaddress.h>
+#include <QtCore/qstringlist.h>
 #include <QtCore/qvector.h>
 
 namespace talaunch {
@@ -25,16 +26,22 @@ namespace talaunch {
         bool m_requireSearch;
         QString m_submitGameFileHashesEndpoint;
         QString m_submitGameFileHashesToken;
+        QString m_lastPlayerStatusKey; // structural-only key (unit count compressed to 0/1)
+                                       // for log-spam suppression on heartbeat AND unit-count-drift PLAYER_STATUS.
 
     signals:
         // allyFlags is 10x10 row-major: allyFlags[i*10+j] != 0 => slot i allied with slot j
+        // actives: 1 = slot occupied (player joined), 0 = empty slot
+        // unitCounts: live unit count per slot, from the engine's local-view bookkeeping
+        //   (PlayerStruct.UnitsNumber). Consumers derive elimination via a max-seen-then-zero
+        //   edge latch.
         // allyTeams: PlayerStruct.AllyTeam per slot (0-4 = explicit team, 5 = none)
         // propertyMasks: PlayerInfoStruct.PropertyMask per slot (WATCH=0x40, HUMANPLAYER=0x80, PLAYERCHEATING=0x2000)
-        // infoTypes/myTypes: PlayerInfoStruct.PlayerType / PlayerStruct.My_PlayerType (0=none,1=LocalHuman,2=LocalAI,3=RemoteHuman,4=RemoteAI)
-        void playerStatusReceived(QVector<int> allyFlags, QVector<int> actives, QVector<int> allyTeams,
-                                  QVector<int> raceSides, QVector<int> propertyMasks,
-                                  QVector<int> infoTypes, QVector<int> myTypes,
-                                  QVector<int> dplayIds, QVector<int> winLoseTimes, QVector<int> unitsNumbers);
+        //
+        // NOTE: per-slot arrays are indexed by TA's local Players[0..9] order — each peer puts
+        // itself at slot 0. Resolve players by dplayIds[xslot], not by lobby slot.
+        void playerStatusReceived(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
+                                  QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
 
     public:
         LaunchClient(QHostAddress addr, quint16 port);

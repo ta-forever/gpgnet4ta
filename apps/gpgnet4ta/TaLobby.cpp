@@ -7,7 +7,15 @@
 #include "tareplay/TaDemoCompilerClient.h"
 
 static const std::uint32_t TICKS_TO_GAME_START = 1800;  // 60 sec
-static const std::uint32_t TICKS_TO_GAME_DRAW = 60;     // 2 sec
+static const std::uint32_t TICKS_TO_GAME_DRAW = 90;     // 3 sec
+                                                        // TA's engine has its own ~5 sec draw-detection
+                                                        // window (4-tick stability countdown at TAMain
+                                                        // +0x39239, decremented every 30-tick UpdateTime
+                                                        // cycle in Game_PlayerPerTickUpdate at 0x464F80).
+                                                        // We sit a bit shorter so we're not waiting on
+                                                        // the slow-side, but long enough that near-
+                                                        // simultaneous mutual eliminations have a fair
+                                                        // chance to land before our latch commits.
 
 static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& port)
 {
@@ -273,16 +281,12 @@ std::string TaLobby::getPlayerNameFromTafnetId(std::uint32_t tafnetId)
     return std::string();
 }
 
-void TaLobby::onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> allyTeams,
-                                     QVector<int> raceSides, QVector<int> propertyMasks,
-                                     QVector<int> infoTypes, QVector<int> myTypes,
-                                     QVector<int> dplayIds, QVector<int> winLoseTimes, QVector<int> unitsNumbers)
+void TaLobby::onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
+                                     QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds)
 {
     if (m_gameMonitor)
     {
-        m_gameMonitor->onExternalPlayerStatus(allyFlags, actives, allyTeams,
-                                              raceSides, propertyMasks, infoTypes, myTypes,
-                                              dplayIds, winLoseTimes, unitsNumbers);
+        m_gameMonitor->onExternalPlayerStatus(allyFlags, actives, unitCounts, allyTeams, propertyMasks, dplayIds);
     }
 }
 
