@@ -31,6 +31,7 @@ PlayerData::PlayerData():
     slotNumber(-1),
     isDead(false),
     maxUnitsSeen(0),
+    eliminationWallMs(0),
     tick(0u),
     dplayid(0u),
     armyNumber(0),
@@ -45,6 +46,7 @@ PlayerData::PlayerData(const Player &player):
     slotNumber(-1),
     isDead(false),
     maxUnitsSeen(0),
+    eliminationWallMs(0),
     tick(0u),
     dplayid(0u),
     armyNumber(0),
@@ -60,7 +62,8 @@ std::ostream & PlayerData::print(std::ostream &s) const
 
 
 GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
-                           bool allowExternalAlliances, bool allowExternalDeaths) :
+                           bool allowExternalAlliances, bool allowExternalDeaths,
+                           bool noDrawsTiebreaker) :
 m_gameStartsAfterTickCount(gameStartsAfterTickCount),
 m_drawGameTicks(drawGameTicks),
 m_hostDplayId(0u),
@@ -76,7 +79,9 @@ m_allowExternalDeaths(allowExternalDeaths),
 m_externalAlliancesEnabled(false),
 m_externalDeathsEnabled(false),
 m_lastExternalStatusMs(0),
-m_localExiting(false)
+m_localExiting(false),
+m_noDrawsTiebreaker(noDrawsTiebreaker),
+m_externalTiebreakerWinnerDpid(0)
 { }
 
 namespace {
@@ -562,6 +567,10 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         LOG_INFO(ss.str().c_str());
 
         m_players[sourceDplayId].isDead = true;
+#ifdef QT_CORE_LIB
+        if (m_players[sourceDplayId].eliminationWallMs == 0)
+            m_players[sourceDplayId].eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
+#endif
 
         int winningTeamNumber;;
         if (checkEndGameCondition(winningTeamNumber))
@@ -641,10 +650,12 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
         if (m_externalDeathsEnabled && p.maxUnitsSeen > 0 && unitCounts[xslot] == 0 && !p.isDead)
         {
             p.isDead = true;
+            p.eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
             deathChange = true;
             LOG_INFO("[GameMonitor2::onExternalPlayerStatus] xslot " << xslot
                      << " player '" << p.name.c_str() << "' eliminated"
-                     << " (peak units=" << p.maxUnitsSeen << ")");
+                     << " (peak units=" << p.maxUnitsSeen
+                     << ", elimWallMs=" << p.eliminationWallMs << ")");
         }
     }
 
@@ -713,6 +724,51 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
         }
     }
 }
+
+void GameMonitor2::onExternalKillEvents(const QVector<qint64>& wallClockMs,
+                                        const QVector<quint32>& victimDplayIds,
+                                        const QVector<quint32>& killerDplayIds,
+                                        const QVector<quint16>& flags)
+{
+    WATCHDOG("GameMonitor2::onExternalKillEvents", 100);
+
+    const int n = std::min({wallClockMs.size(), victimDplayIds.size(),
+                            killerDplayIds.size(), flags.size()});
+    if (n == 0) return;
+
+    for (int i = 0; i < n; ++i)
+    {
+        ExternalKillEvent ev;
+        ev.wallClockMs   = wallClockMs[i];
+        ev.victimDplayId = victimDplayIds[i];
+        ev.killerDplayId = killerDplayIds[i];
+        ev.flags         = flags[i];
+        m_killEvents.push_back(ev);
+        LOG_INFO("[GameMonitor2::onExternalKillEvents] ev wallMs=" << ev.wallClockMs
+                 << " victim=" << ev.victimDplayId << " killer=" << ev.killerDplayId
+                 << " flags=" << ev.flags);
+    }
+
+    // Prune events older than 30 sec — well beyond the 7 sec resolution window. Keeps
+    // m_killEvents from growing unbounded over a long game while preserving everything
+    // the tiebreaker could plausibly need.
+    const std::int64_t now = QDateTime::currentMSecsSinceEpoch();
+    const std::int64_t cutoff = now - 30000;
+    m_killEvents.erase(
+        std::remove_if(m_killEvents.begin(), m_killEvents.end(),
+                       [cutoff](const ExternalKillEvent& e) { return e.wallClockMs < cutoff; }),
+        m_killEvents.end());
+}
+
+void GameMonitor2::onExternalTiebreakerWinner(quint32 winnerDplayId)
+{
+    WATCHDOG("GameMonitor2::onExternalTiebreakerWinner", 100);
+    if (winnerDplayId == 0u) return;
+    if (m_externalTiebreakerWinnerDpid == winnerDplayId) return;
+    m_externalTiebreakerWinnerDpid = winnerDplayId;
+    LOG_INFO("[GameMonitor2::onExternalTiebreakerWinner] imported decision: dplayId="
+             << winnerDplayId);
+}
 #endif
 
 void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId)
@@ -756,6 +812,10 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
     else if (!isExternalDeathsActive())
     {
         m_players[rejectedDplayId].isDead = true;
+#ifdef QT_CORE_LIB
+        if (m_players[rejectedDplayId].eliminationWallMs == 0)
+            m_players[rejectedDplayId].eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
+#endif
 
         int winningTeamNumber;
         if (checkEndGameCondition(winningTeamNumber))
@@ -1190,6 +1250,127 @@ std::uint32_t GameMonitor2::latchEndGameTick(std::uint32_t endGameTick)
     return m_gameResult.endGameTick;
 }
 
+int GameMonitor2::resolveDrawTiebreaker() const
+{
+    // Find the latest eliminationWallMs across all dead players. Anchor the resolution
+    // window on this — it's the moment the game effectively ended, and is more stable
+    // across peers than the first elimination (which depends on simulation phase).
+    std::int64_t latestElimMs = 0;
+    std::uint32_t latestElimDpid = 0u;
+    for (const auto& kv : m_players)
+    {
+        const PlayerData& p = kv.second;
+        if (p.isWatcher) continue;
+        if (!p.isDead) continue;
+        if (p.eliminationWallMs > latestElimMs)
+        {
+            latestElimMs = p.eliminationWallMs;
+            latestElimDpid = p.dplayid;
+        }
+    }
+    if (latestElimMs == 0)
+    {
+        return -1;  // no eliminations recorded — caller falls back to VOID_RESULT
+    }
+
+    // 0. Honor the imported tiebreaker decision from tdraw if present. tdraw runs the
+    //    same rule set we have below, but with direct access to the kill ring (no
+    //    cross-process serialisation lag) and to TA's engine state for ScoreDisplay
+    //    overriding. When tdraw has resolved the mutual-elim end condition, we trust
+    //    its answer and skip the rule walk. Each peer's tdraw computes independently
+    //    from local-only signals so there's no collusion concern.
+    if (m_externalTiebreakerWinnerDpid != 0u)
+    {
+        auto it = m_frozenPlayers.find(m_externalTiebreakerWinnerDpid);
+        if (it != m_frozenPlayers.end() && it->second.teamNumber > 0)
+        {
+            LOG_INFO("[GameMonitor2::resolveDrawTiebreaker] imported tiebreaker resolution: dplay="
+                     << m_externalTiebreakerWinnerDpid << " team=" << it->second.teamNumber);
+            return it->second.teamNumber;
+        }
+        LOG_WARNING("[GameMonitor2::resolveDrawTiebreaker] imported winner dplayId="
+                    << m_externalTiebreakerWinnerDpid
+                    << " not found in m_frozenPlayers or has no team — falling back to local rules");
+    }
+
+    // Padded a bit past the user's spec'd 5 sec to absorb per-peer simulation drift —
+    // peers run TA non-lockstep and can land on opposite sides of a hard window edge.
+    const std::int64_t windowStart = latestElimMs - 7000;
+
+    // 1. Latest commander dgun-victim within the window — victim's team wins.
+    std::int64_t bestEvMs = 0;
+    std::uint32_t dgunVictimDpid = 0u;
+    for (const auto& ev : m_killEvents)
+    {
+        if ((ev.flags & 0x0004u /*TAF_KILL_FLAG_PRESUMED_DGUN*/) == 0) continue;
+        if (ev.wallClockMs < windowStart || ev.wallClockMs > latestElimMs) continue;
+        if (ev.victimDplayId == 0u) continue;
+        if (ev.wallClockMs > bestEvMs)
+        {
+            bestEvMs = ev.wallClockMs;
+            dgunVictimDpid = ev.victimDplayId;
+        }
+    }
+    if (dgunVictimDpid != 0u)
+    {
+        auto it = m_frozenPlayers.find(dgunVictimDpid);
+        if (it != m_frozenPlayers.end() && it->second.teamNumber > 0)
+        {
+            LOG_INFO("[GameMonitor2::resolveDrawTiebreaker] dgun-victim resolution: dplay=" << dgunVictimDpid
+                     << " team=" << it->second.teamNumber << " evWallMs=" << bestEvMs);
+            return it->second.teamNumber;
+        }
+    }
+
+    // 2. Latest non-self-destruct commander-victim event within the window — victim's
+    //    team wins. Self-destruct events (victim==killer) are excluded because they
+    //    represent the *cause* of cascade deaths, not the last commander to actually
+    //    die. This is more reliable than elimWallMs (rule 3) because tdraw stamps
+    //    each death-edge with its own per-event wall-clock at the moment HP→0,
+    //    whereas gpgnet4ta's elimWallMs comes from unit-count-zero detection that
+    //    frequently ties both players in a mutual-elim and forces a fragile
+    //    dplayid-sort fallback.
+    std::int64_t bestNonSdMs = 0;
+    std::uint32_t lastVictimDpid = 0u;
+    for (const auto& ev : m_killEvents)
+    {
+        if ((ev.flags & 0x0001u /*TAF_KILL_FLAG_VICTIM_COMMANDER*/) == 0) continue;
+        if ((ev.flags & 0x0008u /*TAF_KILL_FLAG_SELF_DESTRUCT*/) != 0) continue;
+        if (ev.wallClockMs < windowStart || ev.wallClockMs > latestElimMs) continue;
+        if (ev.victimDplayId == 0u) continue;
+        if (ev.wallClockMs > bestNonSdMs)
+        {
+            bestNonSdMs = ev.wallClockMs;
+            lastVictimDpid = ev.victimDplayId;
+        }
+    }
+    if (lastVictimDpid != 0u)
+    {
+        auto it = m_frozenPlayers.find(lastVictimDpid);
+        if (it != m_frozenPlayers.end() && it->second.teamNumber > 0)
+        {
+            LOG_INFO("[GameMonitor2::resolveDrawTiebreaker] last-commander-killed resolution: dplay=" << lastVictimDpid
+                     << " team=" << it->second.teamNumber << " evWallMs=" << bestNonSdMs);
+            return it->second.teamNumber;
+        }
+    }
+
+    // 3. Last-man-standing fallback: team containing the latest-eliminated player by
+    //    gpgnet4ta's elimWallMs. Used only when no kill events are present (e.g. tdraw
+    //    didn't observe death-edges for some reason). Tied elimWallMs across players
+    //    falls back to dplayid-sort iteration order, which is non-deterministic across
+    //    games — rules 1 and 2 above should cover the cases that matter.
+    auto it = m_frozenPlayers.find(latestElimDpid);
+    if (it != m_frozenPlayers.end() && it->second.teamNumber > 0)
+    {
+        LOG_INFO("[GameMonitor2::resolveDrawTiebreaker] last-man-standing resolution: dplay=" << latestElimDpid
+                 << " team=" << it->second.teamNumber << " elimWallMs=" << latestElimMs);
+        return it->second.teamNumber;
+    }
+
+    return -1;
+}
+
 const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or zero for forced draw, -1 for mutual draw */)
 {
     if (m_gameResult.status != GameResult::Status::NOT_READY)
@@ -1211,6 +1392,25 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
     m_gameResult.results.clear();
     m_gameResult.endGameTick = getMostRecentGameTick();
     LOG_INFO("[GameMonitor2::latchEndGameResult] tick=" << m_gameResult.endGameTick << " winningTeamNumber=" << winningTeamNumber);
+
+    // Tiebreaker fires for both draw cases: -1 (mutually agreed draw, all active players
+    // allied) AND 0 (forced draw via "no active players" — i.e. simultaneous mutual
+    // elimination, which is the dgun-on-dgun scenario the rule was added for).
+    if (winningTeamNumber <= 0 && m_noDrawsTiebreaker)
+    {
+        const int resolved = resolveDrawTiebreaker();
+        if (resolved > 0)
+        {
+            LOG_INFO("[GameMonitor2::latchEndGameResult] draw (winningTeam=" << winningTeamNumber
+                     << ") resolved by tiebreaker -> winningTeamNumber=" << resolved);
+            winningTeamNumber = resolved;
+        }
+        else
+        {
+            LOG_INFO("[GameMonitor2::latchEndGameResult] draw (winningTeam=" << winningTeamNumber
+                     << ") — tiebreaker found no resolution, leaving as is");
+        }
+    }
 
     if (winningTeamNumber < 0)
     {

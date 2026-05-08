@@ -39,6 +39,10 @@ struct PlayerData : public Player
                                 // this game (across all received PLAYER_STATUS snapshots). Used to
                                 // distinguish "never had units yet" from "had units, now zero" when
                                 // running the elimination edge-latch.
+    std::int64_t eliminationWallMs; // wall-clock ms when isDead first transitioned true (0 if never).
+                                // Used as the "last-man-standing" timestamp for the no-draws
+                                // tiebreaker. Comparable to TAFKillEvent::wallClockMs since both
+                                // come from the same machine's GetSystemTimeAsFileTime / QDateTime.
     std::uint32_t tick;         // serial of last 2C packet
     std::uint32_t dplayid;
     int armyNumber;             // assigned based on sorted names so is consistent across all players' instances
@@ -135,6 +139,27 @@ class GameMonitor2 : public tapacket::TaPacketHandler
                                         // result latching so that the artifact doesn't produce a bad report
                                         // (other clients are still observing the actual game and will report
                                         // correctly).
+    bool m_noDrawsTiebreaker;           // when true, mutual-draw outcomes are resolved into a winner via:
+                                        //   1. team containing the latest commander dgun-victim within 7 sec
+                                        //      of the latest elimination, else
+                                        //   2. team containing the player with the latest eliminationWallMs
+                                        //      (last-man-standing).
+                                        // when false, mutual-draw outcomes are left as VOID_RESULT.
+
+    // Buffer of recent commander-dgun events forwarded by tdraw via the LaunchClient.
+    // Trimmed in onExternalKillEvents; consulted in resolveDrawTiebreaker.
+    struct ExternalKillEvent
+    {
+        std::int64_t  wallClockMs;
+        std::uint32_t victimDplayId;
+        std::uint32_t killerDplayId;
+        std::uint16_t flags;        // see TAF_KILL_FLAG_* bits in tafgamestate.h
+    };
+    std::vector<ExternalKillEvent> m_killEvents;
+
+    // Cached imported tiebreaker decision from tdraw. 0 = none received yet.
+    // resolveDrawTiebreaker prefers this when set (skips its own rule walk).
+    std::uint32_t m_externalTiebreakerWinnerDpid;
 
     GameEventHandler *m_gameEventHandler;
 
@@ -142,7 +167,8 @@ public:
     static void test(int allianceMethod);
 
     GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
-                 bool allowExternalAlliances = true, bool allowExternalDeaths = true);
+                 bool allowExternalAlliances = true, bool allowExternalDeaths = true,
+                 bool noDrawsTiebreaker = false);
 
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
@@ -194,6 +220,21 @@ public:
     virtual void onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives,
                                         const QVector<int>& unitCounts, const QVector<int>& allyTeams,
                                         const QVector<int>& propertyMasks, const QVector<int>& dplayIds);
+
+    // Ingest a batch of commander-death events forwarded by the tdraw exporter.
+    // Newer events are appended to m_killEvents; events older than ~30 seconds are pruned.
+    // Each event token packs: wallClockMs, victim/killer dplayId, and the TAF_KILL_FLAG_* bitfield.
+    virtual void onExternalKillEvents(const QVector<qint64>& wallClockMs,
+                                      const QVector<quint32>& victimDplayIds,
+                                      const QVector<quint32>& killerDplayIds,
+                                      const QVector<quint16>& flags);
+
+    // Imported tiebreaker decision from tdraw's exporter: dplayId of the winning
+    // player. When non-zero, resolveDrawTiebreaker uses it directly instead of
+    // running its own rules. Each peer's tdraw computes the decision independently
+    // from local-only signals (kill ring + ally state), so all peers' GameMonitor2s
+    // receive the same value — no collusion.
+    virtual void onExternalTiebreakerWinner(quint32 winnerDplayId);
 #endif
 
 protected:
@@ -220,6 +261,15 @@ protected:
     // set the game result according to current survivors.  can only be set once
     // fires off m_gameEventHandler->onGameEnded on first call only - ie when result is latched in.
     virtual const GameResult& latchEndGameResult(int winningTeamNumber);
+
+    // No-draws tiebreaker: when winningTeamNumber would be -1 (mutual draw) and m_noDrawsTiebreaker
+    // is set, resolve to a winner by:
+    //   1. Latest TAF_KILL_FLAG_PRESUMED_DGUN event within 7 sec of the latest eliminationWallMs
+    //      across all dead players → winner is the team containing the victim's dplayId.
+    //   2. Else, last-man-standing: team containing the dead player with the latest
+    //      eliminationWallMs.
+    // Returns the resolved team number, or -1 if no resolution possible (no eliminations recorded).
+    virtual int resolveDrawTiebreaker() const;
 
     // returns 0u if not found
     virtual std::uint32_t getPlayerDpidByName(const std::string &name) const;
