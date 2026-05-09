@@ -27,20 +27,11 @@ namespace talaunch {
         bool m_requireSearch;
         QString m_submitGameFileHashesEndpoint;
         QString m_submitGameFileHashesToken;
-        QString m_lastPlayerStatusKey; // structural-only key (unit count compressed to 0/1)
-                                       // for log-spam suppression on heartbeat AND unit-count-drift PLAYER_STATUS.
+        QString m_lastPlayerStatusKey; // structural key (unit count compressed to 0/1) — log dedup
 
     signals:
-        // allyFlags is 10x10 row-major: allyFlags[i*10+j] != 0 => slot i allied with slot j
-        // actives: 1 = slot occupied (player joined), 0 = empty slot
-        // unitCounts: live unit count per slot, from the engine's local-view bookkeeping
-        //   (PlayerStruct.UnitsNumber). Consumers derive elimination via a max-seen-then-zero
-        //   edge latch.
-        // allyTeams: PlayerStruct.AllyTeam per slot (0-4 = explicit team, 5 = none)
-        // propertyMasks: PlayerInfoStruct.PropertyMask per slot (WATCH=0x40, HUMANPLAYER=0x80, PLAYERCHEATING=0x2000)
-        //
-        // NOTE: per-slot arrays are indexed by TA's local Players[0..9] order — each peer puts
-        // itself at slot 0. Resolve players by dplayIds[xslot], not by lobby slot.
+        // Field semantics: see TAFGameState in tafgamestate.h (wire source).
+        // Per-slot arrays are indexed by TA's local Players[0..9] order (local at slot 0).
         void playerStatusReceived(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
                                   QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
 

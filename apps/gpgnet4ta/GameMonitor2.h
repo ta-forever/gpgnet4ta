@@ -35,10 +35,8 @@ struct PlayerData : public Player
     bool isAI;
     int slotNumber;             // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
     bool isDead;                // advertised that their commander died, or was rejected by a player
-    int  maxUnitsSeen;          // peak engine-reported live unit count for this player so far in
-                                // this game (across all received PLAYER_STATUS snapshots). Used to
-                                // distinguish "never had units yet" from "had units, now zero" when
-                                // running the elimination edge-latch.
+    int  maxUnitsSeen;          // peak unit count seen so far. Distinguishes "never had units"
+                                // from "had units, now zero" for the elimination edge-latch.
     std::int64_t eliminationWallMs; // wall-clock ms when isDead first transitioned true (0 if never).
     std::uint32_t tick;         // serial of last 2C packet
     std::uint32_t dplayid;
@@ -122,20 +120,15 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
     bool m_repairAsymmetricAlliances;
-    bool m_allowExternalAlliances;      // if false, never switch away from dplay-based alliance inference
-    bool m_allowExternalDeaths;         // if false, never switch away from dplay-based death detection
-    bool m_externalAlliancesEnabled;    // true = currently using onExternalPlayerStatus for alliances
-    bool m_externalDeathsEnabled;       // true = currently using onExternalPlayerStatus for death detection
-    std::int64_t m_lastExternalStatusMs; // wall-clock ms of last onExternalPlayerStatus; 0 if never received.
-                                        // Used to fall back to packet inference when shared-mem stops flowing
-                                        // (e.g. TA without tadr-ddraw, or exporter stopped updating).
-    bool m_localExiting;                // set true when onDplayDeletePlayer fires for m_localDplayId — i.e.
-                                        // the local TA process is tearing down its own DPlay session. After
-                                        // this point, the local view of remote players (units, dplay state)
-                                        // becomes unreliable due to TA's exit cleanup. Suppresses further
-                                        // result latching so that the artifact doesn't produce a bad report
-                                        // (other clients are still observing the actual game and will report
-                                        // correctly).
+    bool m_allowExternalAlliances;      // command-line gate; false pins to packet inference
+    bool m_allowExternalDeaths;         // command-line gate; false pins to packet inference
+    bool m_externalAlliancesEnabled;    // currently using onExternalPlayerStatus for alliances
+    bool m_externalDeathsEnabled;       // currently using onExternalPlayerStatus for death detection
+    std::int64_t m_lastExternalStatusMs; // wall-clock ms of last onExternalPlayerStatus; 0 if never.
+                                        // Drives the staleness fallback to packet inference.
+    bool m_localExiting;                // local TA's DPlay session is being torn down. Past this point,
+                                        // shared-mem reads of remote players are unreliable (exit cleanup
+                                        // wipes Players[]); suppresses further result latching.
     GameEventHandler *m_gameEventHandler;
 
 public:
@@ -183,14 +176,9 @@ public:
     virtual void onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick);
 
 #ifdef QT_CORE_LIB
-    // allyFlags is 10x10 row-major: allyFlags[i*10+j] != 0 => slot i allied with slot j
-    // actives: slot occupancy (1 = occupied, 0 = empty)
-    // unitCounts: live unit count per slot, from the engine's local view. Elimination is
-    //   derived here via the max-seen-then-zero edge latch on PlayerData::maxUnitsSeen.
-    // propertyMasks: WATCH=0x40, HUMANPLAYER=0x80, PLAYERCHEATING=0x2000
-    //
-    // NOTE: per-slot arrays are indexed by TA's local Players[0..9] order — each peer puts
-    // itself at slot 0. Resolve players by dplayIds[xslot], not by lobby slot.
+    // Wire format documented on TAFGameState in tafgamestate.h.
+    // Per-slot arrays are indexed by TA's local Players[0..9] order (local at slot 0),
+    // NOT by lobby slot. Resolve players by dplayIds[xslot].
     virtual void onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives,
                                         const QVector<int>& unitCounts, const QVector<int>& allyTeams,
                                         const QVector<int>& propertyMasks, const QVector<int>& dplayIds);
@@ -198,10 +186,8 @@ public:
 
 protected:
 
-    // True iff external (shared-mem) death detection is currently load-bearing.
-    // Returns false when external was never received OR when the most recent external
-    // update is older than EXTERNAL_STATUS_STALENESS_MS — the packet-inference path then
-    // resumes so vanilla TA without tadr-ddraw still works.
+    // False if external death detection has never started or has gone stale; in that case
+    // the packet-inference path resumes (so vanilla TA without tadr-ddraw still works).
     virtual bool isExternalDeathsActive() const;
 
     // return true iff a game ending condition is detected

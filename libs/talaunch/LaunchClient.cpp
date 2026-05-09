@@ -173,14 +173,13 @@ void LaunchClient::onReadyReadTcp()
     QByteArray data = m_tcpSocket.readAll();
     QStringList response = QString::fromUtf8(data).split(" ");
 
-    // For PLAYER_STATUS, log only on STRUCTURAL change — compress unit count to 0/1
-    // (zero / non-zero) so pure unit-count drift during active gameplay doesn't spam logs.
-    // Other messages (state transitions etc.) always log.
+    // PLAYER_STATUS log dedup: collapse unit count to 0/1 so unit-count drift doesn't
+    // spam logs. Other messages always log.
+    // Token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId" (10 tokens after PLAYER_STATUS).
     bool isPlayerStatus = !response.isEmpty() && response[0] == "PLAYER_STATUS";
     QString structuralKey;
     if (isPlayerStatus)
     {
-        // Per-slot token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
         QStringList structural;
         structural << response[0];
         for (int i = 1; i < response.size(); ++i)
@@ -227,9 +226,6 @@ void LaunchClient::onReadyReadTcp()
     }
     else if (response[0] == "PLAYER_STATUS")
     {
-        // Expected layout:
-        //   [0]            = "PLAYER_STATUS"
-        //   [1..10]        = 10 per-slot tokens "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
         if (response.size() >= 11)
         {
             QVector<int> allyFlags(100, 0), actives(10), unitCounts(10), allyTeams(10);

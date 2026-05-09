@@ -14,8 +14,7 @@ struct TAFGameState {
     uint8_t  playerAllyFlags[10][10];  // playerAllyFlags[i][j] != 0 => slot i is allied with slot j
     uint8_t  playerAllyTeam[10];       // PlayerStruct.AllyTeam (0-4 = explicit team, 5 = none)
     uint8_t  playerActive[10];         // 1 = slot occupied, 0 = empty (slot occupancy only)
-    int16_t  playerUnitsNumber[10];    // engine's live unit count per slot. Consumers derive
-                                       // elimination via a max-seen-then-zero edge latch.
+    int16_t  playerUnitsNumber[10];    // PlayerStruct.UnitsNumber (live unit count per slot)
     uint16_t playerPropertyMask[10];   // PlayerInfoStruct.PropertyMask (WATCH=0x40, HUMANPLAYER=0x80, PLAYERCHEATING=0x2000)
     uint32_t playerDirectPlayId[10];   // PlayerStruct.DirectPlayID
 };

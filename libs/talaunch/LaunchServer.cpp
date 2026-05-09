@@ -24,17 +24,14 @@
 
 using namespace talaunch;
 
-// 200ms poll cadence. The original 1000ms left only ~1s of headroom against
-// GameMonitor2's m_drawGameTicks deferral window (~2s) for engine-bit-driven
-// outcome corrections to land before the deferred latch fires. 200ms gives
-// comfortable margin without meaningful CPU cost.
+// 200ms poll: needs to be well under GameMonitor2's draw-deferral window (~3s) so
+// outcome corrections from shared mem land before the deferred latch fires.
 static const int TICK_RATE_MILLISEC = 200;
 
 LaunchServer::LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout):
     m_keepAliveTimeout(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
-    // m_shutdownCounter is in ticks (decremented per timerEvent). The original code
-    // initialised it from a seconds value, which only happened to be correct when
-    // TICK_RATE_MILLISEC was 1000. Now that the poll cadence is faster, convert.
+    // m_shutdownCounter is in ticks; convert from the seconds-valued keepAliveTimeout
+    // (original code only matched by accident when TICK_RATE_MILLISEC was 1000).
     m_shutdownCounter(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
     m_loggedAConnection(false)
 {
@@ -341,31 +338,31 @@ void LaunchServer::pollTAFGameState()
     }
     const TAFGameState* shm = static_cast<const TAFGameState*>(m_tafGameStateView);
 
-    // Seqlock read: spin until we get a clean even-sequence snapshot.
-    // Bounded to guard against TA crashing mid-write and leaving an odd sequenceNumber forever.
+    // Seqlock read. Retry bound guards against the writer dying mid-write and leaving
+    // sequenceNumber permanently odd; we'll just try again on the next tick.
     TAFGameState snapshot;
     uint32_t seq1;
     int retries = 0;
     while (true) {
         if (++retries > 100)
         {
-            return;        // writer stuck or process dead — try again next tick
+            return;
         }
         seq1 = shm->sequenceNumber;
         if (seq1 == 0)
         {
-            return;              // never written
+            return;
         }
         if (seq1 & 1)
         {
-            continue;             // write in progress — spin
+            continue;
         }
         MemoryBarrier();
-        snapshot = *shm;                    // copy the whole struct
+        snapshot = *shm;
         MemoryBarrier();
         if (shm->sequenceNumber == seq1)
         {
-            break;  // clean read
+            break;
         }
     }
 
@@ -380,14 +377,14 @@ void LaunchServer::pollTAFGameState()
 
     m_tafGameStatePrev = snapshot;
 
+    // Token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId" (10 per snapshot).
+    // structuralTokens is a parallel list with unitCount collapsed to 0/1 — used only to
+    // dedup logging on heartbeats and unit-count drift; the full message still ships.
     QStringList tokens;
-    QStringList structuralTokens;        // for log-dedup only — compresses unit count to a 0/1
-                                         // "is the player at zero?" so unit-count drift during
-                                         // active gameplay doesn't spam the log.
+    QStringList structuralTokens;
     tokens << "PLAYER_STATUS";
     structuralTokens << "PLAYER_STATUS";
     for (int i = 0; i < 10; i++) {
-        // format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
         QStringList flags;
         for (int j = 0; j < 10; j++)
             flags << QString::number(snapshot.playerAllyFlags[i][j]);
@@ -407,9 +404,6 @@ void LaunchServer::pollTAFGameState()
     }
     QString msg = tokens.join(" ");
     QString structuralKey = structuralTokens.join(" ");
-    // Log only on structural change (active / unit-zero crossing / ally team / property mask
-    // / dplayId). Pure unit-count drift during active gameplay is suppressed. We still forward
-    // every poll's full message to clients regardless — the dedup is for log volume only.
     if (structuralKey != m_lastPlayerStatusMsg) {
         qInfo() << "[LaunchServer::notifyClients]" << msg;
         m_lastPlayerStatusMsg = structuralKey;

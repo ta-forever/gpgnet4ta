@@ -82,10 +82,8 @@ m_localExiting(false)
 { }
 
 namespace {
-    // Window after the last shared-mem PLAYER_STATUS within which we trust external death
-    // detection over packet inference. talauncher pushes status at ~1 Hz, so 5 s tolerates a
-    // few missed ticks before falling back. Vanilla TA without tadr-ddraw never sets
-    // m_externalDeathsEnabled, so this only kicks in for the "tadr-ddraw stopped" failure mode.
+    // talauncher pushes PLAYER_STATUS at ~1 Hz; 5 s tolerates a few missed ticks before
+    // we treat the shared-mem feed as gone and fall back to packet inference.
     constexpr std::int64_t EXTERNAL_STATUS_STALENESS_MS = 5000;
 }
 
@@ -263,13 +261,9 @@ void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
     WATCHDOG("GameMonitor2::onDplayDeletePlayer", 100);
     if (dplayId != 0u && dplayId == m_localDplayId && !m_localExiting)
     {
-        // Local TA's own DPlay session is being torn down — i.e. this client is in the
-        // middle of process exit. After this point, the local view of remote players via
-        // shared memory becomes unreliable (TA's exit cleanup wipes the dynmem Players[]
-        // array, which our exporter reads as "every remote player has 0 units"). Suppress
-        // further result latching so we don't ship a bogus DRAW report based on cleanup
-        // artifacts. Other clients are still observing the actual game and will report
-        // correctly.
+        // Local TA exiting: exit cleanup wipes Players[] in dynmem, so the exporter starts
+        // reporting every remote player at 0 units. Latch m_localExiting and let other peers
+        // (still observing the live game) ship the result.
         m_localExiting = true;
         LOG_INFO("[GameMonitor2::onDplayDeletePlayer] local DPlay session torn down "
                  "(dplayId=" << dplayId << "); suppressing further result latching");
@@ -593,26 +587,15 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
 {
     WATCHDOG("GameMonitor2::onExternalPlayerStatus", 100);
 
-    // Switch from dplay-based inference to authoritative TA memory on first external status,
-    // unless disabled by command-line option.
     if (m_allowExternalAlliances) m_externalAlliancesEnabled = true;
     if (m_allowExternalDeaths)    m_externalDeathsEnabled    = true;
     m_lastExternalStatusMs = QDateTime::currentMSecsSinceEpoch();
 
-    // Build slot -> dplayid lookup
-    std::map<int, std::uint32_t> slotToDpid;
-    for (const auto& kv : m_players)
-    {
-        if (kv.second.slotNumber >= 0 && kv.second.slotNumber < 10)
-            slotToDpid[kv.second.slotNumber] = kv.first;
-    }
-
     bool deathChange    = false;
     bool allianceChange = false;
 
-    // The exporter writes its arrays indexed by TA's *local* Players[0..9] order, which puts
-    // the local player at index 0 — so the same dplayId lands in different array indices on
-    // each peer. Iterate by exporter slot and look up the player by dplayId, NOT by lobby slot.
+    // Exporter arrays are indexed by TA's local Players[0..9] order (local at slot 0), so
+    // the same dplayId lands at different indices on each peer. Resolve players by dplayId.
     for (int xslot = 0; xslot < 10; xslot++)
     {
         if (actives[xslot] == 0) continue;
@@ -621,7 +604,6 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
         if (playerIt == m_players.end()) continue;
         PlayerData& p = playerIt->second;
 
-        // Watcher update — authoritative from TA memory; watchers are not part of the game
         bool isWatcher = (propertyMasks[xslot] & 0x40) != 0;
         if (m_externalAlliancesEnabled && p.isWatcher != isWatcher)
         {
@@ -631,15 +613,10 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
                      << " player '" << p.name.c_str() << "' isWatcher=" << isWatcher);
         }
 
-        // Death detection — max-seen-then-zero edge latch on the engine's live unit count.
-        // Covers commander death (under "ends" setting cascades units to 0), attrition under
-        // "continues" setting, disconnect/reject (UNITS_KillAllForPlayer drains units), and
-        // commanderless spawns. The maxUnitsSeen guard is what distinguishes "never had units
-        // yet" (e.g. tick-zero startup, pre-game) from "had units, now zero" (eliminated).
-        // We deliberately do NOT gate on !isWatcher here: pre-existing watchers never get
-        // units so maxUnitsSeen stays 0, and TA flips eliminated players to watcher mode
-        // automatically — a snapshot where WATCH and units=0 arrive together would otherwise
-        // be silently ignored.
+        // Max-seen-then-zero edge latch on engine unit count. Deliberately not gated on
+        // !isWatcher: TA flips eliminated players to watcher mode automatically, so a
+        // (WATCH, units=0) snapshot would otherwise be silently ignored. The maxUnitsSeen
+        // guard is what filters out pre-game "never had units yet" snapshots.
         if (m_externalDeathsEnabled && unitCounts[xslot] > p.maxUnitsSeen)
         {
             p.maxUnitsSeen = unitCounts[xslot];
@@ -656,9 +633,7 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
         }
     }
 
-    // Alliance update (pre-game only; teams frozen at game start). Iterate by exporter slot
-    // (same caveat as above — exporter arrays are indexed by local Players[0..9] order, not
-    // lobby slot). Look up players by dplayId.
+    // Pre-game only — teams freeze at game start.
     if (m_externalAlliancesEnabled && !m_gameStarted)
     {
         for (int xslot = 0; xslot < 10; xslot++)
@@ -675,7 +650,6 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
                 if (j == xslot) continue;
                 if (allyFlags[xslot*10 + j] != 0)
                 {
-                    // j is also an exporter slot; resolve via its dplayId.
                     if (actives[j] == 0) continue;
                     const std::uint32_t allyDpid = static_cast<std::uint32_t>(dplayIds[j]);
                     if (m_players.count(allyDpid))
@@ -703,7 +677,6 @@ void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const Q
         updatePlayerArmies();
         notifyPlayerStatuses();
 
-        // mutual draw check (all allied)
         int winningTeam;
         if (checkEndGameCondition(winningTeam) && winningTeam < 0)
             latchEndGameResult(winningTeam);
@@ -774,12 +747,8 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         if (checkEndGameCondition(winningTeamNumber))
         {
             // Immediate latch (no deferral). After a reject, sim ticks may stop coming
-            // (post-game disconnect / both players on result screen), so the tick-driven
+            // (post-game disconnect, both players on result screen), so the tick-driven
             // deferred latch in onGameTick wouldn't fire and we'd never report at all.
-            // Cost is the 1v1 simultaneous-mutual-self-d case: both peers latch VICTORY
-            // for self before their own commander deaths arrive → CONFLICTING → unranked.
-            // Rating impact is nil: TAF's game_rater clamps DRAW to zero delta anyway,
-            // so a "fixed" DRAW and the current CONFLICTING produce the same outcome.
             latchEndGameResult(winningTeamNumber);
         }
     }
@@ -1088,14 +1057,10 @@ void GameMonitor2::notifyPlayerStatuses()
     {
         if (p.second.side >= 0)
         {
-            // After game start, army and team numbers are frozen at launch (see
-            // m_frozenPlayers populated in onGameTick). The recomputed values in
-            // m_players go to 0 for dead/watcher players because updatePlayerArmies
-            // skips them — propagating those zeros to the FAF server via the host's
-            // sendPlayerOption("Army", 0) overwrites the launch-time army assignment
-            // and makes the server's game.armies become {0}, which trips an unrelated
-            // bug in is_mutually_agreed_draw (vacuously true when player_armies and
-            // result keys don't overlap). Always report the frozen army/team for FAF.
+            // Report frozen (launch-time) army/team after game start. updatePlayerArmies
+            // zeros these for dead/watcher players, and propagating the zeros via
+            // sendPlayerOption("Army", 0) corrupts the server's game.armies and trips a
+            // vacuous-true bug in is_mutually_agreed_draw.
             PlayerData reportPlayer = p.second;
             if (m_gameStarted)
             {
@@ -1212,10 +1177,7 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
 
     if (m_localExiting)
     {
-        // Local TA process is exiting; our view of the game is unreliable (exit cleanup
-        // wipes remote players' state in dynmem and can also emit reject packets that
-        // mark them dead via packet inference). Mark the result void and don't report —
-        // other clients will resolve the game correctly.
+        // See m_localExiting in the header — local TA tearing down, results unreliable.
         LOG_INFO("[GameMonitor2::latchEndGameResult] suppressed (local player exiting)");
         m_gameResult.status = GameResult::Status::VOID_RESULT;
         return m_gameResult;

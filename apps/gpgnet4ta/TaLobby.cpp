@@ -7,15 +7,9 @@
 #include "tareplay/TaDemoCompilerClient.h"
 
 static const std::uint32_t TICKS_TO_GAME_START = 1800;  // 60 sec
-static const std::uint32_t TICKS_TO_GAME_DRAW = 90;     // 3 sec
-                                                        // TA's engine has its own ~5 sec draw-detection
-                                                        // window (4-tick stability countdown at TAMain
-                                                        // +0x39239, decremented every 30-tick UpdateTime
-                                                        // cycle in Game_PlayerPerTickUpdate at 0x464F80).
-                                                        // We sit a bit shorter so we're not waiting on
-                                                        // the slow-side, but long enough that near-
-                                                        // simultaneous mutual eliminations have a fair
-                                                        // chance to land before our latch commits.
+static const std::uint32_t TICKS_TO_GAME_DRAW = 90;     // 3 sec — under TA's own ~5s draw window,
+                                                        // but long enough for near-simultaneous
+                                                        // mutual eliminations to land before we latch.
 
 static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& port)
 {

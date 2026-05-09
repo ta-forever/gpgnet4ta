@@ -29,7 +29,7 @@ namespace talaunch {
         HANDLE       m_tafGameStateMap  = NULL;
         void*        m_tafGameStateView = NULL;
         TAFGameState m_tafGameStatePrev = {};
-        QString      m_lastPlayerStatusMsg; // for log-spam suppression on heartbeat-only updates
+        QString      m_lastPlayerStatusMsg; // structural key for log dedup (heartbeats + unit-count drift)
 
     signals:
         void quit();
