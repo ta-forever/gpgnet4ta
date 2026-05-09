@@ -7,6 +7,10 @@
 #include <set>
 #include <vector>
 
+#ifdef QT_CORE_LIB
+#include <QtCore/qvector.h>
+#endif
+
 #include "TAPacketParser.h"
 #include "tapacket/TPacket.h"
 
@@ -31,6 +35,9 @@ struct PlayerData : public Player
     bool isAI;
     int slotNumber;             // as reported by game. Seems may be suitable for use as armyNumber when reporting to gpgnet.  not sure
     bool isDead;                // advertised that their commander died, or was rejected by a player
+    int  maxUnitsSeen;          // peak unit count seen so far. Distinguishes "never had units"
+                                // from "had units, now zero" for the elimination edge-latch.
+    std::int64_t eliminationWallMs; // wall-clock ms when isDead first transitioned true (0 if never).
     std::uint32_t tick;         // serial of last 2C packet
     std::uint32_t dplayid;
     int armyNumber;             // assigned based on sorted names so is consistent across all players' instances
@@ -113,13 +120,22 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
     bool m_repairAsymmetricAlliances;
-
+    bool m_allowExternalAlliances;      // command-line gate; false pins to packet inference
+    bool m_allowExternalDeaths;         // command-line gate; false pins to packet inference
+    bool m_externalAlliancesEnabled;    // currently using onExternalPlayerStatus for alliances
+    bool m_externalDeathsEnabled;       // currently using onExternalPlayerStatus for death detection
+    std::int64_t m_lastExternalStatusMs; // wall-clock ms of last onExternalPlayerStatus; 0 if never.
+                                        // Drives the staleness fallback to packet inference.
+    bool m_localExiting;                // local TA's DPlay session is being torn down. Past this point,
+                                        // shared-mem reads of remote players are unreliable (exit cleanup
+                                        // wipes Players[]); suppresses further result latching.
     GameEventHandler *m_gameEventHandler;
 
 public:
     static void test(int allianceMethod);
 
-    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances);
+    GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
+                 bool allowExternalAlliances = true, bool allowExternalDeaths = true);
 
     // Unfortunately we need to be informed who is host so we can determine who's status packets (ie mapname and maxunits)
     // to pay attention to.  (or otherwise @todo find a way to determine who is host from the network packets themselves)
@@ -159,7 +175,20 @@ public:
     virtual void onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId);
     virtual void onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick);
 
+#ifdef QT_CORE_LIB
+    // Wire format documented on TAFGameState in tafgamestate.h.
+    // Per-slot arrays are indexed by TA's local Players[0..9] order (local at slot 0),
+    // NOT by lobby slot. Resolve players by dplayIds[xslot].
+    virtual void onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives,
+                                        const QVector<int>& unitCounts, const QVector<int>& allyTeams,
+                                        const QVector<int>& propertyMasks, const QVector<int>& dplayIds);
+#endif
+
 protected:
+
+    // False if external death detection has never started or has gone stale; in that case
+    // the packet-inference path resumes (so vanilla TA without tadr-ddraw still works).
+    virtual bool isExternalDeathsActive() const;
 
     // return true iff a game ending condition is detected
     // sets winningTeamNumber to the winning team number, or zero if forced draw, or -1 if mutual draw

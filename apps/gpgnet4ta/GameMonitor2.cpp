@@ -7,6 +7,7 @@
 
 #ifdef QT_CORE_LIB
 #include "QtCore/qdebug.h"
+#include "QtCore/qdatetime.h"
 #include "taflib/Watchdog.h"
 #define LOG_WARNING(x) qWarning() << x
 #define LOG_INFO(x) qInfo() << x
@@ -29,6 +30,8 @@ PlayerData::PlayerData():
     isAI(false),
     slotNumber(-1),
     isDead(false),
+    maxUnitsSeen(0),
+    eliminationWallMs(0),
     tick(0u),
     dplayid(0u),
     armyNumber(0),
@@ -42,6 +45,8 @@ PlayerData::PlayerData(const Player &player):
     isAI(false),
     slotNumber(-1),
     isDead(false),
+    maxUnitsSeen(0),
+    eliminationWallMs(0),
     tick(0u),
     dplayid(0u),
     armyNumber(0),
@@ -56,7 +61,8 @@ std::ostream & PlayerData::print(std::ostream &s) const
 }
 
 
-GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances) :
+GameMonitor2::GameMonitor2(GameEventHandler *gameEventHandler, std::uint32_t gameStartsAfterTickCount, std::uint32_t drawGameTicks, bool repairAsymmetricAlliances,
+                           bool allowExternalAlliances, bool allowExternalDeaths) :
 m_gameStartsAfterTickCount(gameStartsAfterTickCount),
 m_drawGameTicks(drawGameTicks),
 m_hostDplayId(0u),
@@ -66,8 +72,32 @@ m_gameStarted(false),
 m_cheatsEnabled(false),
 m_suspiciousStatus(false),
 m_gameEventHandler(gameEventHandler),
-m_repairAsymmetricAlliances(repairAsymmetricAlliances)
+m_repairAsymmetricAlliances(repairAsymmetricAlliances),
+m_allowExternalAlliances(allowExternalAlliances),
+m_allowExternalDeaths(allowExternalDeaths),
+m_externalAlliancesEnabled(false),
+m_externalDeathsEnabled(false),
+m_lastExternalStatusMs(0),
+m_localExiting(false)
 { }
+
+namespace {
+    // talauncher pushes PLAYER_STATUS at ~1 Hz; 5 s tolerates a few missed ticks before
+    // we treat the shared-mem feed as gone and fall back to packet inference.
+    constexpr std::int64_t EXTERNAL_STATUS_STALENESS_MS = 5000;
+}
+
+bool GameMonitor2::isExternalDeathsActive() const
+{
+    if (!m_externalDeathsEnabled) return false;
+    if (m_lastExternalStatusMs == 0) return false;
+#ifdef QT_CORE_LIB
+    const std::int64_t nowMs = QDateTime::currentMSecsSinceEpoch();
+    return (nowMs - m_lastExternalStatusMs) < EXTERNAL_STATUS_STALENESS_MS;
+#else
+    return true;
+#endif
+}
 
 void GameMonitor2::setHostPlayerName(const std::string &playerName)
 {
@@ -133,6 +163,10 @@ void GameMonitor2::reset()
     m_mapName.clear();
     m_players.clear();
     m_gameResult = GameResult();
+    m_externalAlliancesEnabled = false;
+    m_externalDeathsEnabled = false;
+    m_lastExternalStatusMs = 0;
+    m_localExiting = false;
 }
 
 std::set<std::string> GameMonitor2::getPlayerNames(bool queryIsPlayer, bool queryIsWatcher) const
@@ -225,6 +259,15 @@ void GameMonitor2::onDplayCreateOrForwardPlayer(std::uint16_t command, std::uint
 void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
 {
     WATCHDOG("GameMonitor2::onDplayDeletePlayer", 100);
+    if (dplayId != 0u && dplayId == m_localDplayId && !m_localExiting)
+    {
+        // Local TA exiting: exit cleanup wipes Players[] in dynmem, so the exporter starts
+        // reporting every remote player at 0 units. Latch m_localExiting and let other peers
+        // (still observing the live game) ship the result.
+        m_localExiting = true;
+        LOG_INFO("[GameMonitor2::onDplayDeletePlayer] local DPlay session torn down "
+                 "(dplayId=" << dplayId << "); suppressing further result latching");
+    }
     if (dplayId == 0u || m_players.count(dplayId) == 0)
     {
         return;
@@ -402,6 +445,11 @@ void GameMonitor2::onAlliance(std::uint32_t subjectDpid, std::uint32_t objectDpi
         return;
     }
 
+    if (m_externalAlliancesEnabled)
+    {
+        return;
+    }
+
     const bool wasAllied = itSubject->second.allies.count(objectDpid);
     LOG_INFO("[GameMonitor2::onAlliance] subject=" << itSubject->second.name.c_str() << "object=" << itObject->second.name.c_str() << "wasAllied=" << wasAllied << "isAllied=" << isAllied);
 
@@ -440,6 +488,11 @@ void GameMonitor2::onTeamSelection(std::uint32_t fromDplayId, int teamNumber)
     if (itSubject == m_players.end())
     {
         LOG_WARNING("[GameMonitor2::onTeamSelection] ERROR unexpected subjectDpid=" << fromDplayId);
+        return;
+    }
+
+    if (m_externalAlliancesEnabled)
+    {
         return;
     }
 
@@ -497,7 +550,7 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         return;
     }
 
-    if (unitId % m_maxUnits == 1)
+    if (unitId % m_maxUnits == 1 && !isExternalDeathsActive())
     {
         LOG_INFO("[GameMonitor2::onUnitDied] sourcedplayId=" << sourceDplayId << " tick=" << getMostRecentGameTick() << " unitId=" << unitId << "(commander), maxUnits=" << m_maxUnits);
         std::ostringstream ss;
@@ -505,6 +558,10 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         LOG_INFO(ss.str().c_str());
 
         m_players[sourceDplayId].isDead = true;
+#ifdef QT_CORE_LIB
+        if (m_players[sourceDplayId].eliminationWallMs == 0)
+            m_players[sourceDplayId].eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
+#endif
 
         int winningTeamNumber;;
         if (checkEndGameCondition(winningTeamNumber))
@@ -522,6 +579,123 @@ void GameMonitor2::onUnitDied(std::uint32_t sourceDplayId, std::uint16_t unitId)
         }
     }
 }
+
+#ifdef QT_CORE_LIB
+void GameMonitor2::onExternalPlayerStatus(const QVector<int>& allyFlags, const QVector<int>& actives,
+                                          const QVector<int>& unitCounts, const QVector<int>& allyTeams,
+                                          const QVector<int>& propertyMasks, const QVector<int>& dplayIds)
+{
+    WATCHDOG("GameMonitor2::onExternalPlayerStatus", 100);
+
+    if (m_allowExternalAlliances) m_externalAlliancesEnabled = true;
+    if (m_allowExternalDeaths)    m_externalDeathsEnabled    = true;
+    m_lastExternalStatusMs = QDateTime::currentMSecsSinceEpoch();
+
+    bool deathChange    = false;
+    bool allianceChange = false;
+
+    // Exporter arrays are indexed by TA's local Players[0..9] order (local at slot 0), so
+    // the same dplayId lands at different indices on each peer. Resolve players by dplayId.
+    for (int xslot = 0; xslot < 10; xslot++)
+    {
+        if (actives[xslot] == 0) continue;
+        const std::uint32_t dpid = static_cast<std::uint32_t>(dplayIds[xslot]);
+        auto playerIt = m_players.find(dpid);
+        if (playerIt == m_players.end()) continue;
+        PlayerData& p = playerIt->second;
+
+        bool isWatcher = (propertyMasks[xslot] & 0x40) != 0;
+        if (m_externalAlliancesEnabled && p.isWatcher != isWatcher)
+        {
+            p.isWatcher = isWatcher;
+            allianceChange = true;
+            LOG_INFO("[GameMonitor2::onExternalPlayerStatus] xslot " << xslot
+                     << " player '" << p.name.c_str() << "' isWatcher=" << isWatcher);
+        }
+
+        // Max-seen-then-zero edge latch on engine unit count. Deliberately not gated on
+        // !isWatcher: TA flips eliminated players to watcher mode automatically, so a
+        // (WATCH, units=0) snapshot would otherwise be silently ignored. The maxUnitsSeen
+        // guard is what filters out pre-game "never had units yet" snapshots.
+        if (m_externalDeathsEnabled && unitCounts[xslot] > p.maxUnitsSeen)
+        {
+            p.maxUnitsSeen = unitCounts[xslot];
+        }
+        if (m_externalDeathsEnabled && p.maxUnitsSeen > 0 && unitCounts[xslot] == 0 && !p.isDead)
+        {
+            p.isDead = true;
+            p.eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
+            deathChange = true;
+            LOG_INFO("[GameMonitor2::onExternalPlayerStatus] xslot " << xslot
+                     << " player '" << p.name.c_str() << "' eliminated"
+                     << " (peak units=" << p.maxUnitsSeen
+                     << ", elimWallMs=" << p.eliminationWallMs << ")");
+        }
+    }
+
+    // Pre-game only — teams freeze at game start.
+    if (m_externalAlliancesEnabled && !m_gameStarted)
+    {
+        for (int xslot = 0; xslot < 10; xslot++)
+        {
+            if (actives[xslot] == 0) continue;
+            const std::uint32_t dpid = static_cast<std::uint32_t>(dplayIds[xslot]);
+            auto playerIt = m_players.find(dpid);
+            if (playerIt == m_players.end()) continue;
+            PlayerData& p = playerIt->second;
+
+            std::set<std::uint32_t> newAllies;
+            for (int j = 0; j < 10; j++)
+            {
+                if (j == xslot) continue;
+                if (allyFlags[xslot*10 + j] != 0)
+                {
+                    if (actives[j] == 0) continue;
+                    const std::uint32_t allyDpid = static_cast<std::uint32_t>(dplayIds[j]);
+                    if (m_players.count(allyDpid))
+                    {
+                        newAllies.insert(allyDpid);
+                    }
+                }
+            }
+            if (p.allies != newAllies)
+            {
+                p.allies = newAllies;
+                allianceChange = true;
+            }
+
+            if (p.battleroomTeamSelection != allyTeams[xslot])
+            {
+                p.battleroomTeamSelection = allyTeams[xslot];
+                allianceChange = true;
+            }
+        }
+    }
+
+    if (allianceChange)
+    {
+        updatePlayerArmies();
+        notifyPlayerStatuses();
+
+        int winningTeam;
+        if (checkEndGameCondition(winningTeam) && winningTeam < 0)
+            latchEndGameResult(winningTeam);
+    }
+
+    if (deathChange)
+    {
+        int winningTeam;
+        if (checkEndGameCondition(winningTeam))
+        {
+            if (winningTeam > 0)
+                latchEndGameTick(getMostRecentGameTick() + m_drawGameTicks);
+            else
+                latchEndGameResult(winningTeam);
+        }
+    }
+}
+
+#endif
 
 void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t rejectedDplayId)
 {
@@ -561,14 +735,20 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         updatePlayerArmies();
         notifyPlayerStatuses();
     }
-    else
+    else if (!isExternalDeathsActive())
     {
         m_players[rejectedDplayId].isDead = true;
+#ifdef QT_CORE_LIB
+        if (m_players[rejectedDplayId].eliminationWallMs == 0)
+            m_players[rejectedDplayId].eliminationWallMs = QDateTime::currentMSecsSinceEpoch();
+#endif
 
         int winningTeamNumber;
         if (checkEndGameCondition(winningTeamNumber))
         {
-            // better latch the result right now since we may not receive any more game ticks from anyone
+            // Immediate latch (no deferral). After a reject, sim ticks may stop coming
+            // (post-game disconnect, both players on result screen), so the tick-driven
+            // deferred latch in onGameTick wouldn't fire and we'd never report at all.
             latchEndGameResult(winningTeamNumber);
         }
     }
@@ -769,6 +949,11 @@ std::set<std::string> GameMonitor2::getMutualAllyNames(std::uint32_t playerId, c
 // anyway alliance has to be created mutually to have any effect ...
 bool GameMonitor2::updateAlliances(std::uint32_t sender, const std::string &chat)
 {
+    if (m_externalAlliancesEnabled)
+    {
+        return false;
+    }
+
     if (sender == 0u)
     {
         std::size_t senderStart = chat.find_first_of('<');
@@ -872,7 +1057,21 @@ void GameMonitor2::notifyPlayerStatuses()
     {
         if (p.second.side >= 0)
         {
-            m_gameEventHandler->onPlayerStatus(p.second, getMutualAllyNames(p.first, m_players));
+            // Report frozen (launch-time) army/team after game start. updatePlayerArmies
+            // zeros these for dead/watcher players, and propagating the zeros via
+            // sendPlayerOption("Army", 0) corrupts the server's game.armies and trips a
+            // vacuous-true bug in is_mutually_agreed_draw.
+            PlayerData reportPlayer = p.second;
+            if (m_gameStarted)
+            {
+                auto frozenIt = m_frozenPlayers.find(p.first);
+                if (frozenIt != m_frozenPlayers.end())
+                {
+                    reportPlayer.armyNumber = frozenIt->second.armyNumber;
+                    reportPlayer.teamNumber = frozenIt->second.teamNumber;
+                }
+            }
+            m_gameEventHandler->onPlayerStatus(reportPlayer, getMutualAllyNames(p.first, m_players));
             // NB UNKNOWN side means the slot number is invalid too
             if (unsigned(p.second.slotNumber) < isSlotUsed.size())
             {
@@ -973,6 +1172,14 @@ const GameResult & GameMonitor2::latchEndGameResult(int winningTeamNumber /* or 
 {
     if (m_gameResult.status != GameResult::Status::NOT_READY)
     {
+        return m_gameResult;
+    }
+
+    if (m_localExiting)
+    {
+        // See m_localExiting in the header — local TA tearing down, results unreliable.
+        LOG_INFO("[GameMonitor2::latchEndGameResult] suppressed (local player exiting)");
+        m_gameResult.status = GameResult::Status::VOID_RESULT;
         return m_gameResult;
     }
 

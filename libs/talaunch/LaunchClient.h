@@ -2,11 +2,16 @@
 
 #include <QtNetwork/qtcpsocket.h>
 #include <QtNetwork/qhostaddress.h>
+#include <QtCore/qmetatype.h>
+#include <QtCore/qstringlist.h>
+#include <QtCore/qvector.h>
 
 namespace talaunch {
 
     class LaunchClient : public QObject
     {
+        Q_OBJECT
+
         QHostAddress m_serverAddress;
         quint16 m_serverPort;
 
@@ -22,6 +27,13 @@ namespace talaunch {
         bool m_requireSearch;
         QString m_submitGameFileHashesEndpoint;
         QString m_submitGameFileHashesToken;
+        QString m_lastPlayerStatusKey; // structural key (unit count compressed to 0/1) — log dedup
+
+    signals:
+        // Field semantics: see TAFGameState in tafgamestate.h (wire source).
+        // Per-slot arrays are indexed by TA's local Players[0..9] order (local at slot 0).
+        void playerStatusReceived(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
+                                  QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
 
     public:
         LaunchClient(QHostAddress addr, quint16 port);

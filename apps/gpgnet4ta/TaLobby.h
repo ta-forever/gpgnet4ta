@@ -3,6 +3,7 @@
 #include <QtNetwork/qhostaddress.h>
 #include <QtCore/quuid.h>
 #include <QtCore/qtimer.h>
+#include <QtCore/qvector.h>
 #include "GameEventHandlerQt.h"
 #include "GameMonitor2.h"
 #include "tareplay/TaDemoCompilerClient.h"
@@ -36,7 +37,8 @@ class TaLobby : public QObject
     QMap<QString, quint32> m_tafnetIdsByPlayerName;
 
 public:
-    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances);
+    TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances,
+            bool allowExternalAlliances = true, bool allowExternalDeaths = true);
     void enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
@@ -58,4 +60,6 @@ public slots:
 
 public slots:
     void echoToGame(bool isPrivate, QString name, QString chat);
+    void onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
+                                QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
 };

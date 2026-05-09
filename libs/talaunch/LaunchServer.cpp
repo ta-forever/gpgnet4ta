@@ -24,11 +24,15 @@
 
 using namespace talaunch;
 
-static const int TICK_RATE_MILLISEC = 1000;
+// 200ms poll: needs to be well under GameMonitor2's draw-deferral window (~3s) so
+// outcome corrections from shared mem land before the deferred latch fires.
+static const int TICK_RATE_MILLISEC = 200;
 
 LaunchServer::LaunchServer(QHostAddress addr, quint16 port, int keepAliveTimeout):
     m_keepAliveTimeout(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
-    m_shutdownCounter(keepAliveTimeout),
+    // m_shutdownCounter is in ticks; convert from the seconds-valued keepAliveTimeout
+    // (original code only matched by accident when TICK_RATE_MILLISEC was 1000).
+    m_shutdownCounter(keepAliveTimeout * 1000 / TICK_RATE_MILLISEC),
     m_loggedAConnection(false)
 {
     qInfo() << "[LaunchServer::LaunchServer] starting server on addr" << addr << "port" << port;
@@ -116,6 +120,7 @@ void LaunchServer::onReadyReadTcp()
             QString message = args.mid(1).join(" ");
             m_jdPlay.reset();
             notifyClients("FAIL");
+            closeTAFGameState();
             emit gameFileVersionMismatch(message);
         }
         else if (args.size() >= 5 && args[0] == "/host")
@@ -185,6 +190,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -197,6 +203,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -206,6 +213,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_jdPlay.reset();
         notifyClients("FAIL");
+        closeTAFGameState();
         emit gameFailedToLaunch(_guid);
         return;
     }
@@ -214,6 +222,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
         qInfo() << "[LaunchServer::launchGame] jdplay log:\n" << m_jdPlay->getLogString().c_str();
         m_joinIsDisabled = false;
         notifyClients("RUNNING");
+        openTAFGameState();
 
         if (okGameId && !submitHashesEndPoint.isEmpty() && !submitHashesToken.isEmpty())
         {
@@ -244,10 +253,12 @@ void LaunchServer::timerEvent(QTimerEvent* event)
                 if (exitCode == 0)
                 {
                     notifyClients("IDLE");
+                    closeTAFGameState();
                 }
                 else
                 {
                     notifyClients(QString("FAIL %1").arg(exitCode, 0, 16, QChar('0')));
+                    closeTAFGameState();
                     emit gameExitedWithError(exitCode);
                 }
                 m_jdPlay.reset();
@@ -273,6 +284,8 @@ void LaunchServer::timerEvent(QTimerEvent* event)
             {
                 m_submitGameFileHashes = nullptr;
             }
+
+            pollTAFGameState();
         }
 
         if (!m_jdPlay || exitCode != STILL_ACTIVE)
@@ -294,6 +307,108 @@ void LaunchServer::timerEvent(QTimerEvent* event)
     {
         qWarning() << "[LaunchServer::timerEvent] general exception:";
     }
+}
+
+void LaunchServer::openTAFGameState()
+{
+    m_tafGameStateMap = OpenFileMapping(FILE_MAP_READ, FALSE, TAFGAMESTATE_SHMEM_NAME);
+    if (m_tafGameStateMap) {
+        m_tafGameStateView = MapViewOfFile(m_tafGameStateMap, FILE_MAP_READ, 0, 0, sizeof(TAFGameState));
+    }
+    memset(&m_tafGameStatePrev, 0, sizeof(m_tafGameStatePrev));
+}
+
+void LaunchServer::closeTAFGameState()
+{
+    if (m_tafGameStateView) { UnmapViewOfFile(m_tafGameStateView); m_tafGameStateView = nullptr; }
+    if (m_tafGameStateMap)  { CloseHandle(m_tafGameStateMap);       m_tafGameStateMap  = NULL;   }
+    memset(&m_tafGameStatePrev, 0, sizeof(m_tafGameStatePrev));
+    m_lastPlayerStatusMsg.clear();
+}
+
+void LaunchServer::pollTAFGameState()
+{
+    if (!m_tafGameStateMap)
+    {
+        openTAFGameState();
+    }
+    if (!m_tafGameStateView)
+    {
+        return;
+    }
+    const TAFGameState* shm = static_cast<const TAFGameState*>(m_tafGameStateView);
+
+    // Seqlock read. Retry bound guards against the writer dying mid-write and leaving
+    // sequenceNumber permanently odd; we'll just try again on the next tick.
+    TAFGameState snapshot;
+    uint32_t seq1;
+    int retries = 0;
+    while (true) {
+        if (++retries > 100)
+        {
+            return;
+        }
+        seq1 = shm->sequenceNumber;
+        if (seq1 == 0)
+        {
+            return;
+        }
+        if (seq1 & 1)
+        {
+            continue;
+        }
+        MemoryBarrier();
+        snapshot = *shm;
+        MemoryBarrier();
+        if (shm->sequenceNumber == seq1)
+        {
+            break;
+        }
+    }
+
+    if (snapshot.magic != TAFGAMESTATE_MAGIC)
+    {
+        return;
+    }
+    if (snapshot.sequenceNumber == m_tafGameStatePrev.sequenceNumber)
+    {
+        return;
+    }
+
+    m_tafGameStatePrev = snapshot;
+
+    // Token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId" (10 per snapshot).
+    // structuralTokens is a parallel list with unitCount collapsed to 0/1 — used only to
+    // dedup logging on heartbeats and unit-count drift; the full message still ships.
+    QStringList tokens;
+    QStringList structuralTokens;
+    tokens << "PLAYER_STATUS";
+    structuralTokens << "PLAYER_STATUS";
+    for (int i = 0; i < 10; i++) {
+        QStringList flags;
+        for (int j = 0; j < 10; j++)
+            flags << QString::number(snapshot.playerAllyFlags[i][j]);
+        const QString flagJoin = flags.join(',');
+        tokens << (flagJoin
+                   + ':' + QString::number(snapshot.playerActive[i])
+                   + ':' + QString::number(snapshot.playerUnitsNumber[i])
+                   + ':' + QString::number(snapshot.playerAllyTeam[i])
+                   + ':' + QString::number(snapshot.playerPropertyMask[i])
+                   + ':' + QString::number(snapshot.playerDirectPlayId[i]));
+        structuralTokens << (flagJoin
+                   + ':' + QString::number(snapshot.playerActive[i])
+                   + ':' + QString::number(snapshot.playerUnitsNumber[i] > 0 ? 1 : 0)
+                   + ':' + QString::number(snapshot.playerAllyTeam[i])
+                   + ':' + QString::number(snapshot.playerPropertyMask[i])
+                   + ':' + QString::number(snapshot.playerDirectPlayId[i]));
+    }
+    QString msg = tokens.join(" ");
+    QString structuralKey = structuralTokens.join(" ");
+    if (structuralKey != m_lastPlayerStatusMsg) {
+        qInfo() << "[LaunchServer::notifyClients]" << msg;
+        m_lastPlayerStatusMsg = structuralKey;
+    }
+    notifyClients(msg);
 }
 
 void LaunchServer::notifyClients(QString _msg)

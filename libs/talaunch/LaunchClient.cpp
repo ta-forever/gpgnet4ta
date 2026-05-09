@@ -15,7 +15,7 @@ LaunchClient::LaunchClient(QHostAddress addr, quint16 port) :
     m_isHost(true),
     m_requireSearch(false)
 
-{ 
+{
     QObject::connect(&m_tcpSocket, &QTcpSocket::readyRead, this, &LaunchClient::onReadyReadTcp);
     QObject::connect(&m_tcpSocket, &QTcpSocket::stateChanged, this, &LaunchClient::onSocketStateChanged);
     if (connect(addr, port))
@@ -172,7 +172,40 @@ void LaunchClient::onReadyReadTcp()
 
     QByteArray data = m_tcpSocket.readAll();
     QStringList response = QString::fromUtf8(data).split(" ");
-    qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
+
+    // PLAYER_STATUS log dedup: collapse unit count to 0/1 so unit-count drift doesn't
+    // spam logs. Other messages always log.
+    // Token format: "f0,...,f9:active:unitCount:team:propertyMask:dplayId" (10 tokens after PLAYER_STATUS).
+    bool isPlayerStatus = !response.isEmpty() && response[0] == "PLAYER_STATUS";
+    QString structuralKey;
+    if (isPlayerStatus)
+    {
+        QStringList structural;
+        structural << response[0];
+        for (int i = 1; i < response.size(); ++i)
+        {
+            QStringList parts = response[i].split(':');
+            if (parts.size() >= 6)
+            {
+                parts[2] = QString::number(parts[2].toInt() > 0 ? 1 : 0);
+                structural << parts.join(':');
+            }
+            else
+            {
+                structural << response[i];
+            }
+        }
+        structuralKey = structural.join(' ');
+    }
+    const bool isHeartbeatOrCountDrift = isPlayerStatus && structuralKey == m_lastPlayerStatusKey;
+    if (!isHeartbeatOrCountDrift)
+    {
+        qInfo() << "[LaunchClient::onReadyReadTcp]" << response;
+    }
+    if (isPlayerStatus)
+    {
+        m_lastPlayerStatusKey = structuralKey;
+    }
 
     State oldState = m_state;
     if (response[0] == "IDLE")
@@ -190,5 +223,27 @@ void LaunchClient::onReadyReadTcp()
     else if (response[0] == "FAIL")
     {
         m_state = State::FAIL;
+    }
+    else if (response[0] == "PLAYER_STATUS")
+    {
+        if (response.size() >= 11)
+        {
+            QVector<int> allyFlags(100, 0), actives(10), unitCounts(10), allyTeams(10);
+            QVector<int> propertyMasks(10), dplayIds(10);
+            for (int i = 0; i < 10; i++) {
+                QStringList tok = response[i+1].split(':');
+                QStringList flags = tok.value(0).split(',');
+                for (int j = 0; j < 10 && j < flags.size(); j++)
+                    allyFlags[i*10 + j] = flags[j].toInt();
+                actives[i]       = tok.value(1).toInt();
+                unitCounts[i]    = tok.value(2).toInt();
+                allyTeams[i]     = tok.value(3).toInt();
+                propertyMasks[i] = tok.value(4).toInt();
+                dplayIds[i]      = tok.value(5).toInt();
+            }
+
+            emit playerStatusReceived(allyFlags, actives, unitCounts, allyTeams,
+                                      propertyMasks, dplayIds);
+        }
     }
 }
