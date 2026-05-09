@@ -8,16 +8,6 @@
 
 namespace talaunch {
 
-    // Mirrors TAFKillEvent in tafgamestate.h, projected through the wire protocol.
-    // wallClockMs / dplayIds / flags are decoded from the per-event ":-separated tokens.
-    struct KillEventQt
-    {
-        qint64  wallClockMs;
-        quint32 victimDplayId;
-        quint32 killerDplayId;
-        quint16 flags;          // see TAF_KILL_FLAG_* in tafgamestate.h
-    };
-
     class LaunchClient : public QObject
     {
         Q_OBJECT
@@ -39,8 +29,6 @@ namespace talaunch {
         QString m_submitGameFileHashesToken;
         QString m_lastPlayerStatusKey; // structural-only key (unit count compressed to 0/1)
                                        // for log-spam suppression on heartbeat AND unit-count-drift PLAYER_STATUS.
-        quint32 m_lastKillRingHead;    // last-seen head counter; new events have head > this
-        quint32 m_lastTiebreakerWinnerDpid;  // last-seen non-zero tiebreaker winner; suppresses re-emit
 
     signals:
         // allyFlags is 10x10 row-major: allyFlags[i*10+j] != 0 => slot i allied with slot j
@@ -55,16 +43,6 @@ namespace talaunch {
         // itself at slot 0. Resolve players by dplayIds[xslot], not by lobby slot.
         void playerStatusReceived(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
                                   QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
-
-        // Fired when one or more new kill events arrive (i.e. the producer's head counter
-        // advanced since the last poll). `events` is in chronological order — oldest first.
-        // Listeners typically buffer these and consult them at game-end-resolution time.
-        void killEventsReceived(QVector<talaunch::KillEventQt> events);
-
-        // Fired when tdraw's local tiebreaker resolves a mutual-elim end-game.
-        // winnerDplayId is the dplayId of the winning player (skip GameMonitor2's own
-        // tiebreaker). Only fires once per game (de-duped on the receive side).
-        void tiebreakerWinnerReceived(quint32 winnerDplayId);
 
     public:
         LaunchClient(QHostAddress addr, quint16 port);
@@ -91,6 +69,3 @@ namespace talaunch {
     };
 
 }
-
-Q_DECLARE_METATYPE(talaunch::KillEventQt)
-Q_DECLARE_METATYPE(QVector<talaunch::KillEventQt>)

@@ -639,7 +639,6 @@ int doMain(int argc, char* argv[])
     parser.addOption(QCommandLineOption("repairAsymmetricAlliances", "Flag to turn on a workaround for teams bug where one player someones is left stranded without a team"));
     parser.addOption(QCommandLineOption("noExternalAlliances", "Always derive alliance info from dplay packets; ignore shared-memory player status for alliances."));
     parser.addOption(QCommandLineOption("noExternalDeaths", "Always derive player deaths from dplay packets; ignore shared-memory player status for death detection."));
-    parser.addOption(QCommandLineOption("noDrawsTiebreaker", "Resolve mutual-draw outcomes into a winner: 1) latest commander dgun-victim within 7s of game-end → victim's team wins; 2) else last-man-standing (team containing the latest-eliminated player). Requires shared-memory player status (tdraw)."));
     parser.process(app);
 
     taflib::Logger::Initialise(parser.value("logfile").toStdString(), taflib::Logger::Verbosity(parser.value("loglevel").toInt()));
@@ -727,8 +726,7 @@ int doMain(int argc, char* argv[])
         // TaLobby needs to be told explicetly to whom connections are to be made and on which UDP ports peers can be found
         // (viz all the Qt signal connections from GpgNetClient to TaLobby)
         TaLobby lobby(QUuid(dplayGuid), "127.0.0.1", "127.0.0.1", "127.0.0.1", parser.isSet("proactiveresend"), parser.value("maxpacketsize").toInt(), parser.isSet("repairAsymmetricAlliances"),
-                      !parser.isSet("noExternalAlliances"), !parser.isSet("noExternalDeaths"),
-                      true);// parser.isSet("noDrawsTiebreaker"));
+                      !parser.isSet("noExternalAlliances"), !parser.isSet("noExternalDeaths"));
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::createLobby, &lobby, &TaLobby::onCreateLobby);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::joinGame, &lobby, &TaLobby::onJoinGame);
         QObject::connect(&gpgNetClient, &gpgnet::GpgNetClient::connectToPeer, &lobby, &TaLobby::onConnectToPeer);
@@ -803,30 +801,6 @@ int doMain(int argc, char* argv[])
 
         QObject::connect(&launchClient, &talaunch::LaunchClient::playerStatusReceived,
                          &lobby,        &TaLobby::onExternalPlayerStatus);
-
-        // Translate KillEventQt batches into the parallel-vector form GameMonitor2 consumes.
-        // Done as a lambda here so GameMonitor2 / TaLobby don't need a build-time dependency
-        // on the talaunch headers (KillEventQt lives in talaunch lib).
-        QObject::connect(&launchClient, &talaunch::LaunchClient::killEventsReceived, &lobby,
-            [&lobby](QVector<talaunch::KillEventQt> events)
-            {
-                QVector<qint64>  ms;
-                QVector<quint32> victim, killer;
-                QVector<quint16> flags;
-                ms.reserve(events.size()); victim.reserve(events.size());
-                killer.reserve(events.size()); flags.reserve(events.size());
-                for (const auto& e : events)
-                {
-                    ms.append(e.wallClockMs);
-                    victim.append(e.victimDplayId);
-                    killer.append(e.killerDplayId);
-                    flags.append(e.flags);
-                }
-                lobby.onExternalKillEvents(ms, victim, killer, flags);
-            });
-
-        QObject::connect(&launchClient, &talaunch::LaunchClient::tiebreakerWinnerReceived,
-                         &lobby,        &TaLobby::onExternalTiebreakerWinner);
 
         taflib::ConsoleReader consoleReader(QHostAddress("127.0.0.1"), parser.value("consoleport").toInt());
         QObject::connect(&consoleReader, &taflib::ConsoleReader::textReceived, &launcher, &GpgNetGameLauncher::onExtendedMessage);

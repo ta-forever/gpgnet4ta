@@ -405,29 +405,6 @@ void LaunchServer::pollTAFGameState()
                    + ':' + QString::number(snapshot.playerPropertyMask[i])
                    + ':' + QString::number(snapshot.playerDirectPlayId[i]));
     }
-    // Kill-event ring appended to the same message (avoids changing the null-terminated
-    // framing on the wire). Format:
-    //   ... slot9 KILL_RING <head> <ev0> <ev1> ... <ev15>
-    // Each event token: ms:victimDplayId:killerDplayId:flags. Empty events serialise as 0:0:0:0.
-    // The consumer compares head against its last-seen counter to find newly-arrived events;
-    // events older than (head - TAF_KILL_RING_SIZE) have been overwritten and are no longer
-    // present in the ring.
-    tokens << "KILL_RING" << QString::number(snapshot.killRingHead);
-    structuralTokens << "KILL_RING" << QString::number(snapshot.killRingHead);
-    for (int k = 0; k < TAF_KILL_RING_SIZE; ++k) {
-        const TAFKillEvent& ev = snapshot.killRing[k];
-        const QString tok = QString::number(ev.wallClockMs)
-                          + ':' + QString::number(ev.victimDplayId)
-                          + ':' + QString::number(ev.killerDplayId)
-                          + ':' + QString::number(ev.flags);
-        tokens << tok;
-        // Don't add per-event tokens to structural key — only head matters for log dedup
-        // (the ring contents are uniquely determined by head and the producer's writes).
-    }
-    // Tiebreaker decision (winner dplayId, 0 = undecided). Computed by tdraw in mutual-elim
-    // scenarios; gpgnet4ta uses this directly instead of running its own tiebreaker.
-    tokens << "TIEBREAKER" << QString::number(snapshot.tiebreakerWinnerDplayId);
-    structuralTokens << "TIEBREAKER" << QString::number(snapshot.tiebreakerWinnerDplayId);
     QString msg = tokens.join(" ");
     QString structuralKey = structuralTokens.join(" ");
     // Log only on structural change (active / unit-zero crossing / ally team / property mask

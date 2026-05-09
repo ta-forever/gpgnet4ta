@@ -33,7 +33,7 @@ static void SplitHostAndPort(QString hostAndPort, QHostAddress& host, quint16& p
 
 TaLobby::TaLobby(
     QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances,
-    bool allowExternalAlliances, bool allowExternalDeaths, bool noDrawsTiebreaker):
+    bool allowExternalAlliances, bool allowExternalDeaths):
     m_lobbyBindAddress("127.0.0.1"),
     m_lobbyPortOverride(0),
     m_gameReceiveBindAddress(gameReceiveBindAddress),
@@ -45,7 +45,7 @@ TaLobby::TaLobby(
     SplitHostAndPort(lobbyBindAddress, m_lobbyBindAddress, m_lobbyPortOverride);
     m_gameEvents.reset(new GameEventsSignalQt());
     m_gameMonitor.reset(new GameMonitor2(m_gameEvents.data(), TICKS_TO_GAME_START, TICKS_TO_GAME_DRAW, repairAsymmetricAlliances,
-                                         allowExternalAlliances, allowExternalDeaths, noDrawsTiebreaker));
+                                         allowExternalAlliances, allowExternalDeaths));
     m_packetParser.reset(new tapacket::TAPacketParser());
     m_packetParser->subscribe(m_gameMonitor.data());
     m_pingTimer.setInterval(3000);
@@ -287,23 +287,6 @@ void TaLobby::onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> active
     if (m_gameMonitor)
     {
         m_gameMonitor->onExternalPlayerStatus(allyFlags, actives, unitCounts, allyTeams, propertyMasks, dplayIds);
-    }
-}
-
-void TaLobby::onExternalKillEvents(QVector<qint64> wallClockMs, QVector<quint32> victimDplayIds,
-                                   QVector<quint32> killerDplayIds, QVector<quint16> flags)
-{
-    if (m_gameMonitor)
-    {
-        m_gameMonitor->onExternalKillEvents(wallClockMs, victimDplayIds, killerDplayIds, flags);
-    }
-}
-
-void TaLobby::onExternalTiebreakerWinner(quint32 winnerDplayId)
-{
-    if (m_gameMonitor)
-    {
-        m_gameMonitor->onExternalTiebreakerWinner(winnerDplayId);
     }
 }
 

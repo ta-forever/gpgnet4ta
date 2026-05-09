@@ -1,5 +1,4 @@
 #include "LaunchClient.h"
-#include "tafgamestate.h"
 
 #include <QtNetwork/qhostaddress.h>
 
@@ -14,16 +13,9 @@ LaunchClient::LaunchClient(QHostAddress addr, quint16 port) :
     m_playerName("BILLYIDOL"),
     m_gameAddress("127.0.0.1"),
     m_isHost(true),
-    m_requireSearch(false),
-    m_lastKillRingHead(0),
-    m_lastTiebreakerWinnerDpid(0)
+    m_requireSearch(false)
 
 {
-    // Custom-type registration for queued signal/slot delivery. Q_DECLARE_METATYPE alone
-    // covers compile-time MetaTypeId resolution; qRegisterMetaType is what makes Qt's
-    // queued-connection serialiser work across event loops.
-    qRegisterMetaType<KillEventQt>("talaunch::KillEventQt");
-    qRegisterMetaType<QVector<KillEventQt>>("QVector<talaunch::KillEventQt>");
     QObject::connect(&m_tcpSocket, &QTcpSocket::readyRead, this, &LaunchClient::onReadyReadTcp);
     QObject::connect(&m_tcpSocket, &QTcpSocket::stateChanged, this, &LaunchClient::onSocketStateChanged);
     if (connect(addr, port))
@@ -238,9 +230,6 @@ void LaunchClient::onReadyReadTcp()
         // Expected layout:
         //   [0]            = "PLAYER_STATUS"
         //   [1..10]        = 10 per-slot tokens "f0,...,f9:active:unitCount:team:propertyMask:dplayId"
-        //   [11]           = "KILL_RING"   (optional — older producers may not send it)
-        //   [12]           = killRingHead
-        //   [13..28]       = 16 event tokens "wallClockMs:victim:killer:flags"
         if (response.size() >= 11)
         {
             QVector<int> allyFlags(100, 0), actives(10), unitCounts(10), allyTeams(10);
@@ -257,68 +246,6 @@ void LaunchClient::onReadyReadTcp()
                 dplayIds[i]      = tok.value(5).toInt();
             }
 
-            // Emit kill events FIRST. The PLAYER_STATUS unitCount=0 transition is what
-            // triggers the elimination edge in GameMonitor2 (which can immediately latch
-            // an end-game result). If kill events arrive AFTER, the dgun-tiebreaker can't
-            // see them and falls back to last-man-standing. By emitting kill events first,
-            // m_killEvents is populated before the elimination handler runs in the same
-            // synchronous direct-connection invocation.
-            //
-            // Optional kill ring tail
-            if (response.size() >= 13 + TAF_KILL_RING_SIZE && response[11] == "KILL_RING")
-            {
-                const quint32 head = response[12].toUInt();
-                if (head != m_lastKillRingHead)
-                {
-                    QVector<KillEventQt> newEvents;
-                    // Determine which ring slots are "newly visible" since last poll.
-                    // The producer writes slot (head-1) % SIZE last, slot (head-2) % SIZE before
-                    // that, etc. Anything older than max(head - SIZE, m_lastKillRingHead) is
-                    // either lost (overwritten) or already seen.
-                    const quint32 firstNewIdx = (head > m_lastKillRingHead + TAF_KILL_RING_SIZE)
-                                                    ? (head - TAF_KILL_RING_SIZE)
-                                                    : m_lastKillRingHead;
-                    for (quint32 idx = firstNewIdx; idx < head; ++idx)
-                    {
-                        const int tokenPos = 13 + (idx % TAF_KILL_RING_SIZE);
-                        if (tokenPos >= response.size()) break;
-                        QStringList parts = response[tokenPos].split(':');
-                        if (parts.size() < 4) continue;
-                        KillEventQt ev;
-                        ev.wallClockMs   = parts[0].toLongLong();
-                        ev.victimDplayId = parts[1].toUInt();
-                        ev.killerDplayId = parts[2].toUInt();
-                        ev.flags         = static_cast<quint16>(parts[3].toUInt());
-                        if (ev.wallClockMs == 0) continue;  // empty slot
-                        newEvents.append(ev);
-                    }
-                    m_lastKillRingHead = head;
-                    if (!newEvents.isEmpty())
-                    {
-                        qInfo() << "[LaunchClient::onReadyReadTcp] kill events received:" << newEvents.size();
-                        emit killEventsReceived(newEvents);
-                    }
-                }
-
-                // Optional TIEBREAKER tail: tdraw's tiebreaker decision (0 = undecided,
-                // otherwise = winning player's dplayId). Token layout:
-                //   [13 + TAF_KILL_RING_SIZE]     = "TIEBREAKER"
-                //   [14 + TAF_KILL_RING_SIZE]     = winnerDplayId (uint32 as decimal string)
-                const int tbHeaderPos = 13 + TAF_KILL_RING_SIZE;
-                if (response.size() > tbHeaderPos + 1 && response[tbHeaderPos] == "TIEBREAKER")
-                {
-                    const quint32 winnerDpid = response[tbHeaderPos + 1].toUInt();
-                    if (winnerDpid != 0u && winnerDpid != m_lastTiebreakerWinnerDpid)
-                    {
-                        m_lastTiebreakerWinnerDpid = winnerDpid;
-                        qInfo() << "[LaunchClient::onReadyReadTcp] tiebreaker winner received:" << winnerDpid;
-                        emit tiebreakerWinnerReceived(winnerDpid);
-                    }
-                }
-            }
-
-            // Emit player status AFTER kill events so the elimination handler downstream
-            // sees the dgun-tiebreaker's m_killEvents already populated.
             emit playerStatusReceived(allyFlags, actives, unitCounts, allyTeams,
                                       propertyMasks, dplayIds);
         }

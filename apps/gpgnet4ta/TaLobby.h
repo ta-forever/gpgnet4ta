@@ -38,8 +38,7 @@ class TaLobby : public QObject
 
 public:
     TaLobby(QUuid gameGuid, QString lobbyBindAddress, QString gameReceiveBindAddress, QString gameAddress, bool proactiveResend, quint32 maxPacketSize, bool repairAsymmetricAlliances,
-            bool allowExternalAlliances = true, bool allowExternalDeaths = true,
-            bool noDrawsTiebreaker = false);
+            bool allowExternalAlliances = true, bool allowExternalDeaths = true);
     void enableForwardToDemoCompiler(QString hostName, quint16 port, quint32 tafGameId);
 
     void connectGameEvents(GameEventHandlerQt &subscriber);
@@ -63,13 +62,4 @@ public slots:
     void echoToGame(bool isPrivate, QString name, QString chat);
     void onExternalPlayerStatus(QVector<int> allyFlags, QVector<int> actives, QVector<int> unitCounts,
                                 QVector<int> allyTeams, QVector<int> propertyMasks, QVector<int> dplayIds);
-    // Forwards each batch of commander-dgun events from LaunchClient::killEventsReceived
-    // into GameMonitor2 (translates from talaunch::KillEventQt to GameMonitor2's primitive
-    // QVectors so GameMonitor2 doesn't need to depend on the talaunch lib).
-    void onExternalKillEvents(QVector<qint64> wallClockMs, QVector<quint32> victimDplayIds,
-                              QVector<quint32> killerDplayIds, QVector<quint16> flags);
-    // Forwards tdraw's local tiebreaker decision (winner dplayId) into GameMonitor2.
-    // GameMonitor2 then uses this in latchEndGameResult instead of running its own
-    // resolveDrawTiebreaker.
-    void onExternalTiebreakerWinner(quint32 winnerDplayId);
 };
