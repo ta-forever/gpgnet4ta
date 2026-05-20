@@ -78,7 +78,8 @@ m_allowExternalDeaths(allowExternalDeaths),
 m_externalAlliancesEnabled(false),
 m_externalDeathsEnabled(false),
 m_lastExternalStatusMs(0),
-m_localExiting(false)
+m_localExiting(false),
+m_initialNonWatcherCount(0)
 { }
 
 namespace {
@@ -732,11 +733,40 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         {
             player.second.allies.erase(rejectedDplayId);
         }
+        m_rejecters.erase(rejectedDplayId);
         updatePlayerArmies();
         notifyPlayerStatuses();
     }
     else if (!isExternalDeathsActive())
     {
+        // Change 2: never declare the LOCAL player dead from a remote reject. The
+        // local TA is authoritative for the local player; if we were actually dead,
+        // onUnitDied for our commander would have fired. A peer's REJECT just means
+        // their TA gave up trying to reach us, which is a network event.
+        if (rejectedDplayId == m_localDplayId)
+        {
+            LOG_INFO("[GameMonitor2::onRejectOther] ignoring reject targeting LOCAL player " << rejectedDplayId);
+            return;
+        }
+
+        // Change 1: require a quorum of distinct rejecters before treating the
+        // rejected peer as dead. One peer asserting "I can't reach X" is a
+        // per-link network timeout, not a game-state signal. 1v1 games (initial
+        // non-watcher count <= 2) keep today's behaviour (quorum=1) because the
+        // lone opponent is the only possible rejecter.
+        m_rejecters[rejectedDplayId].insert(sourceDplayId);
+        const std::size_t REJECT_DEATH_QUORUM = 2;
+        const std::size_t requiredQuorum =
+            (m_initialNonWatcherCount <= 2) ? 1 : REJECT_DEATH_QUORUM;
+        if (m_rejecters[rejectedDplayId].size() < requiredQuorum)
+        {
+            LOG_INFO("[GameMonitor2::onRejectOther] reject quorum "
+                     << m_rejecters[rejectedDplayId].size() << "/"
+                     << requiredQuorum << " for " << rejectedDplayId
+                     << "; deferring death flag");
+            return;
+        }
+
         m_players[rejectedDplayId].isDead = true;
 #ifdef QT_CORE_LIB
         if (m_players[rejectedDplayId].eliminationWallMs == 0)
@@ -827,6 +857,18 @@ void GameMonitor2::onGameTick(std::uint32_t sourceDplayId, std::uint32_t tick)
         // server logic requires alliances to be locked at launch so we require teams to be set before game starts (tick > m_gameStartsAfterTickCount)
         // so here we grab the player status (in particular the alliances) at time of game start
         m_frozenPlayers = m_players;
+
+        // Snapshot initial roster size (non-watcher, non-AI) so onRejectOther can
+        // scale its quorum: 1v1 games keep today's single-reject latch, larger
+        // games require >=2 distinct rejecters before treating a peer as dead.
+        m_initialNonWatcherCount = 0;
+        for (const auto& kv : m_frozenPlayers)
+        {
+            if (!kv.second.isWatcher && !kv.second.isAI)
+            {
+                ++m_initialNonWatcherCount;
+            }
+        }
 
         m_gameStarted = true;
         notifyPlayerStatuses();
@@ -1532,10 +1574,12 @@ void GameMonitor2::test(int allianceMethod)
     }
 
     {
-        // normal 1v1 player2 disconnects
+        // normal 1v1 player2 disconnects — observed from player 1 (the rejecter)
+        // perspective. With initial non-watcher count == 2, the quorum drops to 1
+        // and the single reject is sufficient to latch.
         GameMonitor2 gm(NULL, 100, 10, false);
         gm.setHostPlayerName("player1");
-        gm.setLocalPlayerName("player2");
+        gm.setLocalPlayerName("player1");
         gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
         gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
         gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
@@ -1567,6 +1611,53 @@ void GameMonitor2::test(int allianceMethod)
             TestGameResult(gr.results, 1, +1);
             TestGameResult(gr.results, 2, -1);
         }
+    }
+
+    {
+        // Local-player guard (Change 2): a reject targeting the LOCAL player must
+        // NOT mark the local as dead — local TA is authoritative for local death.
+        // Observed from player2's (the rejected player's) perspective.
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onGameTick(1, 101);
+        gm.onGameTick(2, 101);
+        TESTASSERT(gm.isGameStarted());
+        // Remote peer claims local player is rejected — must be ignored.
+        gm.onRejectOther(1, 2);
+        TESTASSERT(!gm.isGameOver());
+    }
+
+    {
+        // Quorum-of-2 guard (Change 1): a single reject is insufficient in games
+        // with >2 initial players. Specifically: 3-player scenario where only
+        // player1 rejects player3; player3 stays alive in m_players, game continues.
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player1");
+        gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Comet Catcher", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Comet Catcher", 1500, 3, 0, false, false, false);
+        // Make player1 and player2 allies; player3 is the lone opponent.
+        gm.onAlliance(1, 2, true);
+        gm.onAlliance(2, 1, true);
+        gm.onGameTick(1, 101);
+        gm.onGameTick(2, 101);
+        gm.onGameTick(3, 101);
+        TESTASSERT(gm.isGameStarted());
+        // Solo reject of player3 by player1 — quorum=2, only 1 source → no latch.
+        gm.onRejectOther(1, 3);
+        TESTASSERT(!gm.isGameOver());
+        // Second peer also rejects — quorum reached, game ends with allied team win.
+        gm.onRejectOther(2, 3);
+        TESTASSERT(gm.isGameOver());
     }
 
     {

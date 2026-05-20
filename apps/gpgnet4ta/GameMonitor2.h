@@ -117,6 +117,14 @@ class GameMonitor2 : public tapacket::TaPacketHandler
     std::uint16_t m_maxUnits;
     std::map<std::uint32_t, PlayerData> m_players;      // keyed by PlayerData::dplayid
     std::map<std::uint32_t, PlayerData> m_frozenPlayers;// m_players (in particular the teams and alliances) as is was at time of game start
+    // rejected dplayId -> set of sourceDplayIds that emitted REJECT_1B for that target.
+    // Used by onRejectOther to require a quorum before treating a peer as dead — one
+    // peer's network timeout is a network event, not a game-state event.
+    std::map<std::uint32_t, std::set<std::uint32_t>> m_rejecters;
+    // Count of non-watcher non-AI players at game start. Used to scale the reject
+    // quorum: 1v1 games keep today's behaviour (single reject suffices because the
+    // lone opponent is the only possible rejecter), larger games require >=2.
+    std::size_t m_initialNonWatcherCount;
     std::map<std::string, std::string> m_playerRealNames;// keyed by in-game alias
     GameResult m_gameResult;                            // empty until latched onto the first encountered victory condition
     bool m_repairAsymmetricAlliances;
