@@ -106,7 +106,14 @@ public:
             }
             else
             {
-                int teamNumber = isWatcher ? -1 : int(_teamNumber);
+                // _teamNumber is the frozen launch-time team after game start
+                // (GameMonitor2::notifyPlayerStatuses substitutes it from
+                // m_frozenPlayers). It's >0 only for players who were
+                // participants at launch — spectators stay at 0. Preserve
+                // that team even when isWatcher flips true (commander died);
+                // emit -1 only for genuine never-was-active spectators.
+                int teamNumber = (_teamNumber > 0) ? int(_teamNumber)
+                                 : (isWatcher ? -1 : int(_teamNumber));
                 qInfo() << "[ForwardGameEventsToGpgNet::onPlayerStatus] playerName:" << name << "id:" << gpgnetId << "slot:" << slot << "army:" << armyNumber << "team:" << teamNumber << "side:" << side << "isDead:" << isDead << "isWatcher:" << isWatcher;
                 if (m_isHost)
                 {
