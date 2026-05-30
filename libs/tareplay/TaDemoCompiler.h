@@ -40,7 +40,17 @@ namespace tareplay {
             int gamePlayerNumber;   // 1..10
         };
 
+        // Finalise (rename .part -> .tad, or discard) a game's demo once it has
+        // gone this many timer ticks (1s each) without a game packet. Long
+        // enough to ride out mid-game lulls/pauses *while players are still
+        // connected*, so a live game's demo is never truncated.
         static const quint32 GAME_EXPIRY_TICKS = 3600;
+        // Shorter expiry applied once the LAST player socket for a game has
+        // disconnected (game over / abandoned): no live game remains to
+        // truncate, so finalise promptly instead of making watchers wait out
+        // the full GAME_EXPIRY_TICKS. Kept as a small grace (not an immediate
+        // finalise) so a quick reconnect doesn't lose the demo tail.
+        static const quint32 GAME_ABANDONED_TICKS = 60;
         struct GameContext
         {
             GameContext();

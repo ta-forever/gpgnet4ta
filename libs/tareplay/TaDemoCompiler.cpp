@@ -129,9 +129,46 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
         {
             QTcpSocket* sender = static_cast<QTcpSocket*>(QObject::sender());
             qInfo() << "[TaDemoCompiler::onSocketStateChanged] peer disconnected" << sender->peerAddress() << "port" << sender->peerPort();
+
+            // Capture which game this socket belonged to before we drop it, so
+            // we can tell afterwards whether the game still has any connected
+            // players.
+            quint32 gameId = 0u;
+            auto itContext = m_players.find(sender);
+            if (itContext != m_players.end() && !itContext.value().isNull())
+            {
+                gameId = itContext.value()->gameId;
+            }
+
             sender->disconnect();
             m_players.remove(sender);
             sender->deleteLater();
+
+            // If that was the last connected socket for the game, the game is
+            // over (or abandoned): bring its demo finalisation forward to the
+            // short grace window instead of waiting out the full
+            // GAME_EXPIRY_TICKS. The long expiry only exists to ride out
+            // mid-game lulls while players are still connected; once nobody is
+            // connected there is no live game to truncate, and making watchers
+            // wait an hour for the replay serves no purpose. We only ever clamp
+            // the countdown DOWN.
+            if (gameId != 0u && m_games.contains(gameId))
+            {
+                int connectedSockets = 0;
+                for (auto it = m_players.constBegin(); it != m_players.constEnd(); ++it)
+                {
+                    if (!it.value().isNull() && it.value()->gameId == gameId)
+                    {
+                        ++connectedSockets;
+                    }
+                }
+                if (connectedSockets == 0 && m_games[gameId].expiryCountdown > int(GAME_ABANDONED_TICKS))
+                {
+                    qInfo() << "[TaDemoCompiler::onSocketStateChanged] last player for game" << gameId
+                            << "disconnected; bringing demo finalisation forward to" << GAME_ABANDONED_TICKS << "ticks";
+                    m_games[gameId].expiryCountdown = GAME_ABANDONED_TICKS;
+                }
+            }
         }
     }
     catch (const std::exception & e)
@@ -198,6 +235,10 @@ void TaDemoCompiler::onReadyRead()
                     userContext.playerName = sender->peerAddress().toString();
                     m_games[msg.gameId].players[msg.playerDpId] = m_players[sender];
                 }
+                // A reconnecting player is fresh proof the game is live —
+                // restore the full expiry in case the abandoned-game grace
+                // window was started when the player's previous socket dropped.
+                m_games[msg.gameId].expiryCountdown = GAME_EXPIRY_TICKS;
                 continue;
             }
             
