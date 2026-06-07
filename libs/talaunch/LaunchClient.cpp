@@ -239,7 +239,13 @@ void LaunchClient::onReadyReadTcp()
                 unitCounts[i]    = tok.value(2).toInt();
                 allyTeams[i]     = tok.value(3).toInt();
                 propertyMasks[i] = tok.value(4).toInt();
-                dplayIds[i]      = tok.value(5).toInt();
+                // DirectPlay IDs routinely have the high bit set (e.g. 0x82xxxxxx > INT_MAX),
+                // so toInt() overflows and returns 0 — which makes m_players.find(dpid) miss
+                // every player in onExternalPlayerStatus and silently drops all shared-memory
+                // alliance/death/watcher updates (game 175237 reported as 6 individual teams ->
+                // MULTI_TEAM -> unranked). Parse unsigned; the uint bit pattern is preserved in
+                // the int element and recovered by static_cast<uint32_t> on the consumer side.
+                dplayIds[i]      = static_cast<int>(tok.value(5).toUInt());
             }
 
             emit playerStatusReceived(allyFlags, actives, unitCounts, allyTeams,
