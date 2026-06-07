@@ -139,6 +139,7 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
             {
                 gameId = itContext.value()->gameId;
             }
+            qInfo() << "[TaDemoCompiler::onSocketStateChanged] ... gameId=" << gameId;
 
             sender->disconnect();
             m_players.remove(sender);
@@ -154,6 +155,7 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
             // the countdown DOWN.
             if (gameId != 0u && m_games.contains(gameId))
             {
+                qInfo() << "[TaDemoCompiler::onSocketStateChanged] ... and m_games.contains(gameId)";
                 int connectedSockets = 0;
                 for (auto it = m_players.constBegin(); it != m_players.constEnd(); ++it)
                 {
@@ -162,12 +164,17 @@ void TaDemoCompiler::onSocketStateChanged(QAbstractSocket::SocketState socketSta
                         ++connectedSockets;
                     }
                 }
+                qInfo() << "[TaDemoCompiler::onSocketStateChanged] ... and connectedSockets=" << connectedSockets;
                 if (connectedSockets == 0 && m_games[gameId].expiryCountdown > int(GAME_ABANDONED_TICKS))
                 {
                     qInfo() << "[TaDemoCompiler::onSocketStateChanged] last player for game" << gameId
                             << "disconnected; bringing demo finalisation forward to" << GAME_ABANDONED_TICKS << "ticks";
                     m_games[gameId].expiryCountdown = GAME_ABANDONED_TICKS;
                 }
+            }
+            else
+            {
+                qInfo() << "[TaDemoCompiler::onSocketStateChanged] ... and not m_games.contains(gameId)";
             }
         }
     }
