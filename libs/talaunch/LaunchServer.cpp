@@ -280,9 +280,27 @@ void LaunchServer::timerEvent(QTimerEvent* event)
             }
 
             // is it time to submit game file hashes yet?
-            if (m_submitGameFileHashes && m_submitGameFileHashes())
+            // Guard the callback: a throw here (e.g. an unreadable game file) must not abort
+            // the rest of timerEvent, and must still disarm the one-shot so we don't spin on it.
+            if (m_submitGameFileHashes)
             {
-                m_submitGameFileHashes = nullptr;
+                bool done = true;
+                try
+                {
+                    done = m_submitGameFileHashes();
+                }
+                catch (const std::exception& e)
+                {
+                    qWarning() << "[LaunchServer::timerEvent] submitGameFileHashes failed:" << e.what();
+                }
+                catch (...)
+                {
+                    qWarning() << "[LaunchServer::timerEvent] submitGameFileHashes failed: unknown error";
+                }
+                if (done)
+                {
+                    m_submitGameFileHashes = nullptr;
+                }
             }
 
             pollTAFGameState();
@@ -497,20 +515,31 @@ static QString generateGameFileHashes(int gameId, const QMap<QString, QString>& 
 
     addHashes({ "*.dll", "*.gp3" });
 
-    // Handle *.ufo files that contain a units* directory
+    // Handle *.ufo files that contain a units* directory.
+    // Some installs ship empty/non-HPI .ufo placeholders (e.g. 0-byte stubs); parsing those
+    // throws HpiException. Skip any unreadable .ufo individually rather than aborting the whole
+    // hash set (and therefore the launch-code submission) for the entire game.
     QStringList ufoFiles = dir.entryList(QStringList() << "*.ufo", QDir::Files);
     for (const QString& f : ufoFiles) {
         QString fullPath = dir.absoluteFilePath(f);
 
-        std::ifstream file(fullPath.toStdString(), std::ios::binary);
-        rwe::HpiArchive archive(&file);
-        auto matchingDirs = archive.findRootDirectoriesWithPrefix("units");
+        try {
+            std::ifstream file(fullPath.toStdString(), std::ios::binary);
+            rwe::HpiArchive archive(&file);
+            auto matchingDirs = archive.findRootDirectoriesWithPrefix("units");
 
-        if (!matchingDirs.empty()) {
-            QString hash = sha256OfFile(fullPath);
-            if (!hash.isEmpty()) {
-                hashes.insert(f, hash);
+            if (!matchingDirs.empty()) {
+                QString hash = sha256OfFile(fullPath);
+                if (!hash.isEmpty()) {
+                    hashes.insert(f, hash);
+                }
             }
+        }
+        catch (const std::exception& e) {
+            qWarning() << "[generateGameFileHashes] skipping unreadable .ufo" << f << ":" << e.what();
+        }
+        catch (...) {
+            qWarning() << "[generateGameFileHashes] skipping unreadable .ufo" << f << ": unknown error";
         }
     }
 
