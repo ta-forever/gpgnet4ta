@@ -1115,6 +1115,9 @@ bool Replayer::doPlay()
                     }
                 }
                 m_demoTicks = demoTicks;
+                // Forward move[3] (game-tick) UNCHANGED -- it doubles as the engine's unit-move
+                // schedule time. Mirror it as the recorder's per-dpid +0x1c to predict 0x28 underflow.
+                m_recorderEconMirror[senderDpId].lastTick = ticks;
                 filteredMoves += move;
                 break;
             }
@@ -1151,7 +1154,24 @@ bool Replayer::doPlay()
                 {
                     sender->cumulativeEnergy = std::max(energy, sender->cumulativeEnergy);
                 }
-                filteredMoves += move;
+                // Drop a 0x28 only if it would crash the deployed recorder (EPLAYX): its handler does
+                // an UNSIGNED a = LastTimeStamp(+0x1c) - Economy.LastTimeStamp(+0x34) and traps (pauses,
+                // forcing ".panic") when +0x1c < +0x34. Funnel packets collapse several players' ticks
+                // onto the host dpid, so the tick oscillates and some 0x28s underflow. Mirror is keyed by
+                // output dpid (the recorder logs the raw source dpid). Forward the rest so resource bars
+                // update; no-op for visible-only replays (monotonic tick).
+                RecorderEconMirror& mirror = m_recorderEconMirror[senderDpId];
+                if (mirror.lastTick < mirror.econLastTimeStamp)
+                {
+                    // Skip; don't advance econLastTimeStamp -- the recorder never sees a packet we drop.
+                    qDebug() << "[doPlay] dropping 0x28 to avoid EPLAYX underflow: dpId=" << senderDpId
+                             << "lastTick=" << mirror.lastTick << "econLastTimeStamp=" << mirror.econLastTimeStamp;
+                }
+                else
+                {
+                    mirror.econLastTimeStamp = mirror.lastTick;  // recorder sets +0x34 := +0x1c
+                    filteredMoves += move;
+                }
                 break;
             }
             case tapacket::SubPacketCode::SHARE_RESOURCES_16:

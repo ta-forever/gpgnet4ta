@@ -132,6 +132,14 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::set<unsigned> m_recentChatMessageCrcsSet;
     taflib::CRC32 m_crc;
 
+    // Mirror of the deployed recorder's (EPLAYX) per-dpid economy timestamps, so we drop only the
+    // 0x28s that would trip its crash. Its 0x28 handler does an UNSIGNED (LastTimeStamp -
+    // Economy.LastTimeStamp) that traps if negative: lastTick = the 0x2c game-tick (+0x1c),
+    // econLastTimeStamp = lastTick as of the previous 0x28 (+0x34). Keyed by OUTPUT dpid (the recorder
+    // logs the raw source dpid). No-op for visible-only replays (monotonic per dpid).
+    struct RecorderEconMirror { std::uint32_t lastTick = 0u; std::uint32_t econLastTimeStamp = 0u; };
+    std::map<std::uint32_t, RecorderEconMirror> m_recorderEconMirror;  // keyed by OUTPUT dpid
+
 public:
     Replayer(std::istream*);
 
