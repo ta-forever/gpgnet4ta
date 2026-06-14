@@ -1,0 +1,12 @@
+# Keep build artifacts and VCS metadata out of docker build contexts. This dir
+# is the git root and is also consumed as the `gpgnet4ta` named build context by
+# the private replayserver repo's Dockerfile — without this, the multi-GB
+# in-source build/ tree gets transferred and the build stalls/cancels.
+.git/
+build/
+build-*/
+bin/
+*.o
+*.obj
+*.a
+*.exe

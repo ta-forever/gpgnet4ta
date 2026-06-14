@@ -17,6 +17,7 @@
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qurl.h>
+#include <QtCore/qurlquery.h>
 #include <QtCore/quuid.h>
 #include <QtCore/qtimer.h>
 
@@ -285,8 +286,13 @@ int doMain(int argc, char* argv[])
         QString serverHostName = demoUrl.host();
         int port = demoUrl.port();
         int gameId = demoUrl.path().replace("/", "").toInt();
-        qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId;
-        replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0));
+        // Optional signed watch ticket carried as a query parameter:
+        //   taflive://host:port/<gameId>?ticket=<base64>
+        QByteArray watchTicket = QUrlQuery(demoUrl).queryItemValue(
+            "ticket", QUrl::FullyDecoded).toUtf8();
+        qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId
+                << "ticket=" << (watchTicket.isEmpty() ? "none" : "present");
+        replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0, watchTicket));
         replayer.reset(new Replayer(replayClient->getReplayStream()));
         QObject::connect(replayClient.get(), &tareplay::TaReplayClient::gameNotFound, [&app, &msgbox](tareplay::TaReplayServerStatus status) {
             QObject::connect(&msgbox, &taflib::MessageBoxThread::userAcknowledged, &app, QCoreApplication::quit);

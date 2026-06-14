@@ -18,7 +18,8 @@ namespace tareplay {
         Q_OBJECT
 
     public:
-        TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position);
+        TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position,
+            QByteArray watchTicket = QByteArray());
         ~TaReplayClient();
 
         std::istream* getReplayStream();
@@ -37,6 +38,8 @@ namespace tareplay {
         quint16 m_replayServerPort;
         quint32 m_tafGameId;
         quint32 m_position;
+        // Signed watch ticket from the lobby; empty if none (legacy / local file).
+        QByteArray m_watchTicket;
 
         QTcpSocket m_tcpSocket;
         QDataStream m_socketStream;

@@ -12,6 +12,9 @@ namespace tareplay {
     public:
         quint32 gameId;
         quint32 position;
+        // Optional signed watch ticket issued by the lobby (base64). Empty for
+        // legacy clients that predate authenticated watch sessions.
+        QByteArray ticket;
 
         static const char * const ID;
         TaReplayServerSubscribe();
@@ -24,7 +27,8 @@ namespace tareplay {
         CONNECTING = 0,
         OK = 1,
         GAME_NOT_FOUND = 2,
-        LIVE_REPLAY_DISABLED = 3
+        LIVE_REPLAY_DISABLED = 3,
+        AUTH_REQUIRED = 4
     };
 
     class TaReplayServerData

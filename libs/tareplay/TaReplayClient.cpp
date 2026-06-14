@@ -9,11 +9,13 @@
 
 using namespace tareplay;
 
-TaReplayClient::TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position):
+TaReplayClient::TaReplayClient(QString replayServerHostName, quint16 replayServerPort, quint32 tafGameId, quint32 position,
+    QByteArray watchTicket):
     m_replayServerHostName(replayServerHostName),
     m_replayServerPort(replayServerPort),
     m_tafGameId(tafGameId),
     m_position(position),
+    m_watchTicket(watchTicket),
     m_socketStream(&m_tcpSocket),
     m_gpgNetSerialiser(m_socketStream)
 {
@@ -93,10 +95,21 @@ void TaReplayClient::onSocketStateChanged(QAbstractSocket::SocketState socketSta
 
 void TaReplayClient::sendSubscribe(quint32 gameId, quint32 position)
 {
-    qInfo() << "[TaReplayClient::sendSubscribe] gameId,position" << gameId << position;
-    m_gpgNetSerialiser.sendCommand(TaReplayServerSubscribe::ID, 2);
-    m_gpgNetSerialiser.sendArgument(gameId);
-    m_gpgNetSerialiser.sendArgument(position);
+    if (m_watchTicket.isEmpty())
+    {
+        qInfo() << "[TaReplayClient::sendSubscribe] gameId,position" << gameId << position << "(no ticket)";
+        m_gpgNetSerialiser.sendCommand(TaReplayServerSubscribe::ID, 2);
+        m_gpgNetSerialiser.sendArgument(gameId);
+        m_gpgNetSerialiser.sendArgument(position);
+    }
+    else
+    {
+        qInfo() << "[TaReplayClient::sendSubscribe] gameId,position" << gameId << position << "(with ticket)";
+        m_gpgNetSerialiser.sendCommand(TaReplayServerSubscribe::ID, 3);
+        m_gpgNetSerialiser.sendArgument(gameId);
+        m_gpgNetSerialiser.sendArgument(position);
+        m_gpgNetSerialiser.sendArgument(m_watchTicket);
+    }
 }
 
 void TaReplayClient::onReadyRead()

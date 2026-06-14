@@ -24,6 +24,16 @@ void TaReplayServerSubscribe::set(QVariantList command)
     }
     gameId = command[1].toUInt();
     position = command[2].toUInt();
+    // 4th argument (signed watch ticket) is optional for backward compatibility
+    // with clients that subscribe with only gameId+position.
+    if (command.size() > 3)
+    {
+        ticket = command[3].toByteArray();
+    }
+    else
+    {
+        ticket.clear();
+    }
 }
 
 TaReplayServerData::TaReplayServerData():

@@ -1,16 +1,13 @@
 set(CMAKE_AUTOMOC ON)
 
+# Client/protocol half only
 add_library(tareplay STATIC
-    TaDemoCompiler.h
-    TaDemoCompiler.cpp
     TaDemoCompilerClient.h
     TaDemoCompilerClient.cpp
     TaDemoCompilerMessages.h
     TaDemoCompilerMessages.cpp
     TaReplayClient.h
     TaReplayClient.cpp
-    TaReplayServer.h
-    TaReplayServer.cpp
     TaReplayServerMessages.h
     TaReplayServerMessages.cpp)
 
