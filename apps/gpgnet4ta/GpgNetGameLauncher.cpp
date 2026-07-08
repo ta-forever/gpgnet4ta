@@ -162,13 +162,25 @@ void GpgNetGameLauncher::onExtendedMessage(QString msg)
         {
             m_launchClient.setSubmitGameFileHashesToken(args[1]);
         }
+        else if (msg.startsWith("/fixed_positions"))
+        {
+            // Sole authority for the TAForever.ini "location" value
+            // (1=fixed, 2=random): a direct mapping from the host's fixed/random
+            // pill, sent by the client before /launch. No longer inferred from
+            // an ordered /launch (that heuristic used to override this).
+            if (m_alreadyStarted) {
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] game already launched. ignoring /fixed_positions";
+            }
+            else {
+                QStringList parts = msg.split(' ');
+                m_randomPositions = !(parts.size() > 1 && parts[1] == "1");
+                qInfo() << "[GpgNetGameLauncher::onExtendedMessage] m_randomPositions=" << m_randomPositions;
+            }
+        }
         else if (msg.startsWith("/launch"))
         {
-            if (!msg.endsWith("/launch"))
-            {
-                // a specific join order has been requested
-                m_randomPositions = false;
-            }
+            // Position mode comes solely from /fixed_positions (the host's pill).
+            // An ordered /launch <ids> no longer implies fixed positions.
             onStartApplication();
         }
         else if (msg.startsWith("/map ") && msg.size()>5)
