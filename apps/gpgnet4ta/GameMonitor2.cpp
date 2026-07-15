@@ -291,11 +291,15 @@ void GameMonitor2::onDplayDeletePlayer(std::uint32_t dplayId)
     {
         // A DPlay delete is an authoritative departure (TAF reconnect lives below
         // DirectPlay and never issues one), so mark a departing REMOTE player
-        // inactive. Otherwise a clean quit (leaving while alive) is never flagged
-        // isDead -- onRejectOther/onUnitDied both gate on !isExternalDeathsActive()
-        // -- so the player lingers in getActivePlayers() and checkEndGameCondition
-        // can't see their team is gone until teardown zeroes everyone's units, by
-        // which point every peer has gone m_localExiting and the result is VOIDed.
+        // inactive. This handles a CLEAN quit (DPlay DeletePlayer). A player who
+        // drops WITHOUT a delete -- network loss, no clean teardown -- surfaces only
+        // as a REJECT cascade; onRejectOther now handles that departure feed-
+        // independently too (with a quorum). Both must be feed-independent because a
+        // dropped player's abandoned units linger at units>0, so the engine feed
+        // keeps reporting them "alive" and never latches their death; the phantom
+        // then lingers in getActivePlayers() and checkEndGameCondition can't see
+        // their team is gone until teardown zeroes everyone's units, by which point
+        // every peer has gone m_localExiting and the result is VOIDed.
         // Never mark the LOCAL player dead: local death is authoritative only via
         // onUnitDied (cf. onRejectOther Change 2), and m_localExiting handles exit.
         if (dplayId != m_localDplayId)
@@ -759,8 +763,18 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
         updatePlayerArmies();
         notifyPlayerStatuses();
     }
-    else if (!isExternalDeathsActive())
+    else
     {
+        // NOT gated on isExternalDeathsActive(): a reject is a DirectPlay departure,
+        // and the engine feed is blind to departures. onExternalPlayerStatus only
+        // reports ACTIVE slots, and a dropped player's abandoned units linger in the
+        // sim at units>0, so the feed keeps reporting them "alive" and never latches
+        // their death (game 181825: Chao_Storm dropped, 7-peer reject cascade, feed
+        // never zeroed him -> phantom active player jammed the endgame for ~6 min).
+        // Departure authority sits below the sim, same as the DPlay-delete path in
+        // onDplayDeletePlayer, which is likewise feed-independent. The quorum below is
+        // what separates a real departure from one flaky per-link timeout.
+
         // Change 2: never declare the LOCAL player dead from a remote reject. The
         // local TA is authoritative for the local player; if we were actually dead,
         // onUnitDied for our commander would have fired. A peer's REJECT just means
@@ -1897,6 +1911,67 @@ void GameMonitor2::test(int allianceMethod)
         // team 1's last member QUITS while alive. No further game ticks follow.
         // The result must latch right here. (Without the fix the game stays open.)
         gm.onDplayDeletePlayer(2);
+        TESTASSERT(gm.isGameOver());
+
+        const auto& gr = gm.getGameResult();
+        TESTASSERT(gr.status == GameResult::Status::READY_RESULT);
+        TESTASSERT(gr.results.size() == 4);
+        TestGameResult(gr.results, 1, -1);
+        TestGameResult(gr.results, 2, -1);
+        TestGameResult(gr.results, 3, 1);
+        TestGameResult(gr.results, 4, 1);
+    }
+
+    {
+        // Regression (game 181825): a player who DROPS while still alive WITHOUT a
+        // clean DPlay delete -- pure network loss -- surfaces only as a REJECT
+        // cascade, never an onDplayDeletePlayer. That departure must still drop them
+        // from the active set so their team's elimination is seen and the result
+        // latches, even though the engine feed keeps reporting their abandoned units
+        // as "alive" (why the reject path is no longer gated on isExternalDeathsActive;
+        // that suppression is Qt-only, but the un-gated behaviour is mode-independent).
+        // The quorum is RETAINED: a lone reject is one flaky per-link timeout and must
+        // NOT end the game -- only a quorum (>=2 for a team game) does. Teams 1+2 vs
+        // 3+4; team 1 loses (p1 commander dies in-sim, p2 drops); local player3 (a
+        // winner) is still in-game so it can report.
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player3");
+        gm.onDplayCreateOrForwardPlayer(0x0008, 1, "player1", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 2, "player2", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 3, "player3", NULL, NULL);
+        gm.onDplayCreateOrForwardPlayer(0x0008, 4, "player4", NULL, NULL);
+        gm.onStatus(1, "Comet Catcher", 1500, 1, 0, false, false, false);
+        gm.onStatus(2, "Canal Crossing", 1500, 2, 0, false, false, false);
+        gm.onStatus(3, "Canal Crossing", 1500, 3, 0, false, false, false);
+        gm.onStatus(4, "Canal Crossing", 1500, 4, 0, false, false, false);
+        gm.onGameTick(1, 10);
+        gm.onGameTick(2, 10);
+        gm.onGameTick(3, 10);
+        gm.onGameTick(4, 10);
+        SetTestAlliance(allianceMethod, gm, 1, 2, true);
+        SetTestAlliance(allianceMethod, gm, 2, 1, true);
+        SetTestAlliance(allianceMethod, gm, 3, 4, true);
+        SetTestAlliance(allianceMethod, gm, 4, 3, true);
+        gm.onGameTick(1, 101);
+        gm.onGameTick(2, 101);
+        gm.onGameTick(3, 101);
+        gm.onGameTick(4, 101);
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+
+        // team 1's first member dies in-sim; team 1 still has p2 active -> not over
+        gm.onUnitDied(1, 1);
+        TESTASSERT(!gm.isGameOver());
+
+        // p2 drops (no DPlay delete). A single reject must NOT end the game: the
+        // quorum (2 for a 4-player game) guards a lone flaky per-link timeout.
+        gm.onRejectOther(3, 2);
+        TESTASSERT(!gm.isGameOver());
+
+        // second distinct rejecter meets quorum -> p2 is a confirmed departure ->
+        // team 1 is gone -> result latches with no further game ticks.
+        gm.onRejectOther(4, 2);
         TESTASSERT(gm.isGameOver());
 
         const auto& gr = gm.getGameResult();
