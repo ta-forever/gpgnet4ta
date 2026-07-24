@@ -153,6 +153,12 @@ static int safewcslen(const wchar_t* ws)
     return 0;
 }
 
+static bool isRunningUnderWine()
+{
+    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+    return ntdll != NULL && GetProcAddress(ntdll, "wine_get_version") != NULL;
+}
+
 static std::ostream& operator<< (std::ostream& os, const DPNAME& name)
 {
     os << "{lpszShortName='" << CharBytes(name.lpszShortName, 2 * safewcslen(name.lpszShortName)) << "'"
@@ -484,16 +490,26 @@ namespace jdplay {
             hostIP = "";
         }
 
-        // use the wide INet type to match the unicode lobby interface
-        // (IID_IDirectPlayLobby3): Windows tolerates ANSI DPAID_INet there but
-        // Wine's dplobby rejects it with DPERR_INVALIDFLAGS
+        // native Windows dplayx has run the ANSI DPAID_INet element for years —
+        // keep that proven path on real Windows. Wine's builtin dplobby rejects
+        // ANSI address GUIDs on the unicode lobby interface (DPERR_INVALIDFLAGS
+        // at CreateCompoundAddress), so use the wide element there instead.
         wchar_t hostIPW[64];
-        std::mbstowcs(hostIPW, hostIP, 64);
-        hostIPW[63] = L'\0';
-
-        address[1].guidDataType = DPAID_INetW;
-        address[1].dwDataSize = static_cast<DWORD>((wcslen(hostIPW) + 1) * sizeof(wchar_t));
-        address[1].lpData = hostIPW;
+        if (isRunningUnderWine())
+        {
+            std::mbstowcs(hostIPW, hostIP, 64);
+            hostIPW[63] = L'\0';
+            address[1].guidDataType = DPAID_INetW;
+            address[1].dwDataSize = static_cast<DWORD>((wcslen(hostIPW) + 1) * sizeof(wchar_t));
+            address[1].lpData = hostIPW;
+            debug() << "initialize() - wine detected: using DPAID_INetW address element" << endl;
+        }
+        else
+        {
+            address[1].guidDataType = DPAID_INet;
+            address[1].dwDataSize = static_cast<DWORD>(strlen(hostIP) + 1);
+            address[1].lpData = const_cast<char*>(hostIP);
+        }
 
         // get size to create address
         // this method will return DPERR_BUFFERTOOSMALL, that is not an error
