@@ -33,6 +33,7 @@
 #include <windowsx.h>	//GlobalAllocPtr
 #include <iomanip>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <fstream>
@@ -467,13 +468,12 @@ namespace jdplay {
             }
         }
 
-        // release old interface since we have new one
-        hr = old_lpDPLobby->Release();
-
-        if (hr != S_OK) {
-            SET_LAST_ERROR("initialize() - ERROR[" << getDPERR(hr) << "]: failed to release old lobby interface");
-            return false;
-        }
+        // release old interface since we have new one.
+        // NB Release() returns the remaining reference count, NOT an HRESULT —
+        // under Wine the QueryInterface'd lobby3 shares the refcount so this
+        // returns 1, which is not an error (treating it as one broke launching
+        // under Wine/CrossOver)
+        old_lpDPLobby->Release();
 
         // fill in data for address
         address[0].guidDataType = DPAID_ServiceProvider;
@@ -484,9 +484,16 @@ namespace jdplay {
             hostIP = "";
         }
 
-        address[1].guidDataType = DPAID_INet;
-        address[1].dwDataSize = static_cast<DWORD>(strlen(hostIP) + 1);
-        address[1].lpData = const_cast<char*>(hostIP);
+        // use the wide INet type to match the unicode lobby interface
+        // (IID_IDirectPlayLobby3): Windows tolerates ANSI DPAID_INet there but
+        // Wine's dplobby rejects it with DPERR_INVALIDFLAGS
+        wchar_t hostIPW[64];
+        std::mbstowcs(hostIPW, hostIP, 64);
+        hostIPW[63] = L'\0';
+
+        address[1].guidDataType = DPAID_INetW;
+        address[1].dwDataSize = static_cast<DWORD>((wcslen(hostIPW) + 1) * sizeof(wchar_t));
+        address[1].lpData = hostIPW;
 
         // get size to create address
         // this method will return DPERR_BUFFERTOOSMALL, that is not an error
@@ -908,10 +915,7 @@ namespace jdplay {
                 lpDPIsOpen = false;
             }
 
-            hr = lpDP->Release();	//release dplay interface
-            if (hr != S_OK) {
-                SET_LAST_ERROR(getLastError() << "\ndeInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release DirectPlay interface");
-            }
+            lpDP->Release();	//release dplay interface (returns refcount, not HRESULT)
 
             lpDP = NULL;  // set to NULL, safe practice here
         }
@@ -924,10 +928,7 @@ namespace jdplay {
         SET_LAST_ERROR("");
         if (lpDPLobby) {
 
-            hr = lpDPLobby->Release(); //release lobby
-            if (hr != S_OK) {
-                SET_LAST_ERROR("deInitialize() - ERROR[" << getDPERR(hr) << "]: failed to release lobby interface");
-            }
+            lpDPLobby->Release(); //release lobby (returns refcount, not HRESULT)
             lpDPLobby = NULL;
         }
     }
