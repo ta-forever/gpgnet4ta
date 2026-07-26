@@ -820,6 +820,17 @@ void GameMonitor2::onRejectOther(std::uint32_t sourceDplayId, std::uint32_t reje
     }
 }
 
+// Deliberately only fires for a player with ZERO mutual allies (adopting their
+// incoming one-way edges). Do not broaden: an asymmetric edge has two valid
+// repairs - add the missing direction (merge) or drop the stray one (split) -
+// and without the battleroom team-selection signal the choice is ambiguous;
+// one-way alliances are legitimate TA gameplay (LOS diplomacy), so aggressive
+// symmetrization would manufacture teams in checkbox/FFA lobbies and can end
+// games early with false results. Partial asymmetry WITHIN a selected team
+// (game 183524: noob->Arch present, Arch->noob missing, Arch<->TRP mutual, so
+// this repair correctly stayed silent yet the team still split) is handled by
+// tryAssignTeamsByBattleroomSelection, which takes precedence at freeze when
+// every active player has explicitly selected a team.
 static void repairAsymmetricAlliances(std::map<std::uint32_t, PlayerData>& players)
 {
     bool anyRepair = true;
@@ -1081,6 +1092,87 @@ bool GameMonitor2::updateAlliances(std::uint32_t sender, const std::string &chat
     return false;
 }
 
+// If every active player has explicitly selected a battleroom team (values 0..4,
+// 5 and up meaning none), the players are organising themselves with the team
+// buttons rather than with pairwise ally toggles, so group by selected team
+// directly instead of inferring teams from the alliance matrix. The matrix is
+// assembled from sniffed per-pair ALLY packets which slot shuffles can leave
+// asymmetric or missing (game 183524: a stale one-way edge stranded a player on
+// a solo frozen team and a genuine 3v3 win was scored a draw).
+//
+// The matrix still gets a veto: a MUTUAL alliance between players on different
+// selected teams means the selections don't reflect intent, so fall back to
+// matrix inference. One-way/missing edges within a selected team are exactly
+// the artifact being defended against and are tolerated.
+//
+// Returns false (no teamNumber assigned) if the selections are unusable.
+bool GameMonitor2::tryAssignTeamsByBattleroomSelection(const std::vector<PlayerData*>& sortedPlayers)
+{
+    std::vector<PlayerData*> activePlayers;
+    for (PlayerData* p : sortedPlayers)
+    {
+        if (!p->isWatcher && !p->isDead)
+        {
+            activePlayers.push_back(p);
+        }
+    }
+    if (activePlayers.size() < 2)
+    {
+        return false;
+    }
+
+    for (PlayerData* p : activePlayers)
+    {
+        if (p->battleroomTeamSelection < 0 || p->battleroomTeamSelection >= 5)
+        {
+            return false;
+        }
+    }
+
+    for (std::size_t i = 0; i < activePlayers.size(); ++i)
+    {
+        for (std::size_t j = i + 1; j < activePlayers.size(); ++j)
+        {
+            PlayerData* a = activePlayers[i];
+            PlayerData* b = activePlayers[j];
+            const bool sameTeam = a->battleroomTeamSelection == b->battleroomTeamSelection;
+            const bool alliedAB = a->allies.count(b->dplayid) > 0;
+            const bool alliedBA = b->allies.count(a->dplayid) > 0;
+            if (!sameTeam && alliedAB && alliedBA)
+            {
+                LOG_INFO("[GameMonitor2::tryAssignTeamsByBattleroomSelection] declining: '"
+                    << a->name.c_str() << "' (brTeam " << a->battleroomTeamSelection << ") and '"
+                    << b->name.c_str() << "' (brTeam " << b->battleroomTeamSelection
+                    << ") are mutually allied across different selected teams");
+                return false;
+            }
+            if (sameTeam && (!alliedAB || !alliedBA))
+            {
+                LOG_INFO("[GameMonitor2::tryAssignTeamsByBattleroomSelection] tolerating incomplete alliance within brTeam "
+                    << a->battleroomTeamSelection << ": '" << a->name.c_str() << "'->" << alliedAB
+                    << " '" << b->name.c_str() << "'->" << alliedBA);
+            }
+        }
+    }
+
+    int teamCount = 1;  // same numbering scheme as matrix inference: first assigned team is 2
+    for (PlayerData* p : activePlayers)
+    {
+        if (p->teamNumber == 0)
+        {
+            ++teamCount;
+            for (PlayerData* q : activePlayers)
+            {
+                if (q->teamNumber == 0 && q->battleroomTeamSelection == p->battleroomTeamSelection)
+                {
+                    q->teamNumber = teamCount;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 void GameMonitor2::updatePlayerArmies()
 {
     std::vector<PlayerData*> sortedPlayers;
@@ -1095,6 +1187,24 @@ void GameMonitor2::updatePlayerArmies()
     std::sort(sortedPlayers.begin(), sortedPlayers.end(),
         [](const PlayerData* p1, const PlayerData* p2)
         -> bool { return p1->dplayid < p2->dplayid; });
+
+    // Before game start, prefer the players' explicit battleroom team selections
+    // when everyone is clearly using them (and they don't contradict the alliance
+    // matrix) - the pairwise matrix can be corrupted by stale/asymmetric ALLY
+    // packets during slot shuffles. After game start teams must come from the
+    // (dynamic) alliance matrix so that ally-everyone mutual draws are detected.
+    if (!m_gameStarted && tryAssignTeamsByBattleroomSelection(sortedPlayers))
+    {
+        int armyCount = 0;
+        for (PlayerData* sortedPlayer : sortedPlayers)
+        {
+            if (!sortedPlayer->isWatcher && !sortedPlayer->isDead)
+            {
+                sortedPlayer->armyNumber = ++armyCount;
+            }
+        }
+        return;
+    }
 
     int teamCount = 1;  // assign team numbers consecutively to each mutually allied set
     int armyCount = 0;  // assign army number by consecutive sortedPlayer
@@ -2199,6 +2309,132 @@ void GameMonitor2::test(int allianceMethod)
         TESTASSERT(!gm.isGameOver());
         gm.onGameTick(1, 121);
         gm.onGameTick(2, 121);
+        TESTASSERT(gm.isGameOver());
+        const auto& gr = gm.getGameResult();
+        TESTASSERT(gr.status == GameResult::Status::READY_RESULT);
+        TESTASSERT(gr.results.size() == 4);
+        TestGameResult(gr.results, 1, 1);
+        TestGameResult(gr.results, 2, 1);
+        TestGameResult(gr.results, 3, -1);
+        TestGameResult(gr.results, 4, -1);
+    }
+
+    {
+        // game 183524 repro: 3v3 organised with battleroom team selections, but a
+        // stale one-way ALLY packet strands player5 without a mutual alliance to
+        // player1. Explicit team selections must win over the corrupted matrix.
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        for (int n = 1; n <= 6; ++n)
+        {
+            std::ostringstream name;
+            name << "player" << n;
+            gm.onDplayCreateOrForwardPlayer(0x0008, n, name.str().c_str(), NULL, NULL);
+            gm.onStatus(n, "Comet Catcher", 1500, n, 0, false, false, false);
+        }
+        gm.onTeamSelection(1, 0);
+        gm.onTeamSelection(2, 0);
+        gm.onTeamSelection(5, 0);
+        gm.onTeamSelection(3, 1);
+        gm.onTeamSelection(4, 1);
+        gm.onTeamSelection(6, 1);
+        gm.onAlliance(5, 1, false);     // stale packet: 5 -> 1 edge lost (1 -> 5 remains)
+        for (int n = 1; n <= 6; ++n)
+        {
+            gm.onGameTick(n, 101);
+        }
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(!gm.isGameOver());
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber == gm.m_frozenPlayers.at(2).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber == gm.m_frozenPlayers.at(5).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(3).teamNumber == gm.m_frozenPlayers.at(4).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(3).teamNumber == gm.m_frozenPlayers.at(6).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber != gm.m_frozenPlayers.at(3).teamNumber);
+
+        // team 3+4+6 eliminated -> 1,2,5 must win (old code: no end condition
+        // because 5 was frozen on a solo team; game lingered then drew)
+        gm.onUnitDied(3, 3001);
+        gm.onUnitDied(4, 4501);
+        gm.onUnitDied(6, 7501);
+        TESTASSERT(!gm.isGameOver());
+        gm.onGameTick(1, 130);
+        TESTASSERT(gm.isGameOver());
+        const auto& gr = gm.getGameResult();
+        TESTASSERT(gr.status == GameResult::Status::READY_RESULT);
+        TESTASSERT(gr.results.size() == 6);
+        TestGameResult(gr.results, 1, 1);
+        TestGameResult(gr.results, 2, 1);
+        TestGameResult(gr.results, 5, 1);
+        TestGameResult(gr.results, 3, -1);
+        TestGameResult(gr.results, 4, -1);
+        TestGameResult(gr.results, 6, -1);
+    }
+
+    {
+        // team selections present but contradicted by a deliberate MUTUAL
+        // cross-team alliance -> selections must be vetoed, matrix inference rules
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        for (int n = 1; n <= 4; ++n)
+        {
+            std::ostringstream name;
+            name << "player" << n;
+            gm.onDplayCreateOrForwardPlayer(0x0008, n, name.str().c_str(), NULL, NULL);
+            gm.onStatus(n, "Comet Catcher", 1500, n, 0, false, false, false);
+        }
+        gm.onTeamSelection(1, 0);
+        gm.onTeamSelection(2, 0);
+        gm.onTeamSelection(3, 1);
+        gm.onTeamSelection(4, 1);
+        gm.onAlliance(1, 2, false);     // 1 and 2 break up entirely...
+        gm.onAlliance(2, 1, false);
+        gm.onAlliance(2, 3, true);      // ...and 2 defects to 3, mutually
+        gm.onAlliance(3, 2, true);
+        for (int n = 1; n <= 4; ++n)
+        {
+            gm.onGameTick(n, 101);
+        }
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(gm.m_frozenPlayers.at(2).teamNumber == gm.m_frozenPlayers.at(3).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber != gm.m_frozenPlayers.at(2).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(4).teamNumber != gm.m_frozenPlayers.at(2).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber != gm.m_frozenPlayers.at(4).teamNumber);
+    }
+
+    {
+        // team selections present, one same-team pair has BOTH ally edges missing
+        // (worst-case packet loss): selections still win, pair stays teamed
+        GameMonitor2 gm(NULL, 100, 10, false);
+        gm.setHostPlayerName("player1");
+        gm.setLocalPlayerName("player2");
+        for (int n = 1; n <= 4; ++n)
+        {
+            std::ostringstream name;
+            name << "player" << n;
+            gm.onDplayCreateOrForwardPlayer(0x0008, n, name.str().c_str(), NULL, NULL);
+            gm.onStatus(n, "Comet Catcher", 1500, n, 0, false, false, false);
+        }
+        gm.onTeamSelection(1, 0);
+        gm.onTeamSelection(2, 0);
+        gm.onTeamSelection(3, 1);
+        gm.onTeamSelection(4, 1);
+        gm.onAlliance(1, 2, false);
+        gm.onAlliance(2, 1, false);
+        for (int n = 1; n <= 4; ++n)
+        {
+            gm.onGameTick(n, 101);
+        }
+        TESTASSERT(gm.isGameStarted());
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber == gm.m_frozenPlayers.at(2).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(3).teamNumber == gm.m_frozenPlayers.at(4).teamNumber);
+        TESTASSERT(gm.m_frozenPlayers.at(1).teamNumber != gm.m_frozenPlayers.at(3).teamNumber);
+
+        gm.onUnitDied(3, 3001);
+        gm.onUnitDied(4, 4501);
+        TESTASSERT(!gm.isGameOver());
+        gm.onGameTick(1, 130);
         TESTASSERT(gm.isGameOver());
         const auto& gr = gm.getGameResult();
         TESTASSERT(gr.status == GameResult::Status::READY_RESULT);

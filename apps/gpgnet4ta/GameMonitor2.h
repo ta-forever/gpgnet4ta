@@ -241,6 +241,10 @@ protected:
     // or we could lock the alliances and designations at launch.
     // Since FAF server logic requires latter, so thats what we'll do
     virtual void updatePlayerArmies();
+    // pre-game only: group by explicit battleroom team selections when everyone
+    // is using them and the alliance matrix doesn't contradict them; returns
+    // false if inapplicable (caller falls back to alliance-matrix inference)
+    virtual bool tryAssignTeamsByBattleroomSelection(const std::vector<PlayerData*>& sortedPlayers);
     virtual void notifyPlayerStatuses();
 
 };
