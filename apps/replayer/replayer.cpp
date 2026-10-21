@@ -316,8 +316,9 @@ int doMain(int argc, char* argv[])
             }
         });
 
-        QObject::connect(replayer.get(), &Replayer::readyToJoin, [&launchClient, &timer]() {
+        QObject::connect(replayer.get(), &Replayer::readyToJoin, [&launchClient, &timer, &replayer, &parser]() {
             qInfo() << "[doMain] launching TA";
+            launchClient->setPlayerName(replayer->getWatcherName(parser.value("playername")));
             launchClient->startApplication();
             timer.setInterval(1000);
             timer.start();

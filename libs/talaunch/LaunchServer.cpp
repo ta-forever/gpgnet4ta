@@ -137,7 +137,9 @@ void LaunchServer::onReadyReadTcp()
         }
         else if (args.size() >= 5 && args[0] == "/searchjoin")
         {
-            launchGame(args[1], args[2], args[3], args[4], "", "", false, true);
+            // Replay names come from recordings and can contain spaces. The address
+            // is the final field; searchjoin has no hash endpoint or token.
+            launchGame(args[1], args[2], args.mid(3, args.size() - 4).join(' '), args.last(), "", "", false, true);
         }
     }
     catch (const std::exception & e)
@@ -167,7 +169,7 @@ void LaunchServer::launchGame(QString _gameId, QString _guid, QString _player, Q
     bool okGameId;
     int gameId = _gameId.toInt(&okGameId);
     std::string guid = _guid.toStdString();
-    std::string player = _player.toStdString();
+    std::string player = doSearch ? _player.toLocal8Bit().toStdString() : _player.toStdString();
     std::string ipaddr = _ipaddr.toStdString();
 
     if (asHost)

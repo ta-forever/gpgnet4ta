@@ -31,6 +31,7 @@ class Replayer : public QObject, public tapacket::DemoParser
         std::uint32_t dpId;
         std::uint32_t originalDpId;
         tapacket::bytestring statusPacket;
+        tapacket::bytestring pendingResourceInfo;
         std::uint32_t ticks;
         double cumulativeMetal;
         double cumulativeMetalSharedToOther;
@@ -132,7 +133,7 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::set<unsigned> m_recentChatMessageCrcsSet;
     taflib::CRC32 m_crc;
 
-    // Mirror of the deployed recorder's (EPLAYX) per-dpid economy timestamps, so we drop only the
+    // Mirror of the deployed recorder's (EPLAYX) per-dpid economy timestamps, so we defer only the
     // 0x28s that would trip its crash. Its 0x28 handler does an UNSIGNED (LastTimeStamp -
     // Economy.LastTimeStamp) that traps if negative: lastTick = the 0x2c game-tick (+0x1c),
     // econLastTimeStamp = lastTick as of the previous 0x28 (+0x34). Keyed by OUTPUT dpid (the recorder
@@ -145,6 +146,8 @@ public:
 
     void hostGame(QString _guid, QString _player, QString _ipaddr);
     void setNoChat(bool option);
+    QString getWatcherName(const QString& defaultName) const;
+    int getWatcherTeam() const;
 
     virtual void handle(const tapacket::Header& header);
     virtual void handle(const tapacket::Player& player, int n, int ofTotal);
