@@ -873,7 +873,7 @@ TTeam::TTeam(const bytestring& subPacket)
 bytestring TTeam::asSubPacket() const
 {
     bytestring result;
-    result.push_back(std::uint8_t(SubPacketCode::ALLY_23));
+    result.push_back(std::uint8_t(SubPacketCode::TEAM_24));
     serialise(result, dpidFrom);
     result.push_back(teamNumber);
     return result;

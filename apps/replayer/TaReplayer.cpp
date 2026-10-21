@@ -80,6 +80,32 @@ void Replayer::setNoChat(bool option)
     m_nochat = option;
 }
 
+QString Replayer::getWatcherName(const QString& defaultName) const
+{
+    // In a ten-player replay the watcher occupies the invisible demo player's slot.
+    for (const auto& demoPlayer : m_demoPlayers)
+    {
+        if (!demoPlayer->isVisible && !demoPlayer->name.empty())
+        {
+            return QString::fromLocal8Bit(demoPlayer->name.c_str());
+        }
+    }
+    return defaultName;
+}
+
+int Replayer::getWatcherTeam() const
+{
+    for (const auto& demoPlayer : m_demoPlayers)
+    {
+        if (!demoPlayer->isVisible && demoPlayer->statusPacket.size() == 192)
+        {
+            const tapacket::TPlayerInfo info(demoPlayer->statusPacket);
+            if (info.data4 <= 5) return info.data4;
+        }
+    }
+    return -1; // Ordinary spectators, or recordings without a valid starting team.
+}
+
 void Replayer::send(std::uint32_t fromId, std::uint32_t toId, const tapacket::bytestring& subpak)
 {
     tapacket::bytestring bs = tapacket::TPacket::trivialSmartpak(subpak, toId == 0 ? m_tcpSeq-- : 0xffffffff);
@@ -430,6 +456,22 @@ void Replayer::sendPlayerInfos()
             this->send(m_nominatedHostDemoPlayer->dpId, 0, bs);
         }
     }
+    // The real viewer shares the invisible recorded player's slot. Its own
+    // lobby status otherwise leaves that player's team at "no team". Use a
+    // normal team-selection message without replacing the viewer's ready state,
+    // controller, game settings or other player-info fields.
+    const int watcherTeam = getWatcherTeam();
+    if (watcherTeam >= 0)
+    {
+        for (const auto& dpPlayer : m_dpPlayers)
+        {
+            tapacket::TTeam team;
+            team.dpidFrom = dpPlayer.first;
+            team.teamNumber = static_cast<std::uint8_t>(watcherTeam);
+            this->send(m_nominatedHostDemoPlayer->dpId, dpPlayer.first, team.asSubPacket());
+        }
+    }
+
 }
 
 void Replayer::onCompletedLoadingDemoPlayers()
@@ -1027,6 +1069,31 @@ bool Replayer::doPlay()
             hackmsg[2] = 0x2d;  // msgid: hack on/off
             hackmsg[3] = 6;     // msg bytes
             hackmsg[5] = 1;     // hack on
+            // Optional starting-team metadata for the shared player's POV. Keep the first six
+            // bytes unchanged so older tdraw builds still recognise the funnel marker.
+            if (sender->statusPacket.size() == 192)
+            {
+                const tapacket::TPlayerInfo info(sender->statusPacket);
+                if (info.data4 <= 5)
+                {
+                    hackmsg[6] = 'L';
+                    hackmsg[7] = 'O';
+                    hackmsg[8] = 'S';
+                    hackmsg[9] = 1;  // metadata version
+                    hackmsg[10] = info.data4;  // recorded starting team; 5 means no team
+                    // The recorder sees funnel traffic as the host, so carry the actual
+                    // recorded camera position separately for the shared player's row.
+                    for (const auto& move : moves)
+                    {
+                        if (tapacket::SubPacketCode(move[0]) == tapacket::SubPacketCode::MAP_POSITION_FC && move.size() == 5)
+                        {
+                            hackmsg[11] = 'C';
+                            hackmsg[12] = 1;
+                            std::copy(move.begin() + 1, move.end(), hackmsg.begin() + 13);
+                        }
+                    }
+                }
+            }
             senderDpId = m_nominatedHostDemoPlayer->dpId;
             filteredMoves += hackmsg;
         }
@@ -1119,6 +1186,15 @@ bool Replayer::doPlay()
                 // schedule time. Mirror it as the recorder's per-dpid +0x1c to predict 0x28 underflow.
                 m_recorderEconMirror[senderDpId].lastTick = ticks;
                 filteredMoves += move;
+                // The host and funnel player share a recorder clock, but their recorded ticks can
+                // differ. Retry this player's latest resource snapshot once its clock catches up.
+                RecorderEconMirror& mirror = m_recorderEconMirror[senderDpId];
+                if (!sender->pendingResourceInfo.empty() && ticks >= mirror.econLastTimeStamp)
+                {
+                    mirror.econLastTimeStamp = ticks;
+                    filteredMoves += sender->pendingResourceInfo;
+                    sender->pendingResourceInfo.clear();
+                }
                 break;
             }
 
@@ -1154,23 +1230,25 @@ bool Replayer::doPlay()
                 {
                     sender->cumulativeEnergy = std::max(energy, sender->cumulativeEnergy);
                 }
-                // Drop a 0x28 only if it would crash the deployed recorder (EPLAYX): its handler does
+                // Defer a 0x28 if it would crash the deployed recorder (EPLAYX): its handler does
                 // an UNSIGNED a = LastTimeStamp(+0x1c) - Economy.LastTimeStamp(+0x34) and traps (pauses,
                 // forcing ".panic") when +0x1c < +0x34. Funnel packets collapse several players' ticks
                 // onto the host dpid, so the tick oscillates and some 0x28s underflow. Mirror is keyed by
-                // output dpid (the recorder logs the raw source dpid). Forward the rest so resource bars
-                // update; no-op for visible-only replays (monotonic tick).
+                // output dpid (the recorder logs the raw source dpid). Keep the latest snapshot per
+                // original player and retry after its next safe 0x2c, rather than freezing its bars
+                // when its resource broadcasts consistently arrive one tick behind the host.
                 RecorderEconMirror& mirror = m_recorderEconMirror[senderDpId];
                 if (mirror.lastTick < mirror.econLastTimeStamp)
                 {
-                    // Skip; don't advance econLastTimeStamp -- the recorder never sees a packet we drop.
-                    qDebug() << "[doPlay] dropping 0x28 to avoid EPLAYX underflow: dpId=" << senderDpId
+                    sender->pendingResourceInfo = move;
+                    qDebug() << "[doPlay] deferring 0x28 to avoid EPLAYX underflow: dpId=" << senderDpId
                              << "lastTick=" << mirror.lastTick << "econLastTimeStamp=" << mirror.econLastTimeStamp;
                 }
                 else
                 {
                     mirror.econLastTimeStamp = mirror.lastTick;  // recorder sets +0x34 := +0x1c
                     filteredMoves += move;
+                    sender->pendingResourceInfo.clear();
                 }
                 break;
             }
