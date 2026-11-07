@@ -31,6 +31,7 @@ class Replayer : public QObject, public tapacket::DemoParser
         std::uint32_t dpId;
         std::uint32_t originalDpId;
         tapacket::bytestring statusPacket;
+        tapacket::bytestring pendingResourceInfo;
         std::uint32_t ticks;
         double cumulativeMetal;
         double cumulativeMetalSharedToOther;
@@ -112,6 +113,9 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::istream* m_demoDataStream;
     bool m_launch;
     bool m_nochat;  // option to supress ingame chat
+    bool m_sourceComplete;
+    bool m_protocolAnnounced = false;
+    std::uint32_t m_lastReplayTick = 0u;
 
     // multiplier for m_playBackSpeed
     // is reduced in response to depleted m_pendingGamePackets buffer
@@ -132,7 +136,7 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::set<unsigned> m_recentChatMessageCrcsSet;
     taflib::CRC32 m_crc;
 
-    // Mirror of the deployed recorder's (EPLAYX) per-dpid economy timestamps, so we drop only the
+    // Mirror of the deployed recorder's (EPLAYX) per-dpid economy timestamps, so we defer only the
     // 0x28s that would trip its crash. Its 0x28 handler does an UNSIGNED (LastTimeStamp -
     // Economy.LastTimeStamp) that traps if negative: lastTick = the 0x2c game-tick (+0x1c),
     // econLastTimeStamp = lastTick as of the previous 0x28 (+0x34). Keyed by OUTPUT dpid (the recorder
@@ -141,10 +145,13 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::map<std::uint32_t, RecorderEconMirror> m_recorderEconMirror;  // keyed by OUTPUT dpid
 
 public:
-    Replayer(std::istream*);
+    Replayer(std::istream*, bool sourceComplete = true);
+    void setSourceComplete();
 
     void hostGame(QString _guid, QString _player, QString _ipaddr);
     void setNoChat(bool option);
+    QString getWatcherName(const QString& defaultName) const;
+    int getWatcherTeam() const;
 
     virtual void handle(const tapacket::Header& header);
     virtual void handle(const tapacket::Player& player, int n, int ofTotal);
@@ -174,6 +181,10 @@ private:
     void doLaunch();
     bool doLoad();
     bool doPlay();
+    void doDone();
+    void sendReplayPacket(std::uint32_t fromId, const tapacket::bytestring& subpak);
+    void finishReplay();
+    void sendReplayMarkers(bool complete);
     int doSyncWatcher(DpPlayer& dpPlayer);
     void sendPlayerInfos();
     void processUnitData(const tapacket::TUnitData& unitData);

@@ -77,7 +77,7 @@ bytestring RecordReader::operator()(std::istream *is)
     return record;
 }
 
-DemoParser::DemoParser()
+DemoParser::DemoParser() : m_numTimesNewDataReceived(0)
 { }
 
 void DemoParser::load(Header &h)
@@ -197,12 +197,15 @@ bool DemoParser::parse(std::istream *is, unsigned maxPaksToLoad)
     }
 
     unsigned numPacketsRead = m_numPacketsRead;
+    m_waitingForData = false;
     try
     {
         doParse(maxPaksToLoad);
     }
     catch (RecordReader::DataNotReadyException &)
-    { }
+    {
+        m_waitingForData = true;
+    }
 
     if (m_numPacketsRead > numPacketsRead)
     {

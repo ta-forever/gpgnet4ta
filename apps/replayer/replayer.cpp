@@ -293,7 +293,9 @@ int doMain(int argc, char* argv[])
         qInfo() << "[doMain] connecting to replay server addr,port,gameid" << serverHostName << port << gameId
                 << "ticket=" << (watchTicket.isEmpty() ? "none" : "present");
         replayClient.reset(new tareplay::TaReplayClient(serverHostName, port, gameId, 0, watchTicket));
-        replayer.reset(new Replayer(replayClient->getReplayStream()));
+        replayer.reset(new Replayer(replayClient->getReplayStream(), false));
+        QObject::connect(replayClient.get(), &tareplay::TaReplayClient::replayComplete,
+            replayer.get(), &Replayer::setSourceComplete);
         QObject::connect(replayClient.get(), &tareplay::TaReplayClient::gameNotFound, [&app, &msgbox](tareplay::TaReplayServerStatus status) {
             QObject::connect(&msgbox, &taflib::MessageBoxThread::userAcknowledged, &app, QCoreApplication::quit);
             if (status == tareplay::TaReplayServerStatus::GAME_NOT_FOUND) GameNotFoundMessageBox(msgbox);
@@ -316,8 +318,9 @@ int doMain(int argc, char* argv[])
             }
         });
 
-        QObject::connect(replayer.get(), &Replayer::readyToJoin, [&launchClient, &timer]() {
+        QObject::connect(replayer.get(), &Replayer::readyToJoin, [&launchClient, &timer, &replayer, &parser]() {
             qInfo() << "[doMain] launching TA";
+            launchClient->setPlayerName(replayer->getWatcherName(parser.value("playername")));
             launchClient->startApplication();
             timer.setInterval(1000);
             timer.start();

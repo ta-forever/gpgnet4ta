@@ -32,6 +32,7 @@ namespace tapacket
 
         // returns a completed record or throws DataNotReadyException
         bytestring operator()(std::istream *is);
+        bool atRecordBoundary() const { return m_state == State::READ_RECLEN1; }
     };
 
 
@@ -52,6 +53,7 @@ namespace tapacket
         // running count of how many times we reached EOF and then later received more data
         // as a mechanism to distrimincate between a live game and one where user just copied a .tad into the demo folder
         int m_numTimesNewDataReceived;
+        bool m_waitingForData = false;
 
     public:
 
@@ -59,6 +61,10 @@ namespace tapacket
 
         virtual bool parse(std::istream *is, unsigned maxPaksToLoad);
         virtual int numTimesNewDataReceived() const;
+        // A short read is temporary for live streams. The caller must separately
+        // know that the producer has finished before treating this as final EOF.
+        bool waitingForData() const { return m_waitingForData; }
+        bool atRecordBoundary() const { return m_recordReader.atRecordBoundary(); }
 
         virtual void handle(const Header &header) = 0;
         virtual void handle(const Player &player, int n, int ofTotal) = 0;
