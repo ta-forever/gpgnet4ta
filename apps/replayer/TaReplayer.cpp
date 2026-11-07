@@ -6,6 +6,7 @@
 #include "taflib/Logger.h"
 
 #include <cmath>
+#include <cstring>
 #include <dplay.h>
 #include <iomanip>
 #include <sstream>
@@ -18,7 +19,7 @@
 #undef max
 #endif
 
-Replayer::Replayer(std::istream* demoDataStream) :
+Replayer::Replayer(std::istream* demoDataStream, bool sourceComplete) :
     m_timerId(startTimer(100, Qt::TimerType::PreciseTimer)),
     m_tcpSeq(0xfffffffe),
     m_wallClockTicks(0u),
@@ -32,8 +33,96 @@ Replayer::Replayer(std::istream* demoDataStream) :
     m_tickLastUserPauseEvent(0u),
     m_demoDataStream(demoDataStream),
     m_launch(true),
-    m_nochat(false)
+    m_nochat(false),
+    m_sourceComplete(sourceComplete)
 { }
+
+void Replayer::setSourceComplete()
+{
+    m_sourceComplete = true;
+}
+
+void Replayer::sendReplayPacket(std::uint32_t fromId, const tapacket::bytestring& subpak)
+{
+    // Keep the replay envelope/timestamps unchanged, but deliver it in DirectPlay's
+    // ordered reliable stream. An EOF marker must not overtake the final game events.
+    tapacket::bytestring bs = tapacket::TPacket::trivialSmartpak(subpak, 0);
+    tapacket::TPacket::encrypt(bs);
+    m_jdPlay->dpSend(fromId, 0, DPSEND_GUARANTEED, (void*)bs.data(), bs.size());
+}
+
+static tapacket::bytestring replayFunnelMarker(const tapacket::bytestring& status,
+    const std::vector<tapacket::bytestring>& moves)
+{
+    tapacket::bytestring marker(65, '\0');
+    marker[0] = std::uint8_t(tapacket::SubPacketCode::CHAT_05);
+    marker[2] = 0x2d;
+    marker[3] = 6;
+    marker[5] = 1;
+    if (status.size() == 192)
+    {
+        const tapacket::TPlayerInfo info(status);
+        if (info.data4 <= 5)
+        {
+            marker[6] = 'L'; marker[7] = 'O'; marker[8] = 'S';
+            marker[9] = 1; marker[10] = info.data4;
+            for (const auto& move : moves)
+            {
+                if (tapacket::SubPacketCode(move[0]) == tapacket::SubPacketCode::MAP_POSITION_FC && move.size() == 5)
+                {
+                    marker[11] = 'C'; marker[12] = 1;
+                    std::copy(move.begin() + 1, move.end(), marker.begin() + 13);
+                }
+            }
+        }
+    }
+    return marker;
+}
+
+void Replayer::sendReplayMarkers(bool complete)
+{
+    // CHAT_05 extension 0x32, version 2. One fence for each output player;
+    // tdraw waits for every fence and a completed local simulation pass before
+    // requesting the native results transition. Never declare a winner here.
+    std::uint16_t players = 0u;
+    std::uint8_t viewerIsRecordedPlayer = 0u;
+    for (const auto& player : m_demoPlayers)
+    {
+        players |= 1u << player->ordinalId;
+        if (!player->IsVisible()) viewerIsRecordedPlayer = 1u;
+    }
+
+    for (const auto& player : m_demoPlayers)
+    {
+        tapacket::bytestring fence(65, '\0');
+        fence[0] = 0x05;
+        fence[2] = 0x32;
+        fence[3] = 17;
+        fence[4] = 2;
+        fence.replace(5, 3, (const std::uint8_t*)(complete ? "END" : "BEG"), 3);
+        std::memcpy(&fence[8], &m_lastReplayTick, 4);
+        std::memcpy(&fence[12], &players, 2);
+        const std::uint16_t bit = 1u << player->ordinalId;
+        std::memcpy(&fence[14], &bit, 2);
+        fence[16] = viewerIsRecordedPlayer;
+        if (player->IsVisible()) sendReplayPacket(player->dpId, fence);
+        else
+        {
+            // Raw funnel traffic shares the host connection, but TA rewrites
+            // it into the tenth player's native dispatch queue. Fence that
+            // queue explicitly, using the same role/LOS marker as its data.
+            sendReplayPacket(m_nominatedHostDemoPlayer->dpId,
+                replayFunnelMarker(player->statusPacket, {}) + fence);
+        }
+    }
+    qInfo() << "[Replayer::sendReplayMarkers]" << (complete ? "END" : "BEG")
+            << "recorded tick=" << m_lastReplayTick << "output mask=" << players;
+}
+
+void Replayer::finishReplay()
+{
+    sendReplayMarkers(true);
+}
 
 Replayer::DemoPlayer::DemoPlayer(const tapacket::Player& player) :
     tapacket::Player(player),
@@ -353,6 +442,7 @@ void Replayer::timerEvent(QTimerEvent* event)
             break;
 
         case ReplayState::DONE:
+            doDone();
             break;
         };
     }
@@ -968,8 +1058,31 @@ void Replayer::onLoadingTaMessage(std::uint32_t sourceDplayId, std::uint32_t des
     }
 }
 
+void Replayer::doDone()
+{
+    // Playback is finished, but the DirectPlay session remains open until TA
+    // leaves through its native results interface. Keep servicing that session
+    // while TA shuts down its peer; DONE must not abandon its receive queue.
+    std::uint8_t buffer[10000];
+    for (;;)
+    {
+        std::uint32_t fromId = 0u, toId = 0u;
+        std::uint32_t bytesReceived = sizeof(buffer);
+        if (!m_jdPlay->dpReceive(buffer, bytesReceived, fromId, toId)) break;
+        if (fromId == DPID_SYSMSG && bytesReceived >= sizeof(DPMSG_GENERIC))
+            qInfo() << "[Replayer::doDone] session message" << ((const DPMSG_GENERIC*)buffer)->dwType;
+    }
+}
+
 bool Replayer::doPlay()
 {
+    if (!m_protocolAnnounced)
+    {
+        // Negotiate before any recorded game event in each ordered native
+        // output queue. Older replayers can retain their native ending path.
+        sendReplayMarkers(false);
+        m_protocolAnnounced = true;
+    }
     std::uint8_t buffer[10000];
     std::uint32_t fromId, toId;
     std::uint32_t bytesReceived = sizeof(buffer);
@@ -1065,35 +1178,7 @@ bool Replayer::doPlay()
         tapacket::bytestring hackmsg(65, '\0');
         if (!sender->IsVisible())
         {
-            hackmsg[0] = std::uint8_t(tapacket::SubPacketCode::CHAT_05);
-            hackmsg[2] = 0x2d;  // msgid: hack on/off
-            hackmsg[3] = 6;     // msg bytes
-            hackmsg[5] = 1;     // hack on
-            // Optional starting-team metadata for the shared player's POV. Keep the first six
-            // bytes unchanged so older tdraw builds still recognise the funnel marker.
-            if (sender->statusPacket.size() == 192)
-            {
-                const tapacket::TPlayerInfo info(sender->statusPacket);
-                if (info.data4 <= 5)
-                {
-                    hackmsg[6] = 'L';
-                    hackmsg[7] = 'O';
-                    hackmsg[8] = 'S';
-                    hackmsg[9] = 1;  // metadata version
-                    hackmsg[10] = info.data4;  // recorded starting team; 5 means no team
-                    // The recorder sees funnel traffic as the host, so carry the actual
-                    // recorded camera position separately for the shared player's row.
-                    for (const auto& move : moves)
-                    {
-                        if (tapacket::SubPacketCode(move[0]) == tapacket::SubPacketCode::MAP_POSITION_FC && move.size() == 5)
-                        {
-                            hackmsg[11] = 'C';
-                            hackmsg[12] = 1;
-                            std::copy(move.begin() + 1, move.end(), hackmsg.begin() + 13);
-                        }
-                    }
-                }
-            }
+            hackmsg = replayFunnelMarker(sender->statusPacket, moves);
             senderDpId = m_nominatedHostDemoPlayer->dpId;
             filteredMoves += hackmsg;
         }
@@ -1109,6 +1194,12 @@ bool Replayer::doPlay()
             {
             case tapacket::SubPacketCode::CHAT_05:
             {
+                // Output-stream fences belong to this playback, not to a
+                // recording of an earlier replay session.
+                if (move.size() == 65 && move[1] == 0 && move[2] == 0x32 &&
+                    ((move[3] == 16 && move[4] == 1) || (move[3] == 17 && move[4] == 2)) &&
+                    (std::memcmp(&move[5], "END", 3) == 0 || std::memcmp(&move[5], "BEG", 3) == 0))
+                    break;
                 unsigned crc = m_crc.FullCRC(move.data(), 65);
                 if (!m_nochat && 0u == m_recentChatMessageCrcsSet.count(crc))
                 {
@@ -1172,6 +1263,7 @@ bool Replayer::doPlay()
             case tapacket::SubPacketCode::UNIT_STAT_AND_MOVE_2C:
             {
                 std::uint32_t ticks = *(std::uint32_t*) & move[3];
+                m_lastReplayTick = std::max(m_lastReplayTick, ticks);
                 std::uint32_t demoTicks = sender->ticks = ticks;
                 for (const auto& demoPlayer : m_demoPlayers)
                 {
@@ -1334,8 +1426,15 @@ bool Replayer::doPlay()
             //bs = tapacket::TPacket::compress(bs);
             //tapacket::TPacket::encrypt(bs);
             //tapacket::HexDump(bs.data(), bs.size(), std::cout);
-            sendUdp(senderDpId, 0, filteredMoves);
+            sendReplayPacket(senderDpId, filteredMoves);
         }
+    }
+    if (m_sourceComplete && waitingForData() && m_pendingGamePackets.empty() && !m_isPaused)
+    {
+        if (!atRecordBoundary())
+            qWarning() << "[Replayer::doPlay] incomplete final record; showing statistics from complete records only";
+        finishReplay();
+        return true;
     }
     return false;
 }

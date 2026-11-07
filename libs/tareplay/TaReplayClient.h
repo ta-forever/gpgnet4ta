@@ -26,6 +26,7 @@ namespace tareplay {
 
     signals:
         void gameNotFound(TaReplayServerStatus status);
+        void replayComplete();
 
     private:
         void timerEvent(QTimerEvent* event);
@@ -48,6 +49,7 @@ namespace tareplay {
         std::ofstream m_replayBufferOStream;
         std::ifstream m_replayBufferIStream;
         QString m_tempFilename;
+        bool m_complete = false;
     };
 
 }

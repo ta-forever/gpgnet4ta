@@ -28,7 +28,9 @@ namespace tareplay {
         OK = 1,
         GAME_NOT_FOUND = 2,
         LIVE_REPLAY_DISABLED = 3,
-        AUTH_REQUIRED = 4
+        AUTH_REQUIRED = 4,
+        // Explicit terminal status; an empty OK frame or a disconnect is not EOF.
+        REPLAY_COMPLETE = 5
     };
 
     class TaReplayServerData

@@ -61,7 +61,7 @@ void TaReplayClient::timerEvent(QTimerEvent* event)
 
 void TaReplayClient::connect()
 {
-    if (m_tcpSocket.state() == QAbstractSocket::UnconnectedState)
+    if (!m_complete && m_tcpSocket.state() == QAbstractSocket::UnconnectedState)
     {
         qInfo() << "[TaReplayClient::connect] connecting to replay server" << m_replayServerHostName << m_replayServerPort;
         m_tcpSocket.connectToHost(m_replayServerHostName, m_replayServerPort);
@@ -114,9 +114,14 @@ void TaReplayClient::sendSubscribe(quint32 gameId, quint32 position)
 
 void TaReplayClient::onReadyRead()
 {
+    if (m_complete)
+    {
+        m_tcpSocket.readAll();
+        return;
+    }
     try
     {
-        while (m_tcpSocket.bytesAvailable() > 0)
+        while (!m_complete && m_tcpSocket.bytesAvailable() > 0)
         {
             QVariantList command = m_gpgNetParser.GetCommand(m_socketStream);
             QString cmd = command[0].toString();
@@ -128,6 +133,16 @@ void TaReplayClient::onReadyRead()
                 {
                     m_replayBufferOStream.write(msg.data.data(), msg.data.size());
                     m_position += msg.data.size();
+                }
+                else if (msg.status == TaReplayServerStatus::REPLAY_COMPLETE)
+                {
+                    // A completion frame may carry the last bytes. Publish them
+                    // before telling the feeder that a short read is now final.
+                    m_replayBufferOStream.write(msg.data.data(), msg.data.size());
+                    m_position += msg.data.size();
+                    m_replayBufferOStream.flush();
+                    m_complete = true;
+                    emit replayComplete();
                 }
                 else
                 {

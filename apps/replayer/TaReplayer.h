@@ -113,6 +113,9 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::istream* m_demoDataStream;
     bool m_launch;
     bool m_nochat;  // option to supress ingame chat
+    bool m_sourceComplete;
+    bool m_protocolAnnounced = false;
+    std::uint32_t m_lastReplayTick = 0u;
 
     // multiplier for m_playBackSpeed
     // is reduced in response to depleted m_pendingGamePackets buffer
@@ -142,7 +145,8 @@ class Replayer : public QObject, public tapacket::DemoParser
     std::map<std::uint32_t, RecorderEconMirror> m_recorderEconMirror;  // keyed by OUTPUT dpid
 
 public:
-    Replayer(std::istream*);
+    Replayer(std::istream*, bool sourceComplete = true);
+    void setSourceComplete();
 
     void hostGame(QString _guid, QString _player, QString _ipaddr);
     void setNoChat(bool option);
@@ -177,6 +181,10 @@ private:
     void doLaunch();
     bool doLoad();
     bool doPlay();
+    void doDone();
+    void sendReplayPacket(std::uint32_t fromId, const tapacket::bytestring& subpak);
+    void finishReplay();
+    void sendReplayMarkers(bool complete);
     int doSyncWatcher(DpPlayer& dpPlayer);
     void sendPlayerInfos();
     void processUnitData(const tapacket::TUnitData& unitData);
